@@ -24,6 +24,7 @@ export interface Member {
   photo_url?: string
   photos?: string[]
   gender?: Gender
+  birth_order?: number
   created_by: string
 }
 

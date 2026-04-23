@@ -21,6 +21,7 @@ interface FormState {
   hebrew_birth_date: string
   hebrew_death_date: string
   gender: Gender | ''
+  birth_order: string
   photo_url: string
   photos: string[]
 }
@@ -36,6 +37,7 @@ function fromMember(m: Member): FormState {
     hebrew_birth_date: m.hebrew_birth_date ?? '',
     hebrew_death_date: m.hebrew_death_date ?? '',
     gender: (m.gender as Gender | undefined) ?? '',
+    birth_order: m.birth_order != null ? String(m.birth_order) : '',
     photo_url: m.photo_url ?? '',
     photos: m.photos ? [...m.photos] : [],
   }
@@ -99,6 +101,7 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
 
   const handleSave = async () => {
     setSaving(true)
+    const parsedOrder = form.birth_order.trim() === '' ? null : parseInt(form.birth_order, 10)
     await updateMember(member.id, {
       first_name: form.first_name.trim() || member.first_name,
       last_name: form.last_name.trim(),
@@ -109,6 +112,7 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
       hebrew_birth_date: form.hebrew_birth_date.trim() || undefined,
       hebrew_death_date: form.hebrew_death_date.trim() || undefined,
       gender: (form.gender as Gender) || undefined,
+      birth_order: parsedOrder != null && !isNaN(parsedOrder) ? parsedOrder : null as unknown as undefined,
       photo_url: form.photo_url || undefined,
       photos: form.photos.length ? form.photos : undefined,
     })
@@ -243,6 +247,18 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
                     value={form.nickname}
                     onChange={e => patch('nickname', e.target.value)}
                   />
+                </Field>
+                <Field label={t.birthOrderLabel}>
+                  <input
+                    type="number"
+                    min={1}
+                    inputMode="numeric"
+                    placeholder="1, 2, 3…"
+                    className="w-full bg-[#F2F2F7] border border-transparent rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] placeholder:text-[#8E8E93] focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40 focus:bg-white focus:border-[#007AFF]/30 transition"
+                    value={form.birth_order}
+                    onChange={e => patch('birth_order', e.target.value)}
+                  />
+                  <span className="text-[10px] text-[#8E8E93] mt-1 block px-1">{t.birthOrderHint}</span>
                 </Field>
                 <Field label={t.gender}>
                   <div className="flex gap-2">

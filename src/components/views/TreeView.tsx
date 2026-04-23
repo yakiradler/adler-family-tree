@@ -7,11 +7,11 @@ import type { Member, Relationship } from '../../types'
 
 // ─── Layout constants (Instagram-story-card style) ─────────────────────────
 const AVATAR = 64                // avatar diameter
-const NODE_W = AVATAR + 48       // full card width (matches MemberNode card)
-const NODE_H = AVATAR + 58       // photo + card height
-const H_GAP = 14
-const V_GAP = 66
-const COUPLE_GAP = 10
+const NODE_W = AVATAR + 72       // wider card so sibling names never collide
+const NODE_H = AVATAR + 62       // photo + card height
+const H_GAP = 28                 // generous breathing room between siblings
+const V_GAP = 78                 // more vertical air between generations
+const COUPLE_GAP = 14
 
 interface LayoutNode {
   member: Member
@@ -62,12 +62,34 @@ function buildLayout(members: Member[], relationships: Relationship[]): LayoutNo
     ownerChildrenOf.get(parentId)!.push(childId)
   }
 
-  // "Family unit" children: own children + spouse's own children
+  // Sort siblings by age / birth order — eldest first (RTL: appears on right).
+  // Precedence: explicit birth_order → birth_date → first_name alpha.
+  const siblingSort = (aId: string, bId: string) => {
+    const a = memberById.get(aId), b = memberById.get(bId)
+    if (!a || !b) return 0
+    const ao = a.birth_order, bo = b.birth_order
+    if (ao != null && bo != null && ao !== bo) return ao - bo
+    if (ao != null && bo == null) return -1
+    if (ao == null && bo != null) return 1
+    const ad = a.birth_date ? new Date(a.birth_date).getTime() : null
+    const bd = b.birth_date ? new Date(b.birth_date).getTime() : null
+    if (ad != null && bd != null && ad !== bd) return ad - bd
+    if (ad != null && bd == null) return -1
+    if (ad == null && bd != null) return 1
+    return (a.first_name || '').localeCompare(b.first_name || '', 'he')
+  }
+  for (const [pid, kids] of ownerChildrenOf) {
+    kids.sort(siblingSort)
+    ownerChildrenOf.set(pid, kids)
+  }
+
+  // "Family unit" children: own children + spouse's own children (also sorted)
   const familyChildrenOf = new Map<string, string[]>()
   for (const m of members) {
     const owned = ownerChildrenOf.get(m.id) ?? []
     const fromSpouses = (spousesOf.get(m.id) ?? []).flatMap(sp => ownerChildrenOf.get(sp) ?? [])
     const all = [...new Set([...owned, ...fromSpouses])]
+    all.sort(siblingSort)
     if (all.length > 0) familyChildrenOf.set(m.id, all)
   }
 
@@ -451,15 +473,27 @@ export default function TreeView() {
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
       onTouchCancel={onTouchEnd}
-      className="w-full relative overflow-hidden cursor-grab active:cursor-grabbing bg-gradient-to-b from-[#EEF4FF] via-[#F6F0FF] to-[#FFF0F6] select-none"
-      style={{ height: 'calc(100vh - 80px)', touchAction: 'none', WebkitUserSelect: 'none', WebkitTapHighlightColor: 'transparent' }}
+      className="w-full relative overflow-hidden cursor-grab active:cursor-grabbing select-none"
+      style={{
+        height: 'calc(100vh - 80px)',
+        touchAction: 'none',
+        WebkitUserSelect: 'none',
+        WebkitTapHighlightColor: 'transparent',
+        background:
+          // Multi-radial aurora mesh gradient — modern, airy, no hard banding
+          'radial-gradient(at 12% 8%, rgba(120,170,255,0.35) 0px, transparent 50%),' +
+          'radial-gradient(at 92% 12%, rgba(255,140,200,0.28) 0px, transparent 55%),' +
+          'radial-gradient(at 78% 92%, rgba(120,255,220,0.25) 0px, transparent 55%),' +
+          'radial-gradient(at 8% 96%, rgba(180,130,255,0.30) 0px, transparent 55%),' +
+          'linear-gradient(135deg, #F4F7FF 0%, #FBF7FF 55%, #FFF5FA 100%)',
+      }}
     >
-      {/* Dotted background */}
+      {/* Subtle dotted grid — lower contrast, larger pitch for the new airier feel */}
       <div
-        className="absolute inset-0 opacity-50 pointer-events-none"
+        className="absolute inset-0 opacity-35 pointer-events-none"
         style={{
-          backgroundImage: 'radial-gradient(#94A3B8 1px, transparent 1px)',
-          backgroundSize: '22px 22px',
+          backgroundImage: 'radial-gradient(rgba(100,120,150,0.55) 1px, transparent 1px)',
+          backgroundSize: '28px 28px',
         }}
       />
 
@@ -482,29 +516,39 @@ export default function TreeView() {
         >
           <defs>
             <linearGradient id="pc-grad" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="#007AFF" stopOpacity="0.9" />
-              <stop offset="100%" stopColor="#5AC8FA" stopOpacity="0.85" />
+              <stop offset="0%" stopColor="#2B6BFF" stopOpacity="0.95" />
+              <stop offset="55%" stopColor="#6C47FF" stopOpacity="0.85" />
+              <stop offset="100%" stopColor="#19C6FF" stopOpacity="0.9" />
             </linearGradient>
+            <linearGradient id="sp-grad" x1="0" x2="1" y1="0" y2="0">
+              <stop offset="0%" stopColor="#FF5EAE" stopOpacity="0.85" />
+              <stop offset="100%" stopColor="#6C47FF" stopOpacity="0.85" />
+            </linearGradient>
+            <filter id="pc-glow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="1.2" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
           </defs>
           {lines.map((l, i) => (
             <path
               key={`pc-${i}`}
               d={l.d}
               stroke="url(#pc-grad)"
-              strokeWidth="2.25"
+              strokeWidth="2.75"
               fill="none"
               strokeLinecap="round"
               strokeLinejoin="round"
+              filter="url(#pc-glow)"
             />
           ))}
           {spouseLines.map((l, i) => (
             <line
               key={`sp-${i}`}
               x1={l.x1} y1={l.y} x2={l.x2} y2={l.y}
-              stroke="#5AC8FA" strokeOpacity="0.85"
-              strokeWidth="2"
+              stroke="url(#sp-grad)"
+              strokeWidth="2.25"
               strokeLinecap="round"
-              strokeDasharray="5 4"
+              strokeDasharray="6 5"
             />
           ))}
         </svg>

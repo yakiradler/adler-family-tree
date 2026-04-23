@@ -12,7 +12,7 @@ interface Props {
 export default function AddMemberModal({ open, onClose }: Props) {
   const { addMember, profile } = useFamilyStore()
   const { t } = useLang()
-  const [form, setForm] = useState({ first_name: '', last_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '' as Gender | '' })
+  const [form, setForm] = useState({ first_name: '', last_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '' as Gender | '', birth_order: '' })
   const [loading, setLoading] = useState(false)
   const photoInputRef = useRef<HTMLInputElement>(null)
 
@@ -20,6 +20,7 @@ export default function AddMemberModal({ open, onClose }: Props) {
     e.preventDefault()
     if (!profile) return
     setLoading(true)
+    const parsedOrder = form.birth_order.trim() === '' ? undefined : parseInt(form.birth_order, 10)
     await addMember({
       first_name: form.first_name,
       last_name: form.last_name,
@@ -28,10 +29,11 @@ export default function AddMemberModal({ open, onClose }: Props) {
       bio: form.bio || undefined,
       photo_url: form.photo_url || undefined,
       gender: (form.gender as Gender) || undefined,
+      birth_order: parsedOrder != null && !isNaN(parsedOrder) ? parsedOrder : undefined,
       created_by: profile.id,
     })
     setLoading(false)
-    setForm({ first_name: '', last_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '' })
+    setForm({ first_name: '', last_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '', birth_order: '' })
     onClose()
   }
 
@@ -77,6 +79,21 @@ export default function AddMemberModal({ open, onClose }: Props) {
                   </div>
                 </div>
                 <textarea placeholder={t.bioOptional} value={form.bio} onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))} className="input-field resize-none py-2" rows={2} />
+
+                {/* Birth order */}
+                <div>
+                  <label className="text-sf-caption text-[#8E8E93] mb-1 block">{t.birthOrderLabel}</label>
+                  <input
+                    type="number"
+                    min={1}
+                    inputMode="numeric"
+                    placeholder="1, 2, 3…"
+                    value={form.birth_order}
+                    onChange={(e) => setForm(f => ({ ...f, birth_order: e.target.value }))}
+                    className="input-field py-2"
+                  />
+                  <p className="text-[10px] text-[#8E8E93] mt-1">{t.birthOrderHint}</p>
+                </div>
 
                 {/* Gender */}
                 <div>

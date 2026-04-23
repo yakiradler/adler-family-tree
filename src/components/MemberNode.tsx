@@ -14,20 +14,31 @@ interface Props {
 }
 
 export function getRingGradient(m: Member): string {
-  // Blue-family story rings. Gender distinguished by hue/saturation:
-  //  male   → deep blue → indigo
-  //  female → cyan → lighter sky
+  // Modern iridescent story rings with rich 4-stop gradients for depth.
+  //  male   → royal blue → electric violet → cyan highlight
+  //  female → rose-coral → pink → lavender → azure highlight
   //  other  → teal → azure
-  if (m.gender === 'male') return 'linear-gradient(135deg, #0A84FF 0%, #007AFF 55%, #5E5CE6 100%)'
-  if (m.gender === 'female') return 'linear-gradient(135deg, #5AC8FA 0%, #64D2FF 55%, #30B0E6 100%)'
-  return 'linear-gradient(135deg, #30D1C5 0%, #32ADE6 55%, #007AFF 100%)'
+  if (m.gender === 'male')
+    return 'linear-gradient(135deg, #0052FF 0%, #2B6BFF 30%, #6C47FF 65%, #19C6FF 100%)'
+  if (m.gender === 'female')
+    return 'linear-gradient(135deg, #FF3D88 0%, #FF5EAE 30%, #B46BFF 65%, #5AC8FA 100%)'
+  return 'linear-gradient(135deg, #06D6A0 0%, #32ADE6 55%, #0052FF 100%)'
+}
+
+/** Soft ambient glow that surrounds each avatar — gender-tinted */
+export function getRingShadow(m: Member): string {
+  if (m.gender === 'male')
+    return '0 10px 26px rgba(45,110,255,0.32), 0 2px 6px rgba(0,0,0,0.08)'
+  if (m.gender === 'female')
+    return '0 10px 26px rgba(255,80,160,0.30), 0 2px 6px rgba(0,0,0,0.08)'
+  return '0 10px 26px rgba(50,173,230,0.30), 0 2px 6px rgba(0,0,0,0.08)'
 }
 
 export function getFallbackGradient(m: Member): string {
-  // Tailwind classes — blue/cyan theme, gender still distinguishable
-  if (m.gender === 'male') return 'from-blue-500 to-indigo-500'
-  if (m.gender === 'female') return 'from-sky-400 to-cyan-500'
-  return 'from-teal-400 to-sky-500'
+  // Tailwind classes for avatar silhouette background (when no photo).
+  if (m.gender === 'male') return 'from-blue-500 via-indigo-500 to-violet-500'
+  if (m.gender === 'female') return 'from-pink-400 via-fuchsia-400 to-sky-400'
+  return 'from-teal-400 via-sky-500 to-blue-500'
 }
 
 export function getInitials(first: string, last: string) {
@@ -74,19 +85,19 @@ export default function MemberNode({ member, size = 72, highlighted, onClick, va
     : null
 
   const compact = variant === 'compact'
-  const ringThickness = 2.75
+  const ringThickness = 3
   const innerPad = 2
   const avatarSize = size
 
   // The card sits partly underneath the avatar, photo overlaps the top edge.
-  // Overall node width is driven by the card.
-  const cardWidth = compact ? avatarSize + 24 : avatarSize + 48
+  // Wider card gives each name breathing room so siblings never collide.
+  const cardWidth = compact ? avatarSize + 36 : avatarSize + 72
   const overlap = Math.round(avatarSize * 0.38) // how much avatar overlaps card
 
   return (
     <motion.button
       onClick={onClick}
-      whileHover={{ y: -3, scale: 1.02 }}
+      whileHover={{ y: -4, scale: 1.04 }}
       whileTap={{ scale: 0.96 }}
       transition={{ type: 'spring', stiffness: 380, damping: 26 }}
       className="relative flex flex-col items-center no-select group"
@@ -94,13 +105,13 @@ export default function MemberNode({ member, size = 72, highlighted, onClick, va
     >
       {/* Story ring with photo */}
       <div
-        className={`relative rounded-full z-10 ${highlighted ? 'ring-4 ring-[#007AFF]/30' : ''}`}
+        className={`relative rounded-full z-10 ${highlighted ? 'ring-4 ring-[#007AFF]/40' : ''}`}
         style={{
           padding: ringThickness,
           background: getRingGradient(member),
           boxShadow: highlighted
-            ? '0 10px 26px rgba(0,122,255,0.38)'
-            : '0 6px 16px rgba(0,0,0,0.14)',
+            ? '0 14px 34px rgba(0,122,255,0.45), 0 2px 8px rgba(0,0,0,0.1)'
+            : getRingShadow(member),
         }}
       >
         <div
@@ -151,18 +162,39 @@ export default function MemberNode({ member, size = 72, highlighted, onClick, va
         </div>
       </div>
 
-      {/* Card with name + dates (photo overlaps its top edge) */}
+      {/* Card with name + dates (photo overlaps its top edge). Layered
+          shadows + subtle top-edge gradient for depth without feeling heavy. */}
       <div
-        className="relative bg-white rounded-2xl border border-black/5 shadow-md pt-1 pb-2 px-2.5"
+        className="relative rounded-[18px] border border-white/70 pt-1 pb-2 px-3"
         style={{
           marginTop: -overlap,
-          paddingTop: overlap + 6,
+          paddingTop: overlap + 8,
           width: cardWidth,
+          background: 'linear-gradient(180deg, #FFFFFF 0%, #FAFBFF 100%)',
+          boxShadow:
+            '0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(17,34,64,0.08), 0 2px 6px rgba(17,34,64,0.05)',
         }}
       >
+        {/* Birth-order chip (shown only when defined) */}
+        {typeof member.birth_order === 'number' && (
+          <div
+            className="absolute -top-1.5 right-2 px-1.5 min-w-[18px] h-[18px] rounded-full text-[9px] font-bold text-white flex items-center justify-center shadow-sm"
+            style={{
+              background:
+                member.gender === 'female'
+                  ? 'linear-gradient(135deg,#FF5EAE,#B46BFF)'
+                  : 'linear-gradient(135deg,#2B6BFF,#6C47FF)',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+            }}
+            title={`Birth order: ${member.birth_order}`}
+          >
+            {member.birth_order}
+          </div>
+        )}
+
         <p
           className="font-bold text-[#1C1C1E] leading-tight text-center truncate"
-          style={{ fontSize: compact ? 11 : 12.5 }}
+          style={{ fontSize: compact ? 11 : 13 }}
           title={`${member.first_name} ${member.last_name}`}
         >
           {member.first_name}
@@ -177,8 +209,17 @@ export default function MemberNode({ member, size = 72, highlighted, onClick, va
         )}
         {labelDate && (
           <p
-            className="text-[#8E8E93] leading-tight text-center mt-0.5 font-medium"
-            style={{ fontSize: compact ? 9 : 10 }}
+            className="leading-tight text-center mt-0.5 font-semibold"
+            style={{
+              fontSize: compact ? 9 : 10,
+              background:
+                member.gender === 'female'
+                  ? 'linear-gradient(90deg,#FF5EAE,#B46BFF)'
+                  : 'linear-gradient(90deg,#2B6BFF,#19C6FF)',
+              WebkitBackgroundClip: 'text',
+              backgroundClip: 'text',
+              color: 'transparent',
+            }}
           >
             {labelDate}
           </p>
