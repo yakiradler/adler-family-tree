@@ -78,7 +78,7 @@ export default function App() {
     <div dir={dir} className="min-h-screen">
       <HashRouter>
         <Routes>
-          <Route path="/login" element={isAuth ? <Navigate to="/" replace /> : <Auth />} />
+          <Route path="/login" element={session ? <Navigate to="/" replace /> : <Auth demoMode={demoMode} />} />
           <Route path="/" element={isAuth ? <Dashboard demoMode={demoMode} /> : <Navigate to="/login" replace />} />
           <Route path="/tree" element={isAuth ? <TreePage demoMode={demoMode} /> : <Navigate to="/login" replace />} />
           <Route path="/birthdays" element={isAuth ? <BirthdayPage demoMode={demoMode} /> : <Navigate to="/login" replace />} />

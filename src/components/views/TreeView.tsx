@@ -293,6 +293,11 @@ export default function TreeView() {
   const [tx, setTx] = useState(0)
   const [ty, setTy] = useState(0)
   const dragState = useRef<{ startX: number; startY: number; tx0: number; ty0: number } | null>(null)
+  // Mobile touch state (single-finger pan + two-finger pinch)
+  type TouchMode =
+    | { mode: 'pan'; startX: number; startY: number; tx0: number; ty0: number }
+    | { mode: 'pinch'; initialDist: number; initialScale: number; cx: number; cy: number; tx0: number; ty0: number }
+  const touchState = useRef<TouchMode | null>(null)
 
   // Canvas dims
   const pad = 48
@@ -345,6 +350,70 @@ export default function TreeView() {
   }
   const onMouseUp = () => { dragState.current = null }
 
+  // ─── Touch handlers (mobile) ─────────────────────────────────────────────
+  const onTouchStart = (e: React.TouchEvent) => {
+    if ((e.target as HTMLElement).closest('button')) return
+    const rect = wrapRef.current?.getBoundingClientRect()
+    if (!rect) return
+    if (e.touches.length === 1) {
+      const t = e.touches[0]
+      touchState.current = {
+        mode: 'pan',
+        startX: t.clientX, startY: t.clientY,
+        tx0: tx, ty0: ty,
+      }
+    } else if (e.touches.length >= 2) {
+      const [a, b] = [e.touches[0], e.touches[1]]
+      const dx = b.clientX - a.clientX
+      const dy = b.clientY - a.clientY
+      const dist = Math.hypot(dx, dy) || 1
+      const cx = (a.clientX + b.clientX) / 2 - rect.left
+      const cy = (a.clientY + b.clientY) / 2 - rect.top
+      touchState.current = {
+        mode: 'pinch',
+        initialDist: dist,
+        initialScale: scale,
+        cx, cy,
+        tx0: tx, ty0: ty,
+      }
+    }
+  }
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    const st = touchState.current
+    if (!st) return
+    if (st.mode === 'pan' && e.touches.length === 1) {
+      const t = e.touches[0]
+      setTx(st.tx0 + (t.clientX - st.startX))
+      setTy(st.ty0 + (t.clientY - st.startY))
+    } else if (st.mode === 'pinch' && e.touches.length >= 2) {
+      const [a, b] = [e.touches[0], e.touches[1]]
+      const dist = Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY) || 1
+      const factor = dist / st.initialDist
+      const newScale = Math.max(0.25, Math.min(2.5, st.initialScale * factor))
+      // Zoom anchored on the initial pinch center so the point under fingers stays put
+      const nxWorld = (st.cx - st.tx0) / st.initialScale
+      const nyWorld = (st.cy - st.ty0) / st.initialScale
+      setTx(st.cx - nxWorld * newScale)
+      setTy(st.cy - nyWorld * newScale)
+      setScale(newScale)
+    }
+  }
+
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (e.touches.length === 0) {
+      touchState.current = null
+    } else if (e.touches.length === 1) {
+      // Pinch → fall back to pan with the remaining finger
+      const t = e.touches[0]
+      touchState.current = {
+        mode: 'pan',
+        startX: t.clientX, startY: t.clientY,
+        tx0: tx, ty0: ty,
+      }
+    }
+  }
+
   const fitToView = () => {
     if (!wrapRef.current) return
     const w = wrapRef.current.clientWidth
@@ -378,8 +447,12 @@ export default function TreeView() {
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
       onMouseLeave={onMouseUp}
-      className="w-full relative overflow-hidden cursor-grab active:cursor-grabbing bg-gradient-to-b from-[#EEF4FF] via-[#F6F0FF] to-[#FFF0F6]"
-      style={{ height: 'calc(100vh - 80px)', touchAction: 'none' }}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      onTouchCancel={onTouchEnd}
+      className="w-full relative overflow-hidden cursor-grab active:cursor-grabbing bg-gradient-to-b from-[#EEF4FF] via-[#F6F0FF] to-[#FFF0F6] select-none"
+      style={{ height: 'calc(100vh - 80px)', touchAction: 'none', WebkitUserSelect: 'none', WebkitTapHighlightColor: 'transparent' }}
     >
       {/* Dotted background */}
       <div

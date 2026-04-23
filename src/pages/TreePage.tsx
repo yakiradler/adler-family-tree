@@ -18,11 +18,7 @@ export default function TreePage({ demoMode }: Props) {
 
   return (
     <div dir={dir} className="min-h-screen bg-[#F2F2F7]">
-      {demoMode && (
-        <div className="bg-gradient-to-r from-[#007AFF] to-[#32ADE6] px-4 py-1 text-center">
-          <span className="text-[11px] font-semibold text-white">{t.demoBanner}</span>
-        </div>
-      )}
+      {/* Demo banner hidden for clean UX */}
 
       {/* Floating top bar */}
       <div className="absolute top-0 left-0 right-0 z-30 px-3 pt-3" style={{ top: demoMode ? 20 : 0 }}>

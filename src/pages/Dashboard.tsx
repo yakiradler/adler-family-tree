@@ -115,14 +115,7 @@ export default function Dashboard({ demoMode }: Props) {
 
   return (
     <div dir={dir} className="min-h-screen bg-mesh-gradient pb-10">
-      {/* Demo banner (slimmer) */}
-      {demoMode && (
-        <div className="bg-gradient-to-r from-[#007AFF] to-[#32ADE6] px-4 py-1 text-center">
-          <span className="text-[11px] font-semibold text-white tracking-wide">
-            {t.demoBanner} <code className="bg-white/20 px-1 rounded">.env</code> {t.demoBannerSuffix}
-          </span>
-        </div>
-      )}
+      {/* Demo banner hidden — the setup hint surfaces only on /login when relevant. */}
 
       {/* ─── HERO ─── */}
       <div className="relative px-4 pt-5 pb-6 max-w-lg mx-auto">

@@ -81,12 +81,12 @@ export default function MemberPanel({ onClose }: Props) {
 
   return (
     <div
-      className="glass-strong rounded-[28px] shadow-glass-lg overflow-hidden flex flex-col bg-white"
+      className="glass-strong rounded-[28px] shadow-glass-lg flex flex-col bg-white relative"
       style={{ maxHeight: 'calc(100vh - 120px)' }}
       onClick={(e) => e.stopPropagation()}
     >
-      {/* ─── HEADER cover (taller to fully seat the avatar) ─── */}
-      <div className={`relative bg-gradient-to-br ${getHeaderGradient(member)} h-36 flex-shrink-0 overflow-hidden`}>
+      {/* ─── HEADER cover ─── */}
+      <div className={`relative bg-gradient-to-br ${getHeaderGradient(member)} h-28 flex-shrink-0 rounded-t-[28px] overflow-hidden`}>
         {/* soft decorative blobs */}
         <div className="absolute -top-8 -right-8 w-28 h-28 bg-white/15 rounded-full blur-2xl" />
         <div className="absolute -bottom-10 -left-6 w-24 h-24 bg-white/10 rounded-full blur-2xl" />
@@ -94,7 +94,7 @@ export default function MemberPanel({ onClose }: Props) {
         <motion.button
           whileTap={{ scale: 0.9 }}
           onClick={onClose}
-          className={`absolute top-3 ${isRTL(lang) ? 'left-3' : 'right-3'} w-9 h-9 rounded-full bg-black/30 backdrop-blur flex items-center justify-center hover:bg-black/45 transition`}
+          className={`absolute top-3 ${isRTL(lang) ? 'left-3' : 'right-3'} w-9 h-9 rounded-full bg-black/30 backdrop-blur flex items-center justify-center hover:bg-black/45 transition z-20`}
           aria-label={t.relClose ?? 'Close'}
           title={t.relClose ?? 'Close'}
         >
@@ -104,32 +104,34 @@ export default function MemberPanel({ onClose }: Props) {
         </motion.button>
       </div>
 
-      {/* ─── SCROLL BODY ─── */}
-      <div className="flex-1 overflow-y-auto">
-        {/* Profile photo + identity (centered, avatar seated inside the header) */}
-        <div className="px-5 -mt-16 flex flex-col items-center text-center">
-          <div
-            className="rounded-full shadow-xl"
-            style={{ padding: 3.5, background: getRingGradient(member) }}
-          >
-            <div className="rounded-full bg-white p-[3px]">
-              <div className="w-28 h-28 rounded-full overflow-hidden relative">
-                {member.photo_url ? (
-                  <img
-                    src={member.photo_url}
-                    alt={`${member.first_name} ${member.last_name}`}
-                    className={`w-full h-full object-cover ${isDeceased ? 'grayscale' : ''}`}
-                  />
-                ) : (
-                  <div className={`w-full h-full bg-gradient-to-br ${getFallbackGradient(member)} flex items-center justify-center`}>
-                    <PersonAvatarIcon gender={member.gender} size={112} />
-                  </div>
-                )}
-              </div>
+      {/* ─── AVATAR: floats between header and body, NEVER clipped ─── */}
+      <div className="relative flex-shrink-0 flex justify-center" style={{ marginTop: -56, zIndex: 10 }}>
+        <div
+          className="rounded-full shadow-xl"
+          style={{ padding: 3.5, background: getRingGradient(member) }}
+        >
+          <div className="rounded-full bg-white p-[3px]">
+            <div className="w-28 h-28 rounded-full overflow-hidden relative">
+              {member.photo_url ? (
+                <img
+                  src={member.photo_url}
+                  alt={`${member.first_name} ${member.last_name}`}
+                  className={`w-full h-full object-cover ${isDeceased ? 'grayscale' : ''}`}
+                />
+              ) : (
+                <div className={`w-full h-full bg-gradient-to-br ${getFallbackGradient(member)} flex items-center justify-center`}>
+                  <PersonAvatarIcon gender={member.gender} size={112} />
+                </div>
+              )}
             </div>
           </div>
+        </div>
+      </div>
 
-          <div className="mt-3 w-full">
+      {/* ─── SCROLL BODY ─── */}
+      <div className="flex-1 overflow-y-auto rounded-b-[28px]">
+        <div className="px-5 pt-3 flex flex-col items-center text-center">
+          <div className="w-full">
             <h2 className="text-sf-title2 font-bold text-[#1C1C1E] leading-tight">
               {member.first_name} {member.last_name}
             </h2>

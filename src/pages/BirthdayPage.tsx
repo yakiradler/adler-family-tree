@@ -62,7 +62,7 @@ function groupByMonth(entries: BirthdayEntry[], lang: 'he' | 'en') {
   return [...groups.values()]
 }
 
-export default function BirthdayPage({ demoMode }: Props) {
+export default function BirthdayPage(_props: Props) {
   const { members, setSelectedMemberId } = useFamilyStore()
   const { t, lang } = useLang()
   const dir = isRTL(lang) ? 'rtl' : 'ltr'
@@ -77,11 +77,7 @@ export default function BirthdayPage({ demoMode }: Props) {
 
   return (
     <div dir={dir} className="min-h-screen bg-mesh-gradient pb-10">
-      {demoMode && (
-        <div className="bg-gradient-to-r from-[#007AFF] to-[#32ADE6] px-4 py-1 text-center">
-          <span className="text-[11px] font-semibold text-white">{t.demoBanner}</span>
-        </div>
-      )}
+      {/* Demo banner hidden for clean UX */}
 
       {/* Top bar */}
       <div className="px-4 pt-3 pb-2 max-w-lg mx-auto">

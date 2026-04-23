@@ -1,11 +1,15 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useLang } from '../i18n/useT'
 
 type AuthMode = 'login' | 'signup'
 
-export default function Auth() {
+interface Props { demoMode?: boolean }
+
+export default function Auth({ demoMode = false }: Props) {
+  const navigate = useNavigate()
   const [mode, setMode] = useState<AuthMode>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -23,6 +27,19 @@ export default function Auth() {
     setSuccess(null)
     setLoading(true)
     try {
+      if (demoMode) {
+        // No real backend yet — simulate success and route to demo dashboard so
+        // the user still experiences the full flow end-to-end.
+        await new Promise((r) => setTimeout(r, 450))
+        if (mode === 'signup') {
+          setSuccess(lang === 'he'
+            ? 'רישום הודגם בהצלחה! ברגע ש-Supabase יחובר, הנתונים ייסגנכרנו באמת.'
+            : 'Signup demo successful! Once Supabase is connected, accounts will sync for real.')
+          await new Promise((r) => setTimeout(r, 900))
+        }
+        navigate('/')
+        return
+      }
       if (mode === 'signup') {
         const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: fullName } } })
         if (error) throw error
@@ -128,6 +145,23 @@ export default function Auth() {
         </div>
 
         <p className="text-center text-sf-footnote text-[#8E8E93] mt-6">{t.authTagline}</p>
+
+        {demoMode && (
+          <div className="mt-4 flex flex-col items-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="text-[12px] text-[#007AFF] font-semibold underline decoration-[#007AFF]/40 underline-offset-2 hover:decoration-[#007AFF] transition"
+            >
+              {lang === 'he' ? 'המשך כהדגמה (ללא הרשמה)' : 'Continue as demo (no signup)'}
+            </button>
+            <p className="text-[10px] text-[#8E8E93] text-center max-w-[260px] leading-relaxed px-4">
+              {lang === 'he'
+                ? 'כרגע אין חיבור ל-Supabase. עם חיבור, ההרשמה תהיה אמיתית ומסונכרנת בין מכשירים.'
+                : 'Supabase not yet connected. Once wired up, signup will be real and synced across devices.'}
+            </p>
+          </div>
+        )}
       </motion.div>
     </div>
   )
