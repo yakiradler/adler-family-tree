@@ -1,0 +1,102 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    box-sizing: border-box;
+  }
+
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    background: #F2F2F7;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(0,0,0,0.15);
+    border-radius: 99px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
+}
+
+@layer components {
+  .glass {
+    @apply bg-white/70 backdrop-blur-xl border border-white/60 shadow-glass;
+  }
+
+  .glass-strong {
+    @apply bg-white/85 backdrop-blur-2xl border border-white/70 shadow-glass;
+  }
+
+  .glass-dark {
+    @apply bg-black/30 backdrop-blur-xl border border-white/10;
+  }
+
+  .btn-primary {
+    @apply bg-[#007AFF] text-white font-semibold rounded-xl px-5 py-2.5
+           hover:bg-[#0066D6] active:bg-[#005EC2] transition-all duration-150
+           shadow-sm hover:shadow-md active:scale-95;
+  }
+
+  .btn-secondary {
+    @apply bg-white/80 text-[#007AFF] font-semibold rounded-xl px-5 py-2.5
+           border border-[#007AFF]/20 hover:bg-[#007AFF]/10
+           transition-all duration-150 active:scale-95;
+  }
+
+  .btn-danger {
+    @apply bg-[#FF3B30]/10 text-[#FF3B30] font-semibold rounded-xl px-5 py-2.5
+           border border-[#FF3B30]/20 hover:bg-[#FF3B30]/20
+           transition-all duration-150 active:scale-95;
+  }
+
+  .input-field {
+    @apply w-full bg-white/60 border border-black/10 rounded-xl px-4 py-3
+           text-[#1C1C1E] placeholder:text-[#8E8E93]
+           focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40 focus:border-[#007AFF]/40
+           transition-all duration-150 backdrop-blur-sm;
+  }
+
+  .section-title {
+    @apply text-xs font-semibold uppercase tracking-wider text-[#8E8E93] px-4 mb-2;
+  }
+
+  .card-base {
+    @apply glass rounded-3xl overflow-hidden transition-all duration-300;
+  }
+
+  .island {
+    @apply bg-[#1C1C1E] rounded-[2rem] shadow-2xl;
+  }
+}
+
+@layer utilities {
+  .text-sf-title1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.2; }
+  .text-sf-title2 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; line-height: 1.2; }
+  .text-sf-title3 { font-size: 20px; font-weight: 600; letter-spacing: -0.2px; }
+  .text-sf-headline { font-size: 17px; font-weight: 600; letter-spacing: -0.1px; }
+  .text-sf-body { font-size: 17px; font-weight: 400; line-height: 1.5; }
+  .text-sf-callout { font-size: 16px; font-weight: 400; }
+  .text-sf-subhead { font-size: 15px; font-weight: 400; }
+  .text-sf-footnote { font-size: 13px; font-weight: 400; }
+  .text-sf-caption { font-size: 12px; font-weight: 400; }
+  .text-sf-caption2 { font-size: 11px; font-weight: 400; }
+
+  .no-select { user-select: none; -webkit-user-select: none; }
+
+  .safe-top { padding-top: env(safe-area-inset-top, 0px); }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+}
