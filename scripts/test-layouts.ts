@@ -9,6 +9,8 @@ import { Client } from 'pg'
 import {
   buildLayout,
   NODE_W,
+  NODE_H,
+  MIN_SIDE_GAP,
   type LayoutMode,
   type LayoutNode,
 } from '../src/components/views/treeLayout'
@@ -153,11 +155,47 @@ async function main() {
   if (unique) console.log('  ✓ All 4 modes produce unique layouts')
 
   console.log('\n═══════════════════════════════════════════════════════════')
-  if (allGood && unique) {
-    console.log('RESULT: ✓ ALL TESTS PASSED — layouts actually differ.')
+  console.log('COLLISION CHECK — no two cards may touch in any mode')
+  console.log('═══════════════════════════════════════════════════════════')
+  let noCollisions = true
+  for (const m of modes) {
+    const nodes = layouts[m]
+    const hits: string[] = []
+    for (let i = 0; i < nodes.length; i++) {
+      const a = nodes[i]
+      const ax1 = a.x, ax2 = a.x + NODE_W
+      const ay1 = a.y, ay2 = a.y + NODE_H
+      for (let j = i + 1; j < nodes.length; j++) {
+        const b = nodes[j]
+        const bx1 = b.x, bx2 = b.x + NODE_W
+        const by1 = b.y, by2 = b.y + NODE_H
+        const horizClear = ax2 + MIN_SIDE_GAP <= bx1 || bx2 + MIN_SIDE_GAP <= ax1
+        const vertClear  = ay2 + MIN_SIDE_GAP <= by1 || by2 + MIN_SIDE_GAP <= ay1
+        if (!horizClear && !vertClear) {
+          hits.push(
+            `      ${a.member.first_name} ${a.member.last_name} ` +
+            `↔ ${b.member.first_name} ${b.member.last_name} ` +
+            `(dx=${Math.round(b.x - a.x)}, dy=${Math.round(b.y - a.y)})`,
+          )
+        }
+      }
+    }
+    if (hits.length === 0) {
+      console.log(`  ${m.padEnd(10)} ✓ zero collisions (required gap: ${MIN_SIDE_GAP}px)`)
+    } else {
+      console.log(`  ${m.padEnd(10)} ✗ ${hits.length} collision(s):`)
+      for (const h of hits.slice(0, 5)) console.log(h)
+      if (hits.length > 5) console.log(`      … and ${hits.length - 5} more`)
+      noCollisions = false
+    }
+  }
+
+  console.log('\n═══════════════════════════════════════════════════════════')
+  if (allGood && unique && noCollisions) {
+    console.log('RESULT: ✓ ALL TESTS PASSED — layouts differ AND no cards touch.')
     process.exit(0)
   } else {
-    console.log('RESULT: ✗ FAILED — layouts are not differentiated enough.')
+    console.log('RESULT: ✗ FAILED — see issues above.')
     process.exit(1)
   }
 }

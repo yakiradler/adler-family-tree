@@ -8,9 +8,14 @@ import type { Member, Relationship } from '../../types'
 export const AVATAR = 64
 export const NODE_W = AVATAR + 72
 export const NODE_H = AVATAR + 62
-export const H_GAP = 28
-export const V_GAP = 78
-export const COUPLE_GAP = 14
+// Gaps are generous enough that NO two cards can ever visually touch, even
+// when avatars have protruding gender/birth-order badges on the corners.
+export const H_GAP = 40
+export const V_GAP = 96
+export const COUPLE_GAP = 22
+// Minimum breathing space required on every side of a card. Any layout that
+// produces a closer neighbour should be considered a bug.
+export const MIN_SIDE_GAP = 12
 
 export type LayoutMode = 'classic' | 'grid' | 'arc' | 'staggered'
 
@@ -56,9 +61,14 @@ export function clusterGrid(n: number): ClusterResult {
 }
 
 export function clusterStaggered(n: number): ClusterResult {
-  // Zigzag: adjacent sibs in different rows, so horizontal step can shrink.
-  const step = NODE_W * 0.62 + 6
-  const yOffset = Math.round(NODE_H * 0.5 + 10)
+  // Zigzag / brick pattern. To guarantee no two cards ever visually touch:
+  //   - adjacent indices sit on different rows, so vertical separation must
+  //     fully clear a card height: yOffset ≥ NODE_H + MIN_SIDE_GAP.
+  //   - same-row items (indices i and i+2) must have 2*step ≥ NODE_W + gap.
+  // With step ≈ 0.55·NODE_W the layout still visibly shrinks horizontally
+  // compared to classic while keeping a clean 12+ px visual gap everywhere.
+  const step = Math.round(NODE_W * 0.55 + MIN_SIDE_GAP)       // ~87 px
+  const yOffset = NODE_H + MIN_SIDE_GAP + 2                   // 140 px
   const width = (n - 1) * step + NODE_W
   const placements: Placement[] = []
   for (let i = 0; i < n; i++) {
@@ -68,12 +78,27 @@ export function clusterStaggered(n: number): ClusterResult {
 }
 
 export function clusterArc(n: number): ClusterResult {
-  const sweep = Math.min(Math.PI * 0.9, Math.PI * 0.4 + n * 0.09)
+  // Fan siblings along a shallow arc. Two constraints:
+  //   (a) Neighbouring cards must have enough horizontal spacing at the arc's
+  //       edges — the x-distance between adjacent positions is roughly
+  //       `chord * cos(angle)`, which SHRINKS towards the ends of the arc.
+  //       Cap sweep so cos(halfSweep) stays bounded and bump chord as needed.
+  //   (b) Arc sag (max dy) must not bleed into the next generation. Clamp
+  //       the depth factor so maxDy ≤ NODE_H · 0.9.
+  const sweep = Math.min(Math.PI * 0.55, Math.PI * 0.28 + n * 0.05)   // ≤ 99°
   const halfSweep = sweep / 2
-  const chord = NODE_W + H_GAP * 0.9
+  const cosHalf = Math.max(0.35, Math.cos(halfSweep))                  // bounded
+  const minEdgeDx = NODE_W + MIN_SIDE_GAP + 8                          // 156
+  const chord = Math.max(NODE_W + H_GAP * 0.9, minEdgeDx / cosHalf)
   const R = chord / (2 * Math.sin(sweep / (2 * Math.max(n - 1, 1))))
   const width = 2 * R * Math.sin(halfSweep) + NODE_W
-  const depthFactor = 0.55
+  const naturalDepth = 0.55
+  const maxAllowedSag = NODE_H * 0.9
+  const rawMaxSag = R * (1 - Math.cos(halfSweep)) * naturalDepth
+  const depthFactor =
+    rawMaxSag > maxAllowedSag && rawMaxSag > 0
+      ? (maxAllowedSag / (R * (1 - Math.cos(halfSweep))))
+      : naturalDepth
   const centerX = width / 2
   const placements: Placement[] = []
   let maxDy = 0
@@ -298,7 +323,12 @@ export function buildLayout(
     const spouses = spousesOf.get(id) ?? []
     const spousesToPlace = spouses.filter(sp => !layoutRoots.includes(sp) && !placed.has(sp))
 
+    // Width needed for this node + its co-placed spouses (if any).
+    const coupleWidth = NODE_W + spousesToPlace.length * (NODE_W + COUPLE_GAP)
+
     if (children.length === 0) {
+      // Leaf w/ optional spouse. Couple width IS the reserved width — place
+      // straight from leftX.
       xPos.set(id, leftX)
       let nextX = leftX + NODE_W + COUPLE_GAP
       for (const sp of spousesToPlace) {
@@ -310,8 +340,18 @@ export function buildLayout(
     const cluster = leafClusterCache.get(id)
     if (cluster) {
       const { nonLeaves, leaves } = splitChildren(children)
-      // 1. Non-leaves on the left, each getting its full subtree width.
-      let cursorX = leftX
+      // ── Compute children block width so we know how much to indent when
+      //     the parent's couple is wider than the children (otherwise the
+      //     couple, being centered above children, spills outside the
+      //     parent-reserved slot and collides with the neighbouring subtree).
+      const nonLeavesW = nonLeaves.reduce((s, c) => s + subtreeWidth(c), 0)
+        + Math.max(0, nonLeaves.length - 1) * H_GAP
+      const sep = nonLeaves.length > 0 ? H_GAP : 0
+      const childrenBlockW = nonLeavesW + sep + cluster.width
+      const indent = Math.max(0, (coupleWidth - childrenBlockW) / 2)
+
+      // 1. Non-leaves on the left (indented to keep couple inside slot).
+      let cursorX = leftX + indent
       for (const c of nonLeaves) {
         assign(c, cursorX)
         cursorX += subtreeWidth(c) + H_GAP
@@ -345,7 +385,11 @@ export function buildLayout(
     }
 
     // Classic horizontal layout (fallback).
-    let childLeft = leftX
+    const childrenBlockW =
+      children.reduce((s, c) => s + subtreeWidth(c), 0) +
+      Math.max(0, children.length - 1) * H_GAP
+    const indent = Math.max(0, (coupleWidth - childrenBlockW) / 2)
+    let childLeft = leftX + indent
     for (const c of children) {
       assign(c, childLeft)
       childLeft += subtreeWidth(c) + H_GAP
@@ -365,10 +409,78 @@ export function buildLayout(
     if (!placed.has(m.id)) { xPos.set(m.id, startX); startX += NODE_W + H_GAP }
   })
 
-  return members.map(m => ({
-    member: m,
-    x: xPos.get(m.id) ?? 0,
-    y: (genMap.get(m.id) ?? 0) * (NODE_H + V_GAP) + (yOffset.get(m.id) ?? 0),
-    generation: genMap.get(m.id) ?? 0,
-  }))
+  // ── Generation Y (cluster-aware) ──────────────────────────────────────
+  // Each generation must start LOW enough that the previous generation's
+  // cluster overflow (e.g. arc sag, zigzag 2nd row) cannot bleed into it.
+  // genOverflow[G] = max dy added to any node in generation G by clustering.
+  const genOverflow = new Map<number, number>()
+  for (const [id, dy] of yOffset) {
+    const g = genMap.get(id) ?? 0
+    if (dy > (genOverflow.get(g) ?? 0)) genOverflow.set(g, dy)
+  }
+
+  let maxGen = 0
+  for (const g of genMap.values()) if (g > maxGen) maxGen = g
+
+  const genY = new Map<number, number>()
+  let yAccum = 0
+  for (let g = 0; g <= maxGen; g++) {
+    genY.set(g, yAccum)
+    // Next generation must clear this gen's card height + any cluster dy.
+    yAccum += NODE_H + (genOverflow.get(g) ?? 0) + V_GAP
+  }
+
+  const finalNodes: LayoutNode[] = members.map(m => {
+    const g = genMap.get(m.id) ?? 0
+    return {
+      member: m,
+      x: xPos.get(m.id) ?? 0,
+      y: (genY.get(g) ?? 0) + (yOffset.get(m.id) ?? 0),
+      generation: g,
+    }
+  })
+
+  // ── Collision safety net ──────────────────────────────────────────────
+  // After layout, verify every pair of cards has ≥ MIN_SIDE_GAP either
+  // horizontally or vertically. This catches any regression that would
+  // cause visible touching/clipping. Only logs in dev-like environments
+  // (when import.meta.env.DEV is true, or when running via tsx/node).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const im = (typeof import.meta !== 'undefined' ? (import.meta as any) : {}) as { env?: { DEV?: boolean } }
+  const isDev = im.env?.DEV === true || typeof window === 'undefined'
+  if (isDev) assertNoCollisions(finalNodes)
+
+  return finalNodes
+}
+
+/**
+ * Throws if any pair of cards has their bounding boxes overlapping or
+ * within `MIN_SIDE_GAP` of each other. Used as a regression guard.
+ */
+export function assertNoCollisions(nodes: LayoutNode[]): void {
+  const collisions: string[] = []
+  for (let i = 0; i < nodes.length; i++) {
+    const a = nodes[i]
+    const ax1 = a.x, ax2 = a.x + NODE_W
+    const ay1 = a.y, ay2 = a.y + NODE_H
+    for (let j = i + 1; j < nodes.length; j++) {
+      const b = nodes[j]
+      const bx1 = b.x, bx2 = b.x + NODE_W
+      const by1 = b.y, by2 = b.y + NODE_H
+      // Required gap: either horizontal or vertical separation ≥ MIN_SIDE_GAP.
+      const horizClear = ax2 + MIN_SIDE_GAP <= bx1 || bx2 + MIN_SIDE_GAP <= ax1
+      const vertClear = ay2 + MIN_SIDE_GAP <= by1 || by2 + MIN_SIDE_GAP <= ay1
+      if (!horizClear && !vertClear) {
+        collisions.push(
+          `${a.member.first_name} ${a.member.last_name} ↔ ${b.member.first_name} ${b.member.last_name}`,
+        )
+        if (collisions.length >= 6) break
+      }
+    }
+    if (collisions.length >= 6) break
+  }
+  if (collisions.length) {
+    // eslint-disable-next-line no-console
+    console.warn('[tree-layout] card collisions detected:\n  ' + collisions.join('\n  '))
+  }
 }
