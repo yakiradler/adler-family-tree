@@ -694,10 +694,19 @@ export default function TreeView() {
           <motion.div
             key={member.id}
             initial={{ opacity: 0, scale: 0.85 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.25, delay: Math.min(0.3, y / 2000) }}
+            animate={{
+              opacity: 1,
+              scale: 1,
+              left: x + offsetX,
+              top: y,
+            }}
+            transition={{
+              opacity: { duration: 0.25, delay: Math.min(0.3, y / 2000) },
+              scale:   { duration: 0.25, delay: Math.min(0.3, y / 2000) },
+              left: { type: 'spring', stiffness: 180, damping: 26 },
+              top:  { type: 'spring', stiffness: 180, damping: 26 },
+            }}
             className="absolute"
-            style={{ left: x + offsetX, top: y }}
           >
             <MemberNode
               member={member}
@@ -805,9 +814,12 @@ function LayoutPicker({
     { key: 'staggered', label: t.layoutStaggered },
   ]
   return (
-    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-      <div
-        className="pointer-events-auto glass-strong shadow-glass rounded-full px-1 py-1 flex items-center gap-0.5"
+    <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ type: 'spring', stiffness: 380, damping: 30, delay: 0.15 }}
+        className="pointer-events-auto glass-strong shadow-glass rounded-full px-1 py-1 flex items-center gap-0.5 border border-white/50"
         role="radiogroup"
         aria-label={t.layoutPicker}
       >
@@ -839,12 +851,12 @@ function LayoutPicker({
               )}
               <span className="relative z-10 flex items-center gap-1.5">
                 <LayoutIcon mode={it.key} />
-                <span className="hidden sm:inline">{it.label}</span>
+                <span className="whitespace-nowrap">{it.label}</span>
               </span>
             </motion.button>
           )
         })}
-      </div>
+      </motion.div>
     </div>
   )
 }
