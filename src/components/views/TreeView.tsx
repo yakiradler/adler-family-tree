@@ -13,6 +13,8 @@ const H_GAP = 28                 // generous breathing room between siblings
 const V_GAP = 78                 // more vertical air between generations
 const COUPLE_GAP = 14
 
+export type LayoutMode = 'classic' | 'grid' | 'arc' | 'staggered'
+
 interface LayoutNode {
   member: Member
   x: number
@@ -20,7 +22,84 @@ interface LayoutNode {
   generation: number
 }
 
-function buildLayout(members: Member[], relationships: Relationship[]): LayoutNode[] {
+// ─── Sibling-cluster layouts ────────────────────────────────────────────────
+// These compute relative (dx, dy) placements for a set of leaf siblings given
+// a mode. Only applied when ALL children at a branch have no further descendants,
+// so the alternate shapes never tangle with deeper subtrees.
+
+interface Placement { dx: number; dy: number }
+interface ClusterResult { placements: Placement[]; width: number; height: number }
+
+function clusterClassic(n: number): ClusterResult {
+  const width = n * NODE_W + (n - 1) * H_GAP
+  const placements: Placement[] = []
+  for (let i = 0; i < n; i++) placements.push({ dx: i * (NODE_W + H_GAP), dy: 0 })
+  return { placements, width, height: NODE_H }
+}
+
+function clusterGrid(n: number): ClusterResult {
+  const perRow = n > 8 ? 5 : 4
+  const cols = Math.min(perRow, n)
+  const rowStep = NODE_H + V_GAP * 0.38
+  const width = cols * NODE_W + (cols - 1) * H_GAP
+  const placements: Placement[] = []
+  const rows = Math.ceil(n / perRow)
+  for (let i = 0; i < n; i++) {
+    const r = Math.floor(i / perRow)
+    const col = i % perRow
+    const thisRowCount = Math.min(perRow, n - r * perRow)
+    const thisRowW = thisRowCount * NODE_W + (thisRowCount - 1) * H_GAP
+    const dx = (width - thisRowW) / 2 + col * (NODE_W + H_GAP)
+    const dy = r * rowStep
+    placements.push({ dx, dy })
+  }
+  return { placements, width, height: NODE_H + (rows - 1) * rowStep }
+}
+
+function clusterStaggered(n: number): ClusterResult {
+  // Alternate top/bottom row. Because adjacent sibs are vertically separated,
+  // the horizontal step can be much smaller than NODE_W, saving ~40% width.
+  const step = NODE_W * 0.62 + 6
+  const yOffset = Math.round(NODE_H * 0.5 + 10)
+  const width = (n - 1) * step + NODE_W
+  const placements: Placement[] = []
+  for (let i = 0; i < n; i++) {
+    placements.push({ dx: i * step, dy: (i % 2) * yOffset })
+  }
+  return { placements, width, height: NODE_H + yOffset }
+}
+
+function clusterArc(n: number): ClusterResult {
+  // Fan children out along a gentle arc below parents.
+  // Sweep widens with child count, capped at ~160°.
+  const sweep = Math.min(Math.PI * 0.9, Math.PI * 0.4 + n * 0.09)
+  const halfSweep = sweep / 2
+  const chord = NODE_W + H_GAP * 0.9
+  const R = chord / (2 * Math.sin(sweep / (2 * Math.max(n - 1, 1))))
+  const width = 2 * R * Math.sin(halfSweep) + NODE_W
+  const depthFactor = 0.55 // flatten arc vertically
+  const centerX = width / 2
+  const placements: Placement[] = []
+  let maxDy = 0
+  for (let i = 0; i < n; i++) {
+    const t = n === 1 ? 0 : i / (n - 1)
+    const angle = -halfSweep + t * sweep
+    const dx = centerX + R * Math.sin(angle) - NODE_W / 2
+    const dy = R * (1 - Math.cos(angle)) * depthFactor
+    if (dy > maxDy) maxDy = dy
+    placements.push({ dx, dy })
+  }
+  return { placements, width, height: NODE_H + maxDy }
+}
+
+function clusterFor(mode: LayoutMode, n: number): ClusterResult {
+  if (mode === 'grid' && n >= 4) return clusterGrid(n)
+  if (mode === 'staggered' && n >= 3) return clusterStaggered(n)
+  if (mode === 'arc' && n >= 3) return clusterArc(n)
+  return clusterClassic(n)
+}
+
+function buildLayout(members: Member[], relationships: Relationship[], mode: LayoutMode = 'classic'): LayoutNode[] {
   if (members.length === 0) return []
 
   const memberById = new Map(members.map(m => [m.id, m]))
@@ -145,8 +224,18 @@ function buildLayout(members: Member[], relationships: Relationship[]): LayoutNo
     processedAsSpouse.add(id)
   }
 
-  // Subtree width
+  // Is this parent's children-group eligible for an alternate cluster layout?
+  // Rule: all children are leaves (no further descendants). Deeper subtrees
+  // keep the classic horizontal layout to avoid connector tangles.
+  const useCluster = (childIds: string[]): boolean => {
+    if (mode === 'classic' || childIds.length < 3) return false
+    return childIds.every(c => !(familyChildrenOf.get(c)?.length))
+  }
+
+  // Subtree width + cluster metadata cache
   const swCache = new Map<string, number>()
+  const clusterCache = new Map<string, ClusterResult>()
+
   function subtreeWidth(id: string): number {
     if (swCache.has(id)) return swCache.get(id)!
     const children = familyChildrenOf.get(id) ?? []
@@ -156,7 +245,13 @@ function buildLayout(members: Member[], relationships: Relationship[]): LayoutNo
 
     let childrenWidth = 0
     if (children.length > 0) {
-      childrenWidth = children.reduce((s, c) => s + subtreeWidth(c), 0) + H_GAP * (children.length - 1)
+      if (useCluster(children)) {
+        const c = clusterFor(mode, children.length)
+        clusterCache.set(id, c)
+        childrenWidth = c.width
+      } else {
+        childrenWidth = children.reduce((s, c) => s + subtreeWidth(c), 0) + H_GAP * (children.length - 1)
+      }
     }
     const w = Math.max(coupleWidth, childrenWidth)
     swCache.set(id, w)
@@ -167,6 +262,7 @@ function buildLayout(members: Member[], relationships: Relationship[]): LayoutNo
 
   // Assign positions
   const xPos = new Map<string, number>()
+  const yOffset = new Map<string, number>() // extra dy for cluster layouts (grid/arc/staggered)
   const placed = new Set<string>()
 
   function assign(id: string, leftX: number) {
@@ -182,16 +278,20 @@ function buildLayout(members: Member[], relationships: Relationship[]): LayoutNo
       for (const sp of spousesToPlace) {
         xPos.set(sp, nextX); placed.add(sp); nextX += NODE_W + COUPLE_GAP
       }
-    } else {
-      let childLeft = leftX
-      for (const c of children) {
-        assign(c, childLeft)
-        childLeft += subtreeWidth(c) + H_GAP
-      }
-      const firstCX = xPos.get(children[0])!
-      const lastCX = xPos.get(children[children.length - 1])!
-      const midX = (firstCX + lastCX + NODE_W) / 2
+      return
+    }
 
+    const cluster = clusterCache.get(id)
+    if (cluster) {
+      // Cluster layout — children are leaves, placed at relative (dx, dy).
+      for (let i = 0; i < children.length; i++) {
+        const c = children[i]
+        const p = cluster.placements[i]
+        xPos.set(c, leftX + p.dx)
+        if (p.dy) yOffset.set(c, p.dy)
+        placed.add(c)
+      }
+      const midX = leftX + cluster.width / 2
       if (spousesToPlace.length > 0) {
         const totalCoupleW = NODE_W + spousesToPlace.length * (NODE_W + COUPLE_GAP)
         const coupleLeft = midX - totalCoupleW / 2
@@ -203,6 +303,29 @@ function buildLayout(members: Member[], relationships: Relationship[]): LayoutNo
       } else {
         xPos.set(id, midX - NODE_W / 2)
       }
+      return
+    }
+
+    // Classic horizontal layout (children with their own subtrees).
+    let childLeft = leftX
+    for (const c of children) {
+      assign(c, childLeft)
+      childLeft += subtreeWidth(c) + H_GAP
+    }
+    const firstCX = xPos.get(children[0])!
+    const lastCX = xPos.get(children[children.length - 1])!
+    const midX = (firstCX + lastCX + NODE_W) / 2
+
+    if (spousesToPlace.length > 0) {
+      const totalCoupleW = NODE_W + spousesToPlace.length * (NODE_W + COUPLE_GAP)
+      const coupleLeft = midX - totalCoupleW / 2
+      xPos.set(id, coupleLeft)
+      let spX = coupleLeft + NODE_W + COUPLE_GAP
+      for (const sp of spousesToPlace) {
+        xPos.set(sp, spX); placed.add(sp); spX += NODE_W + COUPLE_GAP
+      }
+    } else {
+      xPos.set(id, midX - NODE_W / 2)
     }
   }
 
@@ -218,7 +341,7 @@ function buildLayout(members: Member[], relationships: Relationship[]): LayoutNo
   return members.map(m => ({
     member: m,
     x: xPos.get(m.id) ?? 0,
-    y: (genMap.get(m.id) ?? 0) * (NODE_H + V_GAP),
+    y: (genMap.get(m.id) ?? 0) * (NODE_H + V_GAP) + (yOffset.get(m.id) ?? 0),
     generation: genMap.get(m.id) ?? 0,
   }))
 }
@@ -301,13 +424,27 @@ function buildConnectors(nodes: LayoutNode[], relationships: Relationship[]) {
 
 // ─── Main TreeView ─────────────────────────────────────────────────────────────
 
+const LAYOUT_STORAGE_KEY = 'ft-tree-layout-mode'
+const isLayoutMode = (v: unknown): v is LayoutMode =>
+  v === 'classic' || v === 'grid' || v === 'arc' || v === 'staggered'
+
 export default function TreeView() {
   const { members, relationships, selectedMemberId, setSelectedMemberId } = useFamilyStore()
   const { t } = useLang()
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
 
-  const nodes = useMemo(() => buildLayout(members, relationships), [members, relationships])
+  // Layout mode — persisted so the user's choice survives reloads.
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => {
+    if (typeof window === 'undefined') return 'classic'
+    const saved = window.localStorage.getItem(LAYOUT_STORAGE_KEY)
+    return isLayoutMode(saved) ? saved : 'classic'
+  })
+  useEffect(() => {
+    try { window.localStorage.setItem(LAYOUT_STORAGE_KEY, layoutMode) } catch { /* ignore */ }
+  }, [layoutMode])
+
+  const nodes = useMemo(() => buildLayout(members, relationships, layoutMode), [members, relationships, layoutMode])
   const { lines, spouseLines } = useMemo(() => buildConnectors(nodes, relationships), [nodes, relationships])
 
   // Pan + zoom
@@ -572,6 +709,9 @@ export default function TreeView() {
         ))}
       </div>
 
+      {/* Layout picker — segmented control, top-center, with iconic glyphs */}
+      <LayoutPicker mode={layoutMode} onChange={setLayoutMode} t={t} />
+
       {/* Zoom controls */}
       <div className="absolute bottom-4 right-4 flex flex-col gap-1.5 z-10">
         <button
@@ -598,6 +738,112 @@ export default function TreeView() {
       {/* Scale indicator */}
       <div className="absolute bottom-4 left-4 glass rounded-full px-3 py-1.5 text-[#636366] text-sf-caption2 font-semibold shadow-glass-sm z-10">
         {Math.round(scale * 100)}%
+      </div>
+    </div>
+  )
+}
+
+// ─── Layout picker (floating segmented control) ──────────────────────────
+// Appears top-center, glass-morphism pill. Each segment has an iconic
+// glyph hinting at the arrangement + Hebrew/English label.
+
+function LayoutIcon({ mode }: { mode: LayoutMode }) {
+  const stroke = 'currentColor'
+  if (mode === 'classic')
+    return (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <circle cx="3" cy="8" r="1.6" fill={stroke} />
+        <circle cx="8" cy="8" r="1.6" fill={stroke} />
+        <circle cx="13" cy="8" r="1.6" fill={stroke} />
+      </svg>
+    )
+  if (mode === 'grid')
+    return (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <circle cx="4" cy="5" r="1.4" fill={stroke} />
+        <circle cx="8" cy="5" r="1.4" fill={stroke} />
+        <circle cx="12" cy="5" r="1.4" fill={stroke} />
+        <circle cx="4" cy="11" r="1.4" fill={stroke} />
+        <circle cx="8" cy="11" r="1.4" fill={stroke} />
+        <circle cx="12" cy="11" r="1.4" fill={stroke} />
+      </svg>
+    )
+  if (mode === 'arc')
+    return (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M2 6 Q 8 14 14 6" stroke={stroke} strokeWidth="1.4" fill="none" strokeLinecap="round" />
+        <circle cx="2.4" cy="6" r="1.4" fill={stroke} />
+        <circle cx="8" cy="10.8" r="1.4" fill={stroke} />
+        <circle cx="13.6" cy="6" r="1.4" fill={stroke} />
+      </svg>
+    )
+  // staggered
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="3" cy="5" r="1.4" fill={stroke} />
+      <circle cx="8" cy="11" r="1.4" fill={stroke} />
+      <circle cx="13" cy="5" r="1.4" fill={stroke} />
+      <circle cx="5.5" cy="11" r="1.4" fill={stroke} />
+      <circle cx="10.5" cy="11" r="1.4" fill={stroke} />
+    </svg>
+  )
+}
+
+function LayoutPicker({
+  mode,
+  onChange,
+  t,
+}: {
+  mode: LayoutMode
+  onChange: (m: LayoutMode) => void
+  t: Translations
+}) {
+  const items: { key: LayoutMode; label: string }[] = [
+    { key: 'classic', label: t.layoutClassic },
+    { key: 'grid', label: t.layoutGrid },
+    { key: 'arc', label: t.layoutArc },
+    { key: 'staggered', label: t.layoutStaggered },
+  ]
+  return (
+    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+      <div
+        className="pointer-events-auto glass-strong shadow-glass rounded-full px-1 py-1 flex items-center gap-0.5"
+        role="radiogroup"
+        aria-label={t.layoutPicker}
+      >
+        {items.map(it => {
+          const active = mode === it.key
+          return (
+            <motion.button
+              key={it.key}
+              role="radio"
+              aria-checked={active}
+              onClick={() => onChange(it.key)}
+              whileTap={{ scale: 0.95 }}
+              className={`relative flex items-center gap-1.5 px-3 h-8 rounded-full text-[12px] font-semibold transition-colors ${
+                active ? 'text-white' : 'text-[#3A3A3C] hover:text-[#1C1C1E]'
+              }`}
+              title={it.label}
+            >
+              {active && (
+                <motion.span
+                  layoutId="layout-pill-active"
+                  className="absolute inset-0 rounded-full"
+                  style={{
+                    background:
+                      'linear-gradient(135deg, #2B6BFF 0%, #6C47FF 55%, #19C6FF 100%)',
+                    boxShadow: '0 6px 16px rgba(108,71,255,0.35)',
+                  }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 36 }}
+                />
+              )}
+              <span className="relative z-10 flex items-center gap-1.5">
+                <LayoutIcon mode={it.key} />
+                <span className="hidden sm:inline">{it.label}</span>
+              </span>
+            </motion.button>
+          )
+        })}
       </div>
     </div>
   )

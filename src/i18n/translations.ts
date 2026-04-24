@@ -39,6 +39,11 @@ export const translations = {
     // Tree View
     treeEmptyTitle: 'התחל את עץ המשפחה שלך',
     treeEmptyDesc: 'הוסף את חבר המשפחה הראשון שלך כדי להתחיל לבנות את העץ.',
+    layoutPicker: 'פריסה',
+    layoutClassic: 'רגיל',
+    layoutGrid: 'רשת',
+    layoutArc: 'קשת',
+    layoutStaggered: 'זיגזג',
 
     // Schematic View
     genGreatGrandparents: 'סבא רבא וסבתא רבא',
@@ -274,6 +279,11 @@ export const translations = {
 
     treeEmptyTitle: 'Start Your Family Tree',
     treeEmptyDesc: 'Add your first family member to begin building your tree.',
+    layoutPicker: 'Layout',
+    layoutClassic: 'Classic',
+    layoutGrid: 'Grid',
+    layoutArc: 'Arc',
+    layoutStaggered: 'Zigzag',
 
     genGreatGrandparents: 'Great-Grandparents',
     genGrandparents: 'Grandparents',
