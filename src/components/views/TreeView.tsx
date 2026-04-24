@@ -1,357 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang, type Translations } from '../../i18n/useT'
 import MemberNode from '../MemberNode'
-import type { Member, Relationship } from '../../types'
+import type { Relationship } from '../../types'
+import {
+  AVATAR, NODE_W, NODE_H,
+  type LayoutMode, type LayoutNode,
+  buildLayout,
+} from './treeLayout'
 
-// ─── Layout constants (Instagram-story-card style) ─────────────────────────
-const AVATAR = 64                // avatar diameter
-const NODE_W = AVATAR + 72       // wider card so sibling names never collide
-const NODE_H = AVATAR + 62       // photo + card height
-const H_GAP = 28                 // generous breathing room between siblings
-const V_GAP = 78                 // more vertical air between generations
-const COUPLE_GAP = 14
-
-export type LayoutMode = 'classic' | 'grid' | 'arc' | 'staggered'
-
-interface LayoutNode {
-  member: Member
-  x: number
-  y: number
-  generation: number
-}
-
-// ─── Sibling-cluster layouts ────────────────────────────────────────────────
-// These compute relative (dx, dy) placements for a set of leaf siblings given
-// a mode. Only applied when ALL children at a branch have no further descendants,
-// so the alternate shapes never tangle with deeper subtrees.
-
-interface Placement { dx: number; dy: number }
-interface ClusterResult { placements: Placement[]; width: number; height: number }
-
-function clusterClassic(n: number): ClusterResult {
-  const width = n * NODE_W + (n - 1) * H_GAP
-  const placements: Placement[] = []
-  for (let i = 0; i < n; i++) placements.push({ dx: i * (NODE_W + H_GAP), dy: 0 })
-  return { placements, width, height: NODE_H }
-}
-
-function clusterGrid(n: number): ClusterResult {
-  const perRow = n > 8 ? 5 : 4
-  const cols = Math.min(perRow, n)
-  const rowStep = NODE_H + V_GAP * 0.38
-  const width = cols * NODE_W + (cols - 1) * H_GAP
-  const placements: Placement[] = []
-  const rows = Math.ceil(n / perRow)
-  for (let i = 0; i < n; i++) {
-    const r = Math.floor(i / perRow)
-    const col = i % perRow
-    const thisRowCount = Math.min(perRow, n - r * perRow)
-    const thisRowW = thisRowCount * NODE_W + (thisRowCount - 1) * H_GAP
-    const dx = (width - thisRowW) / 2 + col * (NODE_W + H_GAP)
-    const dy = r * rowStep
-    placements.push({ dx, dy })
-  }
-  return { placements, width, height: NODE_H + (rows - 1) * rowStep }
-}
-
-function clusterStaggered(n: number): ClusterResult {
-  // Alternate top/bottom row. Because adjacent sibs are vertically separated,
-  // the horizontal step can be much smaller than NODE_W, saving ~40% width.
-  const step = NODE_W * 0.62 + 6
-  const yOffset = Math.round(NODE_H * 0.5 + 10)
-  const width = (n - 1) * step + NODE_W
-  const placements: Placement[] = []
-  for (let i = 0; i < n; i++) {
-    placements.push({ dx: i * step, dy: (i % 2) * yOffset })
-  }
-  return { placements, width, height: NODE_H + yOffset }
-}
-
-function clusterArc(n: number): ClusterResult {
-  // Fan children out along a gentle arc below parents.
-  // Sweep widens with child count, capped at ~160°.
-  const sweep = Math.min(Math.PI * 0.9, Math.PI * 0.4 + n * 0.09)
-  const halfSweep = sweep / 2
-  const chord = NODE_W + H_GAP * 0.9
-  const R = chord / (2 * Math.sin(sweep / (2 * Math.max(n - 1, 1))))
-  const width = 2 * R * Math.sin(halfSweep) + NODE_W
-  const depthFactor = 0.55 // flatten arc vertically
-  const centerX = width / 2
-  const placements: Placement[] = []
-  let maxDy = 0
-  for (let i = 0; i < n; i++) {
-    const t = n === 1 ? 0 : i / (n - 1)
-    const angle = -halfSweep + t * sweep
-    const dx = centerX + R * Math.sin(angle) - NODE_W / 2
-    const dy = R * (1 - Math.cos(angle)) * depthFactor
-    if (dy > maxDy) maxDy = dy
-    placements.push({ dx, dy })
-  }
-  return { placements, width, height: NODE_H + maxDy }
-}
-
-function clusterFor(mode: LayoutMode, n: number): ClusterResult {
-  if (mode === 'grid' && n >= 4) return clusterGrid(n)
-  if (mode === 'staggered' && n >= 3) return clusterStaggered(n)
-  if (mode === 'arc' && n >= 3) return clusterArc(n)
-  return clusterClassic(n)
-}
-
-function buildLayout(members: Member[], relationships: Relationship[], mode: LayoutMode = 'classic'): LayoutNode[] {
-  if (members.length === 0) return []
-
-  const memberById = new Map(members.map(m => [m.id, m]))
-  const parentsOf = new Map<string, string[]>()
-  const childrenOf = new Map<string, string[]>()
-  const spousesOf = new Map<string, string[]>()
-
-  for (const r of relationships) {
-    if (r.type === 'parent-child') {
-      if (!parentsOf.has(r.member_b_id)) parentsOf.set(r.member_b_id, [])
-      parentsOf.get(r.member_b_id)!.push(r.member_a_id)
-      if (!childrenOf.has(r.member_a_id)) childrenOf.set(r.member_a_id, [])
-      const ch = childrenOf.get(r.member_a_id)!
-      if (!ch.includes(r.member_b_id)) ch.push(r.member_b_id)
-    }
-    if (r.type === 'spouse') {
-      const add = (a: string, b: string) => {
-        if (!spousesOf.has(a)) spousesOf.set(a, [])
-        if (!spousesOf.get(a)!.includes(b)) spousesOf.get(a)!.push(b)
-      }
-      add(r.member_a_id, r.member_b_id)
-      add(r.member_b_id, r.member_a_id)
-    }
-  }
-
-  // True roots: members with no parents
-  const rootIds = new Set(members.filter(m => !parentsOf.has(m.id)).map(m => m.id))
-
-  // Primary parent: prefer male so each child placed once
-  const primaryParentOf = new Map<string, string>()
-  for (const [childId, parents] of parentsOf) {
-    const malePrimary = parents.find(p => memberById.get(p)?.gender === 'male')
-    primaryParentOf.set(childId, malePrimary ?? parents[0])
-  }
-
-  const ownerChildrenOf = new Map<string, string[]>()
-  for (const [childId, parentId] of primaryParentOf) {
-    if (!ownerChildrenOf.has(parentId)) ownerChildrenOf.set(parentId, [])
-    ownerChildrenOf.get(parentId)!.push(childId)
-  }
-
-  // Sort siblings by age / birth order — eldest first (RTL: appears on right).
-  // Precedence: explicit birth_order → birth_date → first_name alpha.
-  const siblingSort = (aId: string, bId: string) => {
-    const a = memberById.get(aId), b = memberById.get(bId)
-    if (!a || !b) return 0
-    const ao = a.birth_order, bo = b.birth_order
-    if (ao != null && bo != null && ao !== bo) return ao - bo
-    if (ao != null && bo == null) return -1
-    if (ao == null && bo != null) return 1
-    const ad = a.birth_date ? new Date(a.birth_date).getTime() : null
-    const bd = b.birth_date ? new Date(b.birth_date).getTime() : null
-    if (ad != null && bd != null && ad !== bd) return ad - bd
-    if (ad != null && bd == null) return -1
-    if (ad == null && bd != null) return 1
-    return (a.first_name || '').localeCompare(b.first_name || '', 'he')
-  }
-  for (const [pid, kids] of ownerChildrenOf) {
-    kids.sort(siblingSort)
-    ownerChildrenOf.set(pid, kids)
-  }
-
-  // "Family unit" children: own children + spouse's own children (also sorted)
-  const familyChildrenOf = new Map<string, string[]>()
-  for (const m of members) {
-    const owned = ownerChildrenOf.get(m.id) ?? []
-    const fromSpouses = (spousesOf.get(m.id) ?? []).flatMap(sp => ownerChildrenOf.get(sp) ?? [])
-    const all = [...new Set([...owned, ...fromSpouses])]
-    all.sort(siblingSort)
-    if (all.length > 0) familyChildrenOf.set(m.id, all)
-  }
-
-  // Generation via DAG max-depth — combined fixpoint that alternates two rules
-  // until stable. This fixes stepchildren (e.g. Shir/Or) appearing on their
-  // step-parent's row: a married-in spouse first inherits their partner's
-  // generation, then their own children rise one level.
-  const genMap = new Map<string, number>()
-  members.forEach(m => genMap.set(m.id, 0))
-  let changed = true
-  let safety = 0
-  while (changed && safety++ < 200) {
-    changed = false
-    // Rule 1: child = max(parents) + 1
-    for (const m of members) {
-      const parents = parentsOf.get(m.id) ?? []
-      if (parents.length === 0) continue
-      const newGen = Math.max(...parents.map(p => genMap.get(p) ?? 0)) + 1
-      if (newGen > (genMap.get(m.id) ?? 0)) {
-        genMap.set(m.id, newGen)
-        changed = true
-      }
-    }
-    // Rule 2: married-in spouse (no parents) inherits partner's generation
-    for (const m of members) {
-      if (parentsOf.has(m.id)) continue
-      const currGen = genMap.get(m.id) ?? 0
-      for (const sp of spousesOf.get(m.id) ?? []) {
-        const spGen = genMap.get(sp) ?? 0
-        if (spGen > currGen) {
-          genMap.set(m.id, spGen)
-          changed = true
-        }
-      }
-    }
-  }
-
-  // Layout roots: true roots whose primary spouse isn't itself a root-with-descendants
-  const processedAsSpouse = new Set<string>()
-  const layoutRoots: string[] = []
-
-  for (const id of rootIds) {
-    if (processedAsSpouse.has(id)) continue
-    const spouses = spousesOf.get(id) ?? []
-    const primarySpouse = spouses[0]
-    if (primarySpouse && !rootIds.has(primarySpouse)) {
-      // Married in → placed via partner
-      processedAsSpouse.add(id)
-      continue
-    }
-    layoutRoots.push(id)
-    for (const sp of spouses) if (rootIds.has(sp)) processedAsSpouse.add(sp)
-    processedAsSpouse.add(id)
-  }
-
-  // Is this parent's children-group eligible for an alternate cluster layout?
-  // Rule: all children are leaves (no further descendants). Deeper subtrees
-  // keep the classic horizontal layout to avoid connector tangles.
-  const useCluster = (childIds: string[]): boolean => {
-    if (mode === 'classic' || childIds.length < 3) return false
-    return childIds.every(c => !(familyChildrenOf.get(c)?.length))
-  }
-
-  // Subtree width + cluster metadata cache
-  const swCache = new Map<string, number>()
-  const clusterCache = new Map<string, ClusterResult>()
-
-  function subtreeWidth(id: string): number {
-    if (swCache.has(id)) return swCache.get(id)!
-    const children = familyChildrenOf.get(id) ?? []
-    const spouses = spousesOf.get(id) ?? []
-    const placedSpouses = spouses.filter(sp => !layoutRoots.includes(sp))
-    const coupleWidth = NODE_W + placedSpouses.length * (NODE_W + COUPLE_GAP)
-
-    let childrenWidth = 0
-    if (children.length > 0) {
-      if (useCluster(children)) {
-        const c = clusterFor(mode, children.length)
-        clusterCache.set(id, c)
-        childrenWidth = c.width
-      } else {
-        childrenWidth = children.reduce((s, c) => s + subtreeWidth(c), 0) + H_GAP * (children.length - 1)
-      }
-    }
-    const w = Math.max(coupleWidth, childrenWidth)
-    swCache.set(id, w)
-    return w
-  }
-  layoutRoots.forEach(id => subtreeWidth(id))
-  members.forEach(m => { if (!swCache.has(m.id)) subtreeWidth(m.id) })
-
-  // Assign positions
-  const xPos = new Map<string, number>()
-  const yOffset = new Map<string, number>() // extra dy for cluster layouts (grid/arc/staggered)
-  const placed = new Set<string>()
-
-  function assign(id: string, leftX: number) {
-    if (placed.has(id)) return
-    placed.add(id)
-    const children = familyChildrenOf.get(id) ?? []
-    const spouses = spousesOf.get(id) ?? []
-    const spousesToPlace = spouses.filter(sp => !layoutRoots.includes(sp) && !placed.has(sp))
-
-    if (children.length === 0) {
-      xPos.set(id, leftX)
-      let nextX = leftX + NODE_W + COUPLE_GAP
-      for (const sp of spousesToPlace) {
-        xPos.set(sp, nextX); placed.add(sp); nextX += NODE_W + COUPLE_GAP
-      }
-      return
-    }
-
-    const cluster = clusterCache.get(id)
-    if (cluster) {
-      // Cluster layout — children are leaves, placed at relative (dx, dy).
-      for (let i = 0; i < children.length; i++) {
-        const c = children[i]
-        const p = cluster.placements[i]
-        xPos.set(c, leftX + p.dx)
-        if (p.dy) yOffset.set(c, p.dy)
-        placed.add(c)
-      }
-      const midX = leftX + cluster.width / 2
-      if (spousesToPlace.length > 0) {
-        const totalCoupleW = NODE_W + spousesToPlace.length * (NODE_W + COUPLE_GAP)
-        const coupleLeft = midX - totalCoupleW / 2
-        xPos.set(id, coupleLeft)
-        let spX = coupleLeft + NODE_W + COUPLE_GAP
-        for (const sp of spousesToPlace) {
-          xPos.set(sp, spX); placed.add(sp); spX += NODE_W + COUPLE_GAP
-        }
-      } else {
-        xPos.set(id, midX - NODE_W / 2)
-      }
-      return
-    }
-
-    // Classic horizontal layout (children with their own subtrees).
-    let childLeft = leftX
-    for (const c of children) {
-      assign(c, childLeft)
-      childLeft += subtreeWidth(c) + H_GAP
-    }
-    const firstCX = xPos.get(children[0])!
-    const lastCX = xPos.get(children[children.length - 1])!
-    const midX = (firstCX + lastCX + NODE_W) / 2
-
-    if (spousesToPlace.length > 0) {
-      const totalCoupleW = NODE_W + spousesToPlace.length * (NODE_W + COUPLE_GAP)
-      const coupleLeft = midX - totalCoupleW / 2
-      xPos.set(id, coupleLeft)
-      let spX = coupleLeft + NODE_W + COUPLE_GAP
-      for (const sp of spousesToPlace) {
-        xPos.set(sp, spX); placed.add(sp); spX += NODE_W + COUPLE_GAP
-      }
-    } else {
-      xPos.set(id, midX - NODE_W / 2)
-    }
-  }
-
-  let startX = 0
-  for (const rootId of layoutRoots) {
-    assign(rootId, startX)
-    startX += subtreeWidth(rootId) + H_GAP * 2
-  }
-  members.forEach(m => {
-    if (!placed.has(m.id)) { xPos.set(m.id, startX); startX += NODE_W + H_GAP }
-  })
-
-  return members.map(m => ({
-    member: m,
-    x: xPos.get(m.id) ?? 0,
-    y: (genMap.get(m.id) ?? 0) * (NODE_H + V_GAP) + (yOffset.get(m.id) ?? 0),
-    generation: genMap.get(m.id) ?? 0,
-  }))
-}
+export type { LayoutMode } from './treeLayout'
 
 // ─── Connectors ───────────────────────────────────────────────────────────────
 
 function buildConnectors(nodes: LayoutNode[], relationships: Relationship[]) {
   const posMap = new Map(nodes.map(n => [n.member.id, n]))
 
-  // Group children by parent
   const parentGroups = new Map<string, string[]>()
   for (const r of relationships) {
     if (r.type !== 'parent-child') continue
@@ -371,10 +36,9 @@ function buildConnectors(nodes: LayoutNode[], relationships: Relationship[]) {
   interface LineD { d: string }
   const lines: LineD[] = []
 
-  // For each child, draw an ORTHOGONAL elbow line from the parents' midpoint
-  // straight down, across at the mid-row, then straight down to land exactly
-  // on the TOP EDGE of the child's name-card — directly above the name.
-  // The card's top edge visually sits at: avatar + ring - overlap ≈ AVATAR - 10
+  // Orthogonal elbow: from parents' midpoint down, across, then down to the
+  // top edge of the child's name-card. Works regardless of the child's
+  // layout row (grid/arc/staggered) because it uses the child's actual y.
   const CARD_TOP_OFFSET = AVATAR - 10
   for (const [childId, pars] of childToParents) {
     const child = posMap.get(childId)
@@ -382,25 +46,20 @@ function buildConnectors(nodes: LayoutNode[], relationships: Relationship[]) {
     const parents = pars.map(p => posMap.get(p)).filter(Boolean) as LayoutNode[]
     if (parents.length === 0) continue
 
-    const childCX = Math.round(child.x + NODE_W / 2)        // exact center of card
-    const childTopY = Math.round(child.y + CARD_TOP_OFFSET)  // top edge of name card
+    const childCX = Math.round(child.x + NODE_W / 2)
+    const childTopY = Math.round(child.y + CARD_TOP_OFFSET)
 
-    // Parent exit: midpoint of couple (horizontal), bottom of card (vertical)
     const pxMin = Math.min(...parents.map(p => p.x + NODE_W / 2))
     const pxMax = Math.max(...parents.map(p => p.x + NODE_W / 2))
     const parentCX = Math.round((pxMin + pxMax) / 2)
     const parentBottomY = Math.round(parents[0].y + NODE_H + 2)
 
-    // Orthogonal elbow: down → across at 60% of gap → down. Running the bar
-    // slightly closer to the children makes each drop shorter and lined up
-    // tightly above the name text.
     const gap = childTopY - parentBottomY
     const midY = Math.round(parentBottomY + gap * 0.6)
     const d = `M ${parentCX} ${parentBottomY} L ${parentCX} ${midY} L ${childCX} ${midY} L ${childCX} ${childTopY}`
     lines.push({ d })
   }
 
-  // Spouse lines
   interface SpouseLine { x1: number; x2: number; y: number }
   const spouseLines: SpouseLine[] = []
   const seen = new Set<string>()
@@ -434,7 +93,6 @@ export default function TreeView() {
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
 
-  // Layout mode — persisted so the user's choice survives reloads.
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => {
     if (typeof window === 'undefined') return 'classic'
     const saved = window.localStorage.getItem(LAYOUT_STORAGE_KEY)
@@ -444,21 +102,25 @@ export default function TreeView() {
     try { window.localStorage.setItem(LAYOUT_STORAGE_KEY, layoutMode) } catch { /* ignore */ }
   }, [layoutMode])
 
-  const nodes = useMemo(() => buildLayout(members, relationships, layoutMode), [members, relationships, layoutMode])
-  const { lines, spouseLines } = useMemo(() => buildConnectors(nodes, relationships), [nodes, relationships])
+  const nodes = useMemo(
+    () => buildLayout(members, relationships, layoutMode),
+    [members, relationships, layoutMode],
+  )
+  const { lines, spouseLines } = useMemo(
+    () => buildConnectors(nodes, relationships),
+    [nodes, relationships],
+  )
 
   // Pan + zoom
   const [scale, setScale] = useState(1)
   const [tx, setTx] = useState(0)
   const [ty, setTy] = useState(0)
   const dragState = useRef<{ startX: number; startY: number; tx0: number; ty0: number } | null>(null)
-  // Mobile touch state (single-finger pan + two-finger pinch)
   type TouchMode =
     | { mode: 'pan'; startX: number; startY: number; tx0: number; ty0: number }
     | { mode: 'pinch'; initialDist: number; initialScale: number; cx: number; cy: number; tx0: number; ty0: number }
   const touchState = useRef<TouchMode | null>(null)
 
-  // Canvas dims
   const pad = 48
   const maxX = nodes.length ? Math.max(...nodes.map(n => n.x + NODE_W)) : 0
   const maxY = nodes.length ? Math.max(...nodes.map(n => n.y + NODE_H)) : 0
@@ -467,14 +129,12 @@ export default function TreeView() {
   const canvasW = maxX + offsetX + pad
   const canvasH = maxY + pad * 2
 
-  // Initial view: fit the whole tree with a minimum readable scale.
   useEffect(() => {
     if (!wrapRef.current || nodes.length === 0) return
     const w = wrapRef.current.clientWidth
     const h = wrapRef.current.clientHeight
     const fitW = (w - 20) / canvasW
     const fitH = (h - 120) / canvasH
-    // Prefer horizontal fit (tree is wider than tall); cap at 0.85 so nodes stay readable-ish.
     const s = Math.max(0.28, Math.min(0.85, Math.min(fitW, fitH)))
     setScale(s)
     setTx((w - canvasW * s) / 2)
@@ -489,7 +149,6 @@ export default function TreeView() {
     const rect = wrapRef.current!.getBoundingClientRect()
     const cx = e.clientX - rect.left
     const cy = e.clientY - rect.top
-    // Zoom toward mouse
     const nxWorld = (cx - tx) / scale
     const nyWorld = (cy - ty) / scale
     setTx(cx - nxWorld * newScale)
@@ -498,7 +157,6 @@ export default function TreeView() {
   }
 
   const onMouseDown = (e: React.MouseEvent) => {
-    // Only if clicking empty canvas (not a button)
     if ((e.target as HTMLElement).closest('button')) return
     dragState.current = { startX: e.clientX, startY: e.clientY, tx0: tx, ty0: ty }
   }
@@ -509,7 +167,6 @@ export default function TreeView() {
   }
   const onMouseUp = () => { dragState.current = null }
 
-  // ─── Touch handlers (mobile) ─────────────────────────────────────────────
   const onTouchStart = (e: React.TouchEvent) => {
     if ((e.target as HTMLElement).closest('button')) return
     const rect = wrapRef.current?.getBoundingClientRect()
@@ -550,7 +207,6 @@ export default function TreeView() {
       const dist = Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY) || 1
       const factor = dist / st.initialDist
       const newScale = Math.max(0.25, Math.min(2.5, st.initialScale * factor))
-      // Zoom anchored on the initial pinch center so the point under fingers stays put
       const nxWorld = (st.cx - st.tx0) / st.initialScale
       const nyWorld = (st.cy - st.ty0) / st.initialScale
       setTx(st.cx - nxWorld * newScale)
@@ -563,7 +219,6 @@ export default function TreeView() {
     if (e.touches.length === 0) {
       touchState.current = null
     } else if (e.touches.length === 1) {
-      // Pinch → fall back to pan with the remaining finger
       const t = e.touches[0]
       touchState.current = {
         mode: 'pan',
@@ -617,7 +272,6 @@ export default function TreeView() {
         WebkitUserSelect: 'none',
         WebkitTapHighlightColor: 'transparent',
         background:
-          // Multi-radial aurora mesh gradient — modern, airy, no hard banding
           'radial-gradient(at 12% 8%, rgba(120,170,255,0.35) 0px, transparent 50%),' +
           'radial-gradient(at 92% 12%, rgba(255,140,200,0.28) 0px, transparent 55%),' +
           'radial-gradient(at 78% 92%, rgba(120,255,220,0.25) 0px, transparent 55%),' +
@@ -625,7 +279,6 @@ export default function TreeView() {
           'linear-gradient(135deg, #F4F7FF 0%, #FBF7FF 55%, #FFF5FA 100%)',
       }}
     >
-      {/* Subtle dotted grid — lower contrast, larger pitch for the new airier feel */}
       <div
         className="absolute inset-0 opacity-35 pointer-events-none"
         style={{
@@ -634,7 +287,6 @@ export default function TreeView() {
         }}
       />
 
-      {/* Canvas */}
       <div
         ref={canvasRef}
         className="absolute top-0 left-0 origin-top-left"
@@ -718,7 +370,7 @@ export default function TreeView() {
         ))}
       </div>
 
-      {/* Layout picker — segmented control, top-center, with iconic glyphs */}
+      {/* Floating bottom layout picker — single collapsed button expanding to 4 */}
       <LayoutPicker mode={layoutMode} onChange={setLayoutMode} t={t} />
 
       {/* Zoom controls */}
@@ -744,7 +396,6 @@ export default function TreeView() {
         </button>
       </div>
 
-      {/* Scale indicator */}
       <div className="absolute bottom-4 left-4 glass rounded-full px-3 py-1.5 text-[#636366] text-sf-caption2 font-semibold shadow-glass-sm z-10">
         {Math.round(scale * 100)}%
       </div>
@@ -752,15 +403,16 @@ export default function TreeView() {
   )
 }
 
-// ─── Layout picker (floating segmented control) ──────────────────────────
-// Appears top-center, glass-morphism pill. Each segment has an iconic
-// glyph hinting at the arrangement + Hebrew/English label.
+// ─── Layout picker ────────────────────────────────────────────────────────
+// Collapsed state: a single pill at the BOTTOM-center labelled "שינוי תצוגה"
+// with the current mode's icon. Tap → expands upward into 4 options with a
+// springy stagger. Tap outside (or a choice) → collapses again.
 
-function LayoutIcon({ mode }: { mode: LayoutMode }) {
+function LayoutIcon({ mode, className }: { mode: LayoutMode; className?: string }) {
   const stroke = 'currentColor'
   if (mode === 'classic')
     return (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" className={className}>
         <circle cx="3" cy="8" r="1.6" fill={stroke} />
         <circle cx="8" cy="8" r="1.6" fill={stroke} />
         <circle cx="13" cy="8" r="1.6" fill={stroke} />
@@ -768,7 +420,7 @@ function LayoutIcon({ mode }: { mode: LayoutMode }) {
     )
   if (mode === 'grid')
     return (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" className={className}>
         <circle cx="4" cy="5" r="1.4" fill={stroke} />
         <circle cx="8" cy="5" r="1.4" fill={stroke} />
         <circle cx="12" cy="5" r="1.4" fill={stroke} />
@@ -779,16 +431,15 @@ function LayoutIcon({ mode }: { mode: LayoutMode }) {
     )
   if (mode === 'arc')
     return (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" className={className}>
         <path d="M2 6 Q 8 14 14 6" stroke={stroke} strokeWidth="1.4" fill="none" strokeLinecap="round" />
         <circle cx="2.4" cy="6" r="1.4" fill={stroke} />
         <circle cx="8" cy="10.8" r="1.4" fill={stroke} />
         <circle cx="13.6" cy="6" r="1.4" fill={stroke} />
       </svg>
     )
-  // staggered
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" className={className}>
       <circle cx="3" cy="5" r="1.4" fill={stroke} />
       <circle cx="8" cy="11" r="1.4" fill={stroke} />
       <circle cx="13" cy="5" r="1.4" fill={stroke} />
@@ -807,56 +458,127 @@ function LayoutPicker({
   onChange: (m: LayoutMode) => void
   t: Translations
 }) {
+  const [open, setOpen] = useState(false)
+
   const items: { key: LayoutMode; label: string }[] = [
     { key: 'classic', label: t.layoutClassic },
     { key: 'grid', label: t.layoutGrid },
     { key: 'arc', label: t.layoutArc },
     { key: 'staggered', label: t.layoutStaggered },
   ]
+  const currentLabel = items.find(i => i.key === mode)?.label ?? ''
+
+  // Close the popover on outside click / Escape.
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e: MouseEvent) => {
+      const tgt = e.target as HTMLElement
+      if (!tgt.closest('[data-layout-picker]')) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
   return (
-    <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ type: 'spring', stiffness: 380, damping: 30, delay: 0.15 }}
-        className="pointer-events-auto glass-strong shadow-glass rounded-full px-1 py-1 flex items-center gap-0.5 border border-white/50"
-        role="radiogroup"
-        aria-label={t.layoutPicker}
-      >
-        {items.map(it => {
-          const active = mode === it.key
-          return (
-            <motion.button
-              key={it.key}
-              role="radio"
-              aria-checked={active}
-              onClick={() => onChange(it.key)}
-              whileTap={{ scale: 0.95 }}
-              className={`relative flex items-center gap-1.5 px-3 h-8 rounded-full text-[12px] font-semibold transition-colors ${
-                active ? 'text-white' : 'text-[#3A3A3C] hover:text-[#1C1C1E]'
-              }`}
-              title={it.label}
+    <div
+      data-layout-picker
+      className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none"
+    >
+      <div className="relative pointer-events-auto flex flex-col items-center gap-2">
+        {/* Expanded option list — appears ABOVE the main button */}
+        <AnimatePresence>
+          {open && (
+            <motion.div
+              key="options"
+              initial={{ opacity: 0, y: 12, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.9 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+              className="glass-strong shadow-glass rounded-3xl p-2 border border-white/60 flex flex-col gap-1 min-w-[200px]"
+              role="radiogroup"
+              aria-label={t.layoutPicker}
             >
-              {active && (
-                <motion.span
-                  layoutId="layout-pill-active"
-                  className="absolute inset-0 rounded-full"
-                  style={{
-                    background:
-                      'linear-gradient(135deg, #2B6BFF 0%, #6C47FF 55%, #19C6FF 100%)',
-                    boxShadow: '0 6px 16px rgba(108,71,255,0.35)',
-                  }}
-                  transition={{ type: 'spring', stiffness: 500, damping: 36 }}
-                />
-              )}
-              <span className="relative z-10 flex items-center gap-1.5">
-                <LayoutIcon mode={it.key} />
-                <span className="whitespace-nowrap">{it.label}</span>
-              </span>
-            </motion.button>
-          )
-        })}
-      </motion.div>
+              {items.map((it, idx) => {
+                const active = mode === it.key
+                return (
+                  <motion.button
+                    key={it.key}
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => { onChange(it.key); setOpen(false) }}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.04 }}
+                    whileTap={{ scale: 0.97 }}
+                    className={`relative flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-sf-subhead font-semibold transition-colors ${
+                      active ? 'text-white' : 'text-[#1C1C1E] hover:bg-white/60'
+                    }`}
+                  >
+                    {active && (
+                      <motion.span
+                        layoutId="layout-option-active"
+                        className="absolute inset-0 rounded-2xl"
+                        style={{
+                          background:
+                            'linear-gradient(135deg, #2B6BFF 0%, #6C47FF 55%, #19C6FF 100%)',
+                          boxShadow: '0 6px 16px rgba(108,71,255,0.35)',
+                        }}
+                        transition={{ type: 'spring', stiffness: 500, damping: 36 }}
+                      />
+                    )}
+                    <span className="relative z-10 flex items-center gap-2.5 w-full">
+                      <LayoutIcon mode={it.key} />
+                      <span className="flex-1 text-right">{it.label}</span>
+                      {active && (
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                          <path d="M2 7l3.5 3.5L12 3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </span>
+                  </motion.button>
+                )
+              })}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* The main toggle button — always visible */}
+        <motion.button
+          onClick={() => setOpen(v => !v)}
+          whileTap={{ scale: 0.96 }}
+          className="glass-strong shadow-glass rounded-full px-4 h-11 border border-white/60 flex items-center gap-2.5 text-[#1C1C1E] font-semibold"
+          aria-expanded={open}
+          aria-haspopup="true"
+        >
+          <span
+            className="w-7 h-7 rounded-full flex items-center justify-center text-white"
+            style={{
+              background:
+                'linear-gradient(135deg, #2B6BFF 0%, #6C47FF 55%, #19C6FF 100%)',
+              boxShadow: '0 4px 10px rgba(108,71,255,0.35)',
+            }}
+          >
+            <LayoutIcon mode={mode} />
+          </span>
+          <span className="text-sf-subhead leading-none">
+            <span className="block text-[10px] font-medium text-[#8E8E93]">{t.layoutPicker}</span>
+            <span className="block">{currentLabel}</span>
+          </span>
+          <motion.svg
+            animate={{ rotate: open ? 180 : 0 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+            width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"
+            className="opacity-60"
+          >
+            <path d="M3 9l4-4 4 4" stroke="#636366" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </motion.svg>
+        </motion.button>
+      </div>
     </div>
   )
 }
