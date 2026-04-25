@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard'
 import TreePage from './pages/TreePage'
 import BirthdayPage from './pages/BirthdayPage'
 import AdminDashboard from './components/admin/AdminDashboard'
+import ThemeShell from './components/ThemeShell'
 import { ADLER_MEMBERS, ADLER_RELATIONSHIPS } from './data/adlerFamily'
 import type { Session } from '@supabase/supabase-js'
 
@@ -77,14 +78,16 @@ export default function App() {
   return (
     <div dir={dir} className="min-h-screen">
       <HashRouter>
-        <Routes>
-          <Route path="/login" element={session ? <Navigate to="/" replace /> : <Auth demoMode={demoMode} />} />
-          <Route path="/" element={isAuth ? <Dashboard demoMode={demoMode} /> : <Navigate to="/login" replace />} />
-          <Route path="/tree" element={isAuth ? <TreePage demoMode={demoMode} /> : <Navigate to="/login" replace />} />
-          <Route path="/birthdays" element={isAuth ? <BirthdayPage demoMode={demoMode} /> : <Navigate to="/login" replace />} />
-          <Route path="/admin" element={isAuth ? <AdminDashboard /> : <Navigate to="/login" replace />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <ThemeShell>
+          <Routes>
+            <Route path="/login" element={session ? <Navigate to="/" replace /> : <Auth demoMode={demoMode} />} />
+            <Route path="/" element={isAuth ? <Dashboard demoMode={demoMode} /> : <Navigate to="/login" replace />} />
+            <Route path="/tree" element={isAuth ? <TreePage demoMode={demoMode} /> : <Navigate to="/login" replace />} />
+            <Route path="/birthdays" element={isAuth ? <BirthdayPage demoMode={demoMode} /> : <Navigate to="/login" replace />} />
+            <Route path="/admin" element={isAuth ? <AdminDashboard /> : <Navigate to="/login" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </ThemeShell>
       </HashRouter>
     </div>
   )

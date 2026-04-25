@@ -1,5 +1,8 @@
 import { motion } from 'framer-motion'
 import type { Member } from '../types'
+import type { LineageInfo } from '../lib/lineage'
+import LineageBadge from './LineageBadge'
+import { useLang } from '../i18n/useT'
 
 // Instagram-story-style tree node: photo-ring above a white card with
 // name + date range. Designed to be readable at the default tree scale
@@ -11,6 +14,13 @@ interface Props {
   highlighted?: boolean
   onClick?: () => void
   variant?: 'default' | 'compact'
+  /**
+   * Resolved lineage for this member (computed once per render at the
+   * parent level — see src/lib/lineage.ts). When omitted we fall back to
+   * `member.lineage` without the Adler auto-rule, which is safe but
+   * slightly less accurate.
+   */
+  lineage?: LineageInfo
 }
 
 export function getRingGradient(m: Member): string {
@@ -74,7 +84,8 @@ export function PersonAvatarIcon({ gender, size }: { gender?: 'male' | 'female';
   )
 }
 
-export default function MemberNode({ member, size = 72, highlighted, onClick, variant = 'default' }: Props) {
+export default function MemberNode({ member, size = 72, highlighted, onClick, variant = 'default', lineage }: Props) {
+  const { lang } = useLang()
   const deceased = !!member.death_date
   const birthYear = member.birth_date ? new Date(member.birth_date).getFullYear() : null
   const deathYear = member.death_date ? new Date(member.death_date).getFullYear() : null
@@ -83,6 +94,13 @@ export default function MemberNode({ member, size = 72, highlighted, onClick, va
       ? `${birthYear} – ${deathYear}`
       : `${birthYear}`
     : null
+
+  // Effective lineage + display surname (handles Adler → Kahane suffix).
+  const effLineage: LineageInfo =
+    lineage ?? { lineage: member.lineage ?? null, byAdlerRule: false }
+  const displaySurname = effLineage.byAdlerRule
+    ? (lang === 'he' ? 'אדלר (כהנא)' : 'Adler (Kahane)')
+    : member.last_name
 
   const compact = variant === 'compact'
   const ringThickness = 3
@@ -193,18 +211,19 @@ export default function MemberNode({ member, size = 72, highlighted, onClick, va
         )}
 
         <p
-          className="font-bold text-[#1C1C1E] leading-tight text-center truncate"
+          className="font-bold text-[#1C1C1E] leading-tight text-center truncate flex items-center justify-center gap-1"
           style={{ fontSize: compact ? 11 : 13 }}
-          title={`${member.first_name} ${member.last_name}`}
+          title={`${member.first_name} ${displaySurname}`}
         >
-          {member.first_name}
+          <LineageBadge info={effLineage} size={compact ? 10 : 12} />
+          <span className="truncate">{member.first_name}</span>
         </p>
-        {member.last_name && (
+        {displaySurname && (
           <p
             className="text-[#636366] leading-tight text-center truncate"
             style={{ fontSize: compact ? 9.5 : 10.5 }}
           >
-            {member.last_name}
+            {displaySurname}
           </p>
         )}
         {labelDate && (

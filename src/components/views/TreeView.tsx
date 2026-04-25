@@ -9,6 +9,7 @@ import {
   type LayoutMode, type LayoutNode,
   buildLayout,
 } from './treeLayout'
+import { buildParentMap, resolveLineage } from '../../lib/lineage'
 
 export type { LayoutMode } from './treeLayout'
 
@@ -110,6 +111,14 @@ export default function TreeView() {
     () => buildConnectors(nodes, relationships),
     [nodes, relationships],
   )
+  // Resolve lineage once per (members, relationships) change and index by id
+  // so each MemberNode renders in O(1).
+  const lineageById = useMemo(() => {
+    const parents = buildParentMap(members, relationships)
+    const map = new Map<string, ReturnType<typeof resolveLineage>>()
+    for (const m of members) map.set(m.id, resolveLineage(m, parents))
+    return map
+  }, [members, relationships])
 
   // Pan + zoom
   const [scale, setScale] = useState(1)
@@ -365,6 +374,7 @@ export default function TreeView() {
               size={AVATAR}
               highlighted={selectedMemberId === member.id}
               onClick={() => setSelectedMemberId(member.id)}
+              lineage={lineageById.get(member.id)}
             />
           </motion.div>
         ))}

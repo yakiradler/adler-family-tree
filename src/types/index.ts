@@ -3,6 +3,7 @@ export type RelationshipType = 'parent-child' | 'spouse' | 'sibling'
 export type EditRequestStatus = 'pending' | 'approved' | 'rejected'
 export type UserRole = 'admin' | 'user'
 export type Gender = 'male' | 'female'
+export type Lineage = 'kohen' | 'levi' | 'israel'
 
 export interface Profile {
   id: string
@@ -25,6 +26,11 @@ export interface Member {
   photos?: string[]
   gender?: Gender
   birth_order?: number
+  /**
+   * Priestly lineage (שושלת). When unset, an automatic rule still applies
+   * for Adler descendants (see lineage.ts → `resolveLineage`).
+   */
+  lineage?: Lineage | null
   created_by: string
 }
 

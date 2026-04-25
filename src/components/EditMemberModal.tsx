@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
 import { getRingGradient, getFallbackGradient, PersonAvatarIcon } from './MemberNode'
-import type { Member, Gender } from '../types'
+import type { Member, Gender, Lineage } from '../types'
 
 interface Props {
   open: boolean
@@ -22,6 +22,7 @@ interface FormState {
   hebrew_death_date: string
   gender: Gender | ''
   birth_order: string
+  lineage: Lineage | ''
   photo_url: string
   photos: string[]
 }
@@ -38,6 +39,7 @@ function fromMember(m: Member): FormState {
     hebrew_death_date: m.hebrew_death_date ?? '',
     gender: (m.gender as Gender | undefined) ?? '',
     birth_order: m.birth_order != null ? String(m.birth_order) : '',
+    lineage: (m.lineage ?? '') as Lineage | '',
     photo_url: m.photo_url ?? '',
     photos: m.photos ? [...m.photos] : [],
   }
@@ -113,6 +115,7 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
       hebrew_death_date: form.hebrew_death_date.trim() || undefined,
       gender: (form.gender as Gender) || undefined,
       birth_order: parsedOrder != null && !isNaN(parsedOrder) ? parsedOrder : null as unknown as undefined,
+      lineage: (form.lineage as Lineage) || null,
       photo_url: form.photo_url || undefined,
       photos: form.photos.length ? form.photos : undefined,
     })
@@ -276,6 +279,29 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
                         {g === 'male' ? t.genderMale : t.genderFemale}
                       </button>
                     ))}
+                  </div>
+                </Field>
+                <Field label={t.lineage}>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {([
+                      { key: '', label: t.lineageAuto, cls: 'from-[#E5E5EA] to-[#E5E5EA]' },
+                      { key: 'kohen', label: t.lineageKohen, cls: 'from-amber-400 to-yellow-500' },
+                      { key: 'levi', label: t.lineageLevi, cls: 'from-indigo-400 to-blue-600' },
+                      { key: 'israel', label: t.lineageIsrael, cls: 'from-emerald-400 to-teal-500' },
+                    ] as const).map(opt => {
+                      const active = form.lineage === opt.key
+                      return (
+                        <button key={opt.key || 'auto'} type="button"
+                          onClick={() => patch('lineage', opt.key)}
+                          className={`py-2 rounded-xl text-sf-caption font-semibold transition-colors ${
+                            active
+                              ? `bg-gradient-to-br ${opt.cls} text-white shadow-sm`
+                              : 'bg-[#F2F2F7] text-[#636366]'
+                          }`}>
+                          {opt.label}
+                        </button>
+                      )
+                    })}
                   </div>
                 </Field>
                 <Field label={t.biography}>

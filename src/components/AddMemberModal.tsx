@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang } from '../i18n/useT'
-import type { Gender } from '../types'
+import type { Gender, Lineage } from '../types'
 
 interface Props {
   open: boolean
@@ -12,7 +12,7 @@ interface Props {
 export default function AddMemberModal({ open, onClose }: Props) {
   const { addMember, profile } = useFamilyStore()
   const { t } = useLang()
-  const [form, setForm] = useState({ first_name: '', last_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '' as Gender | '', birth_order: '' })
+  const [form, setForm] = useState({ first_name: '', last_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '' as Gender | '', birth_order: '', lineage: '' as Lineage | '' })
   const [loading, setLoading] = useState(false)
   const photoInputRef = useRef<HTMLInputElement>(null)
 
@@ -30,10 +30,11 @@ export default function AddMemberModal({ open, onClose }: Props) {
       photo_url: form.photo_url || undefined,
       gender: (form.gender as Gender) || undefined,
       birth_order: parsedOrder != null && !isNaN(parsedOrder) ? parsedOrder : undefined,
+      lineage: (form.lineage as Lineage) || null,
       created_by: profile.id,
     })
     setLoading(false)
-    setForm({ first_name: '', last_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '', birth_order: '' })
+    setForm({ first_name: '', last_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '', birth_order: '', lineage: '' })
     onClose()
   }
 
@@ -110,6 +111,32 @@ export default function AddMemberModal({ open, onClose }: Props) {
                         {g === 'male' ? t.genderMale : t.genderFemale}
                       </button>
                     ))}
+                  </div>
+                </div>
+
+                {/* Lineage (שושלת) */}
+                <div>
+                  <label className="text-sf-caption text-[#8E8E93] mb-1 block">{t.lineage}</label>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {([
+                      { key: '', label: t.lineageAuto, cls: 'from-[#E5E5EA] to-[#E5E5EA]' },
+                      { key: 'kohen', label: t.lineageKohen, cls: 'from-amber-400 to-yellow-500' },
+                      { key: 'levi', label: t.lineageLevi, cls: 'from-indigo-400 to-blue-600' },
+                      { key: 'israel', label: t.lineageIsrael, cls: 'from-emerald-400 to-teal-500' },
+                    ] as const).map(opt => {
+                      const active = form.lineage === opt.key
+                      return (
+                        <button key={opt.key || 'auto'} type="button"
+                          onClick={() => setForm(f => ({ ...f, lineage: opt.key }))}
+                          className={`py-2 rounded-xl text-sf-caption font-semibold transition-colors ${
+                            active
+                              ? `bg-gradient-to-br ${opt.cls} text-white shadow-sm`
+                              : 'bg-[#F2F2F7] text-[#636366]'
+                          }`}>
+                          {opt.label}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
 
