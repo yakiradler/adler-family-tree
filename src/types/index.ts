@@ -67,6 +67,9 @@ export interface Member {
   id: string
   first_name: string
   last_name: string
+  /** Previous family name (e.g. maiden name). Surfaces only inside the
+   * profile panel; never on the tree, so the tree stays compact. */
+  maiden_name?: string
   nickname?: string
   birth_date?: string
   death_date?: string

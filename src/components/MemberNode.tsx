@@ -113,8 +113,20 @@ export default function MemberNode({
     : null
 
   // Effective lineage + display surname (handles Adler → Kahane suffix).
+  // Fallback when caller didn't pass a resolved info: respect explicit
+  // member.lineage but apply the male-only badge gate so we don't crown
+  // women who happen to have a Kohen field set.
   const effLineage: LineageInfo =
-    lineage ?? { lineage: member.lineage ?? null, byAdlerRule: false }
+    lineage ?? {
+      lineage: member.lineage ?? null,
+      byAdlerRule: false,
+      showBadge: member.gender !== 'female'
+        && (member.lineage === 'kohen' || member.lineage === 'levi'),
+      daughterOf: member.gender === 'female'
+        && (member.lineage === 'kohen' || member.lineage === 'levi')
+        ? member.lineage
+        : null,
+    }
   const displaySurname = effLineage.byAdlerRule
     ? (lang === 'he' ? 'אדלר (כהנא)' : 'Adler (Kahane)')
     : member.last_name
@@ -149,6 +161,10 @@ export default function MemberNode({
             : getRingShadow(member),
         }}
       >
+        {/* IG-verified-style lineage badge — sits on the ring's
+            top-trailing corner. Renders only for males with effective
+            Kohen / Levi lineage (see LineageInfo.showBadge). */}
+        <LineageBadge info={effLineage} size={compact ? 10 : 12} variant="ring" />
         <div
           className="rounded-full bg-white"
           style={{ padding: innerPad }}
@@ -228,11 +244,10 @@ export default function MemberNode({
         )}
 
         <p
-          className="font-bold text-[#1C1C1E] leading-tight text-center truncate flex items-center justify-center gap-1"
+          className="font-bold text-[#1C1C1E] leading-tight text-center truncate"
           style={{ fontSize: compact ? 11 : 13 }}
           title={`${member.first_name} ${displaySurname}`}
         >
-          <LineageBadge info={effLineage} size={compact ? 10 : 12} />
           <span className="truncate">{member.first_name}</span>
         </p>
         {displaySurname && (

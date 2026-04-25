@@ -10,6 +10,8 @@ import {
   buildLayout,
 } from './treeLayout'
 import { buildParentMap, resolveLineage } from '../../lib/lineage'
+import AdvancedFilter, { DEFAULT_FILTERS, type FilterState } from './AdvancedFilter'
+import { applyTreeFilters } from './applyTreeFilters'
 
 export type { LayoutMode } from './treeLayout'
 
@@ -103,22 +105,39 @@ export default function TreeView() {
     try { window.localStorage.setItem(LAYOUT_STORAGE_KEY, layoutMode) } catch { /* ignore */ }
   }, [layoutMode])
 
-  const nodes = useMemo(
-    () => buildLayout(members, relationships, layoutMode),
-    [members, relationships, layoutMode],
-  )
-  const { lines, spouseLines } = useMemo(
-    () => buildConnectors(nodes, relationships),
-    [nodes, relationships],
-  )
-  // Resolve lineage once per (members, relationships) change and index by id
-  // so each MemberNode renders in O(1).
-  const lineageById = useMemo(() => {
-    const parents = buildParentMap(members, relationships)
+  // Advanced filter (lineage / former spouses / deceased / search / focus).
+  // Filters apply BEFORE buildLayout so the resulting tree only contains
+  // matching members + their inter-relationships.
+  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS)
+
+  // Resolve full lineage map first — needed for the lineage filter to
+  // honour the male-only Kohen/Levi rule.
+  const fullLineageById = useMemo(() => {
+    const parentMap = buildParentMap(members, relationships)
     const map = new Map<string, ReturnType<typeof resolveLineage>>()
-    for (const m of members) map.set(m.id, resolveLineage(m, parents))
+    for (const m of members) map.set(m.id, resolveLineage(m, parentMap))
     return map
   }, [members, relationships])
+
+  const filtered = useMemo(
+    () => applyTreeFilters(members, relationships, filters, fullLineageById),
+    [members, relationships, filters, fullLineageById],
+  )
+
+  const nodes = useMemo(
+    () => buildLayout(filtered.members, filtered.relationships, layoutMode, {
+      showFormerSpouses: filters.showFormerSpouses,
+    }),
+    [filtered, layoutMode, filters.showFormerSpouses],
+  )
+  const { lines, spouseLines } = useMemo(
+    () => buildConnectors(nodes, filtered.relationships),
+    [nodes, filtered.relationships],
+  )
+  // Reuse the full-population lineage map for per-card rendering — it
+  // already covers everyone, including filtered-out parents whose Kohen
+  // status feeds inheritance for visible descendants.
+  const lineageById = fullLineageById
 
   // Pan + zoom
   const [scale, setScale] = useState(1)
@@ -384,6 +403,14 @@ export default function TreeView() {
 
       {/* Floating bottom layout picker — single collapsed button expanding to 4 */}
       <LayoutPicker mode={layoutMode} onChange={setLayoutMode} t={t} />
+
+      {/* Advanced filter (lineage / divorces / deceased / search / focus) */}
+      <AdvancedFilter
+        filters={filters}
+        onChange={setFilters}
+        members={members}
+        matchedCount={filtered.members.length}
+      />
 
       {/* Zoom controls */}
       <div className="absolute bottom-4 right-4 flex flex-col gap-1.5 z-10">

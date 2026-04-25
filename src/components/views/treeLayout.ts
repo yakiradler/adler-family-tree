@@ -142,12 +142,24 @@ export function clusterFor(mode: LayoutMode, n: number): ClusterResult {
 
 // ─── Main layout engine ────────────────────────────────────────────────────
 
+export interface LayoutOptions {
+  /**
+   * Show ex / deceased partners as secondary circles beneath their card.
+   * When false (default — divorce is a sensitive topic and stays inside
+   * the profile panel), they are omitted from the layout entirely so the
+   * tree never reserves vertical genOverflow for them.
+   */
+  showFormerSpouses?: boolean
+}
+
 export function buildLayout(
   members: Member[],
   relationships: Relationship[],
   mode: LayoutMode = 'classic',
+  options: LayoutOptions = {},
 ): LayoutNode[] {
   if (members.length === 0) return []
+  const showFormerSpouses = options.showFormerSpouses ?? false
 
   const memberById = new Map(members.map(m => [m.id, m]))
   const parentsOf = new Map<string, string[]>()
@@ -178,9 +190,11 @@ export function buildLayout(
         }
         add(r.member_a_id, r.member_b_id)
         add(r.member_b_id, r.member_a_id)
-      } else {
+      } else if (showFormerSpouses) {
         // ex / deceased: surface as a secondary partner on BOTH sides so
-        // either member's card shows the relationship indicator.
+        // either member's card shows the relationship indicator. Only
+        // collected when the caller opts in via showFormerSpouses (the
+        // tree hides them by default — see options).
         const addSecondary = (ownerId: string, partnerId: string) => {
           const partner = memberById.get(partnerId)
           if (!partner) return

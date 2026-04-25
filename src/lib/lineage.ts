@@ -1,12 +1,22 @@
 /**
  * Priestly lineage (שושלת) resolution.
  *
+ * Halachic rule (Phase E): Kohen / Levi status passes through the male
+ * line ONLY. A man whose father is a Kohen is a Kohen. A woman whose
+ * father is a Kohen is a "Bat-Kohen" (בת כהן) — she carries the merit
+ * but is NOT a Kohenet, so she does NOT receive the visual crown badge.
+ *
  * Two sources of truth, in priority order:
- *   1. Explicit `member.lineage` field (set via Add/Edit modal).
- *   2. Automatic Adler rule — when `member.last_name` AND at least one
- *      parent's `last_name` both match "Adler" (Hebrew or English spelling),
- *      the member is tagged as Kohen. Adler-Kohens also get a special
- *      display suffix: "Adler (Kahane)" / "אדלר (כהנא)".
+ *   1. Explicit `member.lineage` field (set via Add/Edit modal). This is
+ *      respected for males. For females, an explicit Kohen/Levi value is
+ *      treated as "father was a Kohen/Levi" — i.e. it surfaces as
+ *      `daughterOf` in the resolved info, and `showBadge` stays false.
+ *   2. Automatic Adler rule — a male whose `last_name` AND at least one
+ *      parent's `last_name` both match "Adler" is auto-tagged Kohen.
+ *      Adler-Kohens get a special display suffix: "אדלר (כהנא)" /
+ *      "Adler (Kahane)".
+ *   3. Inheritance — a male whose father is Kohen / Levi inherits.
+ *      A female whose father is Kohen / Levi gets `daughterOf` set.
  *
  * The resolver takes a precomputed parents-by-id map so the caller can do
  * the O(N) relationship walk ONCE per render and then query lineage per
@@ -45,31 +55,106 @@ export function buildParentMap(
 }
 
 /**
- * Effective lineage for a member. Returns undefined when no lineage applies.
- * When `byAutoRule` is true in the return value, the Adler auto-Kohen rule
- * fired (so callers can choose to show the "Kahane" suffix in the display name).
+ * Effective lineage info for a member.
+ *
+ * - `lineage`           — the effective lineage usable for filters.
+ *                         For females it stays null (they're not Kohanot).
+ * - `byAdlerRule`       — true iff the auto-Kohen rule fired (display
+ *                         "Adler (Kahane)" suffix).
+ * - `showBadge`         — true iff the visual badge should render.
+ *                         Crown/Levi badge is shown only for males with
+ *                         resolved Kohen/Levi lineage.
+ * - `daughterOf`        — for females, the *paternal* lineage if her
+ *                         father is Kohen / Levi. Used to render
+ *                         "Daughter of a Kohen" inside the profile.
  */
 export interface LineageInfo {
   lineage: Lineage | null
-  /** true iff the Adler → Kohen rule fired automatically for this member. */
   byAdlerRule: boolean
+  showBadge: boolean
+  daughterOf: Lineage | null
+}
+
+const EMPTY: LineageInfo = {
+  lineage: null,
+  byAdlerRule: false,
+  showBadge: false,
+  daughterOf: null,
+}
+
+function maleFathers(parents: Member[]): Member[] {
+  // Father = parent with gender 'male'. If gender is unknown we treat
+  // the parent as a possible father (best-effort fallback — no female
+  // gender, no exclusion).
+  return parents.filter(p => p.gender !== 'female')
+}
+
+/**
+ * Resolve a parent's lineage WITHOUT recursion guards. Recursion is safe
+ * because parent-child relationships form a DAG and each call walks one
+ * level up. We only need 1 level (father) for inheritance. For the Adler
+ * surname rule we don't need to walk further.
+ */
+function resolveFatherLineage(
+  parents: Member[],
+  parentMap: Map<string, Member[]>,
+): Lineage | null {
+  const fathers = maleFathers(parents)
+  for (const father of fathers) {
+    const info = resolveLineage(father, parentMap)
+    if (info.lineage === 'kohen' || info.lineage === 'levi') return info.lineage
+  }
+  return null
 }
 
 export function resolveLineage(
   member: Member,
   parentMap: Map<string, Member[]>,
 ): LineageInfo {
-  // Explicit lineage wins.
+  const parents = parentMap.get(member.id) ?? []
+  const isMale = member.gender !== 'female'
+
+  // Father's lineage (Kohen / Levi only — Israel doesn't propagate).
+  const fatherLineage = resolveFatherLineage(parents, parentMap)
+
+  // Females: Kohen / Levi never resolves — only daughterOf is set.
+  if (!isMale) {
+    // Honour explicit field by treating it as "her father's lineage".
+    const explicit = member.lineage === 'kohen' || member.lineage === 'levi'
+      ? member.lineage
+      : null
+    return {
+      lineage: null,
+      byAdlerRule: false,
+      showBadge: false,
+      daughterOf: fatherLineage ?? explicit ?? null,
+    }
+  }
+
+  // Males ── explicit lineage wins.
   if (member.lineage === 'kohen' || member.lineage === 'levi' || member.lineage === 'israel') {
-    return { lineage: member.lineage, byAdlerRule: false }
+    return {
+      lineage: member.lineage,
+      byAdlerRule: false,
+      showBadge: member.lineage !== 'israel',
+      daughterOf: null,
+    }
   }
-  // Automatic Adler-Kohen rule.
+
+  // Adler auto-Kohen rule (males only).
   if (isAdlerSurname(member.last_name)) {
-    const parents = parentMap.get(member.id) ?? []
     const hasAdlerParent = parents.some(p => isAdlerSurname(p.last_name))
-    if (hasAdlerParent) return { lineage: 'kohen', byAdlerRule: true }
+    if (hasAdlerParent) {
+      return { lineage: 'kohen', byAdlerRule: true, showBadge: true, daughterOf: null }
+    }
   }
-  return { lineage: null, byAdlerRule: false }
+
+  // Inherit from father if Kohen / Levi.
+  if (fatherLineage) {
+    return { lineage: fatherLineage, byAdlerRule: false, showBadge: true, daughterOf: null }
+  }
+
+  return EMPTY
 }
 
 /**

@@ -5,8 +5,10 @@ import { useLang, isRTL } from '../i18n/useT'
 import { getRingGradient, getFallbackGradient, PersonAvatarIcon } from './MemberNode'
 import EditMemberModal from './EditMemberModal'
 import RelationshipManager from './RelationshipManager'
+import LineageBadge from './LineageBadge'
 import { canEditMember, canManageRelationships } from '../lib/permissions'
-import type { Member } from '../types'
+import { buildParentMap, resolveLineage } from '../lib/lineage'
+import type { Member, SpouseStatus } from '../types'
 
 interface Props {
   onClose: () => void
@@ -38,11 +40,30 @@ export default function MemberPanel({ onClose }: Props) {
     [members, selectedMemberId],
   )
 
-  const { spouses, parents, children, siblings } = useMemo(() => {
-    if (!member) return { spouses: [], parents: [], children: [], siblings: [] }
-    const spouseIds = relationships
-      .filter(r => r.type === 'spouse' && (r.member_a_id === member.id || r.member_b_id === member.id))
-      .map(r => (r.member_a_id === member.id ? r.member_b_id : r.member_a_id))
+  const { currentSpouses, formerSpouses, parents, children, siblings, spouses } = useMemo(() => {
+    if (!member) return {
+      currentSpouses: [], formerSpouses: [],
+      parents: [], children: [], siblings: [], spouses: [],
+    }
+    const spouseRels = relationships.filter(
+      r => r.type === 'spouse' && (r.member_a_id === member.id || r.member_b_id === member.id),
+    )
+    const otherId = (r: { member_a_id: string; member_b_id: string }) =>
+      r.member_a_id === member.id ? r.member_b_id : r.member_a_id
+
+    const byId = (id: string) => members.find(m => m.id === id)
+
+    // Group by status; treat null/undefined as 'current' for back-compat.
+    const cur: Member[] = []
+    const former: { member: Member; status: SpouseStatus }[] = []
+    for (const r of spouseRels) {
+      const m = byId(otherId(r))
+      if (!m) continue
+      const s = (r.status ?? 'current') as SpouseStatus
+      if (s === 'current') cur.push(m)
+      else former.push({ member: m, status: s })
+    }
+
     const parentIds = relationships
       .filter(r => r.type === 'parent-child' && r.member_b_id === member.id)
       .map(r => r.member_a_id)
@@ -57,13 +78,22 @@ export default function MemberPanel({ onClose }: Props) {
         }
       }
     }
-    const byId = (id: string) => members.find(m => m.id === id)
+
     return {
-      spouses: spouseIds.map(byId).filter(Boolean) as Member[],
+      currentSpouses: cur,
+      formerSpouses: former,
       parents: parentIds.map(byId).filter(Boolean) as Member[],
       children: [...new Set(childIds)].map(byId).filter(Boolean) as Member[],
       siblings: [...siblingSet].map(byId).filter(Boolean) as Member[],
+      spouses: [...cur, ...former.map(f => f.member)],
     }
+  }, [member, members, relationships])
+
+  // Lineage info — male-only badge + daughterOf marker.
+  const lineageInfo = useMemo(() => {
+    if (!member) return null
+    const parentMap = buildParentMap(members, relationships)
+    return resolveLineage(member, parentMap)
   }, [member, members, relationships])
 
   if (!member) return null
@@ -230,7 +260,30 @@ export default function MemberPanel({ onClose }: Props) {
                     </p>
                   </div>
                 )}
-                {!member.birth_date && !member.death_date && !member.bio && (
+                {/* Lineage line — Kohen / Levi for males or "Daughter of a Kohen / Levi" for females. */}
+                {lineageInfo && (lineageInfo.showBadge || lineageInfo.daughterOf) && (
+                  <div className="flex items-center gap-2 bg-gradient-to-r from-[#FFF6D6] to-[#FFEAB2] rounded-2xl p-3">
+                    {lineageInfo.showBadge && (
+                      <span className="relative w-7 h-7 inline-flex items-center justify-center">
+                        <LineageBadge info={lineageInfo} size={14} variant="ring" />
+                      </span>
+                    )}
+                    <div className="flex-1">
+                      <p className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wide">{t.lineageLabel}</p>
+                      <p className="text-sf-footnote font-bold text-[#8A5A00]">
+                        {lineageInfo.showBadge && lineageInfo.lineage === 'kohen' && t.lineageKohen}
+                        {lineageInfo.showBadge && lineageInfo.lineage === 'levi' && t.lineageLevi}
+                        {!lineageInfo.showBadge && lineageInfo.daughterOf === 'kohen' && t.lineageDaughterOfKohen}
+                        {!lineageInfo.showBadge && lineageInfo.daughterOf === 'levi' && t.lineageDaughterOfLevi}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {/* Maiden / former last name — surface when set. */}
+                {member.maiden_name && (
+                  <InfoRow icon="🌸" label={t.maidenNameLabel} value={member.maiden_name} />
+                )}
+                {!member.birth_date && !member.death_date && !member.bio && !member.maiden_name && !lineageInfo?.showBadge && !lineageInfo?.daughterOf && (
                   <EmptyTab icon="📝" text={t.panelNoInfo} />
                 )}
               </motion.div>
@@ -245,8 +298,16 @@ export default function MemberPanel({ onClose }: Props) {
                 transition={{ duration: 0.18 }}
                 className="space-y-4"
               >
-                {spouses.length > 0 && (
-                  <FamilySection title={t.relSpouse} members={spouses} onMemberClick={setSelectedMemberId} />
+                {currentSpouses.length > 0 && (
+                  <FamilySection title={t.relSpouse} members={currentSpouses} onMemberClick={setSelectedMemberId} />
+                )}
+                {formerSpouses.length > 0 && (
+                  <FormerSpouseSection
+                    title={t.formerSpousesLabel}
+                    items={formerSpouses}
+                    t={t}
+                    onMemberClick={setSelectedMemberId}
+                  />
                 )}
                 {parents.length > 0 && (
                   <FamilySection title={t.panelParents} members={parents} onMemberClick={setSelectedMemberId} />
@@ -413,6 +474,66 @@ function ChildrenShowcase({
               {dateLabel && (
                 <p className="text-[9px] text-[#8E8E93] font-medium leading-tight">{dateLabel}</p>
               )}
+            </motion.button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Former spouses (divorced / widowed) — surfaced ONLY inside the profile,
+ * never on the tree. Uses a subdued tone to keep painful family history
+ * unobtrusive while still making it accessible. Each entry shows a small
+ * status pill ("גירושין" / "אלמן/ה") next to the name.
+ */
+function FormerSpouseSection({
+  title, items, t, onMemberClick,
+}: {
+  title: string
+  items: { member: Member; status: SpouseStatus }[]
+  t: { statusDivorced: string; statusWidowed: string }
+  onMemberClick: (id: string) => void
+}) {
+  return (
+    <div>
+      <p className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wide mb-2 px-1">{title}</p>
+      <div className="space-y-1.5">
+        {items.map(({ member: m, status }) => {
+          const isDeceased = status === 'deceased'
+          return (
+            <motion.button
+              key={m.id}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => onMemberClick(m.id)}
+              className="w-full flex items-center gap-3 p-2 rounded-2xl bg-[#F8F8FA] hover:bg-[#F2F2F7] transition-colors"
+            >
+              <div className="rounded-full" style={{ padding: 1.5, background: isDeceased ? 'linear-gradient(135deg,#9CA3AF,#6B7280)' : getRingGradient(m), opacity: isDeceased ? 1 : 0.85 }}>
+                <div className="rounded-full bg-white p-[1px]">
+                  <div className="w-9 h-9 rounded-full overflow-hidden">
+                    {m.photo_url ? (
+                      <img src={m.photo_url} alt="" className={`w-full h-full object-cover ${isDeceased ? 'grayscale' : ''}`} />
+                    ) : (
+                      <div className={`w-full h-full bg-gradient-to-br ${getFallbackGradient(m)} flex items-center justify-center ${isDeceased ? 'grayscale' : ''}`}>
+                        <PersonAvatarIcon gender={m.gender} size={36} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <p className="flex-1 text-start text-sf-footnote font-medium text-[#1C1C1E] truncate">
+                {m.first_name} {m.last_name}
+              </p>
+              <span
+                className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${
+                  isDeceased
+                    ? 'bg-[#1F2937]/10 text-[#1F2937]'
+                    : 'bg-[#FF9F0A]/15 text-[#FF9F0A]'
+                }`}
+              >
+                {isDeceased ? t.statusWidowed : t.statusDivorced}
+              </span>
             </motion.button>
           )
         })}
