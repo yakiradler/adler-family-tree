@@ -24,6 +24,7 @@ interface FamilyState {
   deleteMember: (id: string) => Promise<void>
 
   addRelationship: (rel: Omit<Relationship, 'id'>) => Promise<void>
+  updateRelationship: (id: string, updates: Partial<Relationship>) => Promise<void>
   deleteRelationship: (id: string) => Promise<void>
 
   approveEditRequest: (requestId: string) => Promise<void>
@@ -109,6 +110,15 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       const local: Relationship = { ...rel, id: `rel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` }
       set((s) => ({ relationships: [...s.relationships, local] }))
     }
+  },
+
+  updateRelationship: async (id, updates) => {
+    await supabase.from('relationships').update(updates).eq('id', id)
+    set((s) => ({
+      relationships: s.relationships.map((r) =>
+        r.id === id ? { ...r, ...updates } : r,
+      ),
+    }))
   },
 
   deleteRelationship: async (id) => {

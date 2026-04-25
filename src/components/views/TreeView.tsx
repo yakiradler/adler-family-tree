@@ -351,7 +351,7 @@ export default function TreeView() {
           ))}
         </svg>
 
-        {nodes.map(({ member, x, y }) => (
+        {nodes.map(({ member, x, y, secondaryPartners }) => (
           <motion.div
             key={member.id}
             initial={{ opacity: 0, scale: 0.85 }}
@@ -375,6 +375,8 @@ export default function TreeView() {
               highlighted={selectedMemberId === member.id}
               onClick={() => setSelectedMemberId(member.id)}
               lineage={lineageById.get(member.id)}
+              secondaryPartners={secondaryPartners}
+              onSecondarySelect={(id) => setSelectedMemberId(id)}
             />
           </motion.div>
         ))}

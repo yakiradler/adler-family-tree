@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
 import { getRingGradient, getFallbackGradient, PersonAvatarIcon } from './MemberNode'
-import type { Member, Gender, RelationshipType } from '../types'
+import type { Member, Gender, RelationshipType, SpouseStatus, Relationship } from '../types'
 
 interface Props {
   open: boolean
@@ -14,7 +14,7 @@ interface Props {
 type TabKey = 'parents' | 'spouses' | 'children' | 'siblings'
 
 export default function RelationshipManager({ open, onClose, member }: Props) {
-  const { members, relationships, addRelationship, deleteRelationship, addMember, profile } =
+  const { members, relationships, addRelationship, updateRelationship, deleteRelationship, addMember, profile } =
     useFamilyStore()
   const { t, lang } = useLang()
   const rtl = isRTL(lang)
@@ -26,6 +26,10 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
   const [newFirst, setNewFirst] = useState('')
   const [newLast, setNewLast] = useState('')
   const [newGender, setNewGender] = useState<Gender | ''>('')
+  // When the picker is opened for a SPOUSE, this controls whether the
+  // resulting relationship is recorded as current / ex / deceased. Default
+  // is 'current' so behavior matches pre-Phase B exactly.
+  const [spouseStatusDraft, setSpouseStatusDraft] = useState<SpouseStatus>('current')
   const [busy, setBusy] = useState(false)
 
   // Derived relatives
@@ -88,6 +92,7 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
   const closePicker = () => {
     setPicker(null); setPickerKind(null); setSearch('')
     setCreatingNew(false); setNewFirst(''); setNewLast(''); setNewGender('')
+    setSpouseStatusDraft('current')
   }
 
   const linkExisting = async (otherId: string) => {
@@ -99,7 +104,12 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
       } else if (pickerKind === 'child') {
         await addRelationship({ type: 'parent-child', member_a_id: member.id, member_b_id: otherId })
       } else if (pickerKind === 'spouse') {
-        await addRelationship({ type: 'spouse', member_a_id: member.id, member_b_id: otherId })
+        await addRelationship({
+          type: 'spouse',
+          member_a_id: member.id,
+          member_b_id: otherId,
+          status: spouseStatusDraft,
+        })
       }
       closePicker()
     } finally {
@@ -123,7 +133,12 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
         } else if (pickerKind === 'child') {
           await addRelationship({ type: 'parent-child', member_a_id: member.id, member_b_id: created.id })
         } else if (pickerKind === 'spouse') {
-          await addRelationship({ type: 'spouse', member_a_id: member.id, member_b_id: created.id })
+          await addRelationship({
+            type: 'spouse',
+            member_a_id: member.id,
+            member_b_id: created.id,
+            status: spouseStatusDraft,
+          })
         }
       }
       closePicker()
@@ -141,10 +156,6 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
     parentRels.find(r => r.member_a_id === parentId)?.id
   const findChildRel = (childId: string) =>
     childRels.find(r => r.member_b_id === childId)?.id
-  const findSpouseRel = (spouseId: string) =>
-    spouseRels.find(
-      r => r.member_a_id === spouseId || r.member_b_id === spouseId,
-    )?.id
 
   const dir = rtl ? 'rtl' : 'ltr'
 
@@ -236,13 +247,18 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
               />
             )}
             {tab === 'spouses' && (
-              <RelList
+              <SpouseList
                 list={spouses}
-                findRelId={findSpouseRel}
+                spouseRels={spouseRels}
+                memberId={member.id}
                 emptyLabel={t.relNoSpouses}
                 onRemove={removeRel}
+                onChangeStatus={async (relId, status) => {
+                  await updateRelationship(relId, { status })
+                }}
                 isAdmin={isAdmin}
                 lang={lang}
+                t={t}
               />
             )}
             {tab === 'children' && (
@@ -311,6 +327,31 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
                     {pickerKind === 'parent' ? t.relAddParent : pickerKind === 'spouse' ? t.relAddSpouse : t.relAddChild}
                   </h3>
                 </div>
+
+                {/* Spouse status selector — only visible when adding a spouse.
+                    Defaults to 'current' which matches pre-Phase B behavior. */}
+                {pickerKind === 'spouse' && (
+                  <div className="px-4 pt-3">
+                    <p className="text-[11px] text-[#8E8E93] mb-1.5">{t.spouseStatus}</p>
+                    <div className="bg-[#F2F2F7] rounded-2xl p-1 flex gap-1">
+                      {(['current', 'ex', 'deceased'] as const).map(s => (
+                        <button
+                          key={s}
+                          onClick={() => setSpouseStatusDraft(s)}
+                          className={`flex-1 py-1.5 rounded-xl text-[12px] font-semibold transition-all ${
+                            spouseStatusDraft === s
+                              ? 'bg-white text-[#1C1C1E] shadow-sm'
+                              : 'text-[#636366]'
+                          }`}
+                        >
+                          {s === 'current' ? t.spouseStatusCurrent
+                           : s === 'ex' ? t.spouseStatusEx
+                           : t.spouseStatusDeceased}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Search */}
                 <div className="px-4 pt-3">
@@ -505,6 +546,140 @@ function RelList({
                   <path d="M3 3l8 8M11 3l-8 8" stroke="#FF3B30" strokeWidth="1.75" strokeLinecap="round" />
                 </svg>
               </button>
+            )}
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
+/**
+ * Spouse-specific list. Each row exposes a 3-way status pill (current /
+ * ex / deceased) so the user can reclassify a relationship without
+ * deleting + re-adding it. The status is persisted to the relationships
+ * table and the tree layout reads it on next render.
+ */
+function SpouseList({
+  list, spouseRels, memberId, emptyLabel, onRemove, onChangeStatus,
+  isAdmin, lang, t,
+}: {
+  list: Member[]
+  spouseRels: Relationship[]
+  memberId: string
+  emptyLabel: string
+  onRemove: (relId: string) => void
+  onChangeStatus: (relId: string, status: SpouseStatus) => Promise<void>
+  isAdmin: boolean
+  lang: 'he' | 'en'
+  t: {
+    spouseStatusCurrent: string
+    spouseStatusEx: string
+    spouseStatusDeceased: string
+  }
+}) {
+  const { setSelectedMemberId } = useFamilyStore()
+  if (list.length === 0) {
+    return (
+      <div className="text-center py-10 px-4">
+        <div className="w-14 h-14 mx-auto rounded-2xl bg-[#F2F2F7] flex items-center justify-center mb-2">
+          <span className="text-2xl">💍</span>
+        </div>
+        <p className="text-sf-caption text-[#8E8E93]">{emptyLabel}</p>
+      </div>
+    )
+  }
+
+  // Map spouseId → relationship row, so we can read & write status.
+  const relByPartner = new Map<string, Relationship>()
+  for (const r of spouseRels) {
+    const otherId = r.member_a_id === memberId ? r.member_b_id : r.member_a_id
+    relByPartner.set(otherId, r)
+  }
+
+  return (
+    <>
+      {list.map(m => {
+        const rel = relByPartner.get(m.id)
+        const status: SpouseStatus = (rel?.status as SpouseStatus) ?? 'current'
+        return (
+          <div
+            key={m.id}
+            className="flex flex-col gap-2 p-2 rounded-2xl bg-[#F9F9FB] hover:bg-[#F2F2F7] transition"
+          >
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setSelectedMemberId(m.id)}
+                className="flex items-center gap-3 flex-1 text-start min-w-0"
+              >
+                <div className="rounded-full flex-shrink-0" style={{ padding: 2, background: getRingGradient(m) }}>
+                  <div className="rounded-full bg-white p-[1.5px]">
+                    <div className="w-10 h-10 rounded-full overflow-hidden">
+                      {m.photo_url ? (
+                        <img src={m.photo_url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className={`w-full h-full bg-gradient-to-br ${getFallbackGradient(m)} flex items-center justify-center`}>
+                          <PersonAvatarIcon gender={m.gender} size={40} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sf-subhead font-semibold text-[#1C1C1E] truncate">
+                    {m.first_name} {m.last_name}
+                  </p>
+                  <p className="text-[11px] text-[#8E8E93]">
+                    {m.birth_date
+                      ? `${new Date(m.birth_date).toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-US', { year: 'numeric', month: 'short' })}`
+                      : (m.nickname ?? '')}
+                  </p>
+                </div>
+              </button>
+              {isAdmin && rel && (
+                <button
+                  onClick={() => onRemove(rel.id)}
+                  className="w-8 h-8 rounded-xl bg-[#FF3B30]/10 hover:bg-[#FF3B30]/20 text-[#FF3B30] flex items-center justify-center flex-shrink-0"
+                  aria-label="Remove"
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M3 3l8 8M11 3l-8 8" stroke="#FF3B30" strokeWidth="1.75" strokeLinecap="round" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            {/* Status pill row */}
+            {isAdmin && rel && (
+              <div className="bg-white rounded-xl p-1 flex gap-1 border border-black/5">
+                {(['current', 'ex', 'deceased'] as const).map(s => {
+                  const active = status === s
+                  const label =
+                    s === 'current' ? t.spouseStatusCurrent
+                    : s === 'ex' ? t.spouseStatusEx
+                    : t.spouseStatusDeceased
+                  // Color cue: current=blue, ex=amber, deceased=slate
+                  const activeBg =
+                    s === 'current' ? 'bg-[#007AFF] text-white'
+                    : s === 'ex' ? 'bg-[#FF9F0A] text-white'
+                    : 'bg-[#1F2937] text-white'
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => onChangeStatus(rel.id, s)}
+                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                        active ? activeBg : 'text-[#636366] hover:bg-[#F2F2F7]'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            {(!isAdmin || !rel) && status !== 'current' && (
+              <span className="self-start text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#1F2937]/10 text-[#1F2937]">
+                {status === 'ex' ? t.spouseStatusEx : t.spouseStatusDeceased}
+              </span>
             )}
           </div>
         )

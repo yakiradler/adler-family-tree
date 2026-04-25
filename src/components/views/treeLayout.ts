@@ -2,7 +2,7 @@
 // Extracted so it can be unit-tested against real family data without
 // pulling React. All dimensions are in pixels.
 
-import type { Member, Relationship } from '../../types'
+import type { Member, Relationship, SpouseStatus } from '../../types'
 
 // ─── Dimensions ─────────────────────────────────────────────────────────────
 export const AVATAR = 64
@@ -19,12 +19,29 @@ export const MIN_SIDE_GAP = 12
 
 export type LayoutMode = 'classic' | 'grid' | 'arc' | 'staggered'
 
+export interface SecondaryPartner {
+  member: Member
+  status: Exclude<SpouseStatus, 'current'>  // 'ex' | 'deceased'
+}
+
 export interface LayoutNode {
   member: Member
   x: number
   y: number
   generation: number
+  /**
+   * Ex / deceased partners that should render as a smaller circle BELOW
+   * this member's card. They don't reserve horizontal layout width — so a
+   * divorce never widens the tree — but the consumer is expected to draw
+   * them at a known offset (see SECONDARY_PARTNER_* constants).
+   */
+  secondaryPartners?: SecondaryPartner[]
 }
+
+// Visual constants for ex/deceased partner indicators rendered by the
+// caller. Kept in this module so tests and TreeView agree on the geometry.
+export const SECONDARY_PARTNER_SIZE = 36           // avatar diameter, px
+export const SECONDARY_PARTNER_TOP_OFFSET = NODE_H + 6  // gap below card
 
 interface Placement { dx: number; dy: number }
 interface ClusterResult { placements: Placement[]; width: number; height: number }
@@ -135,7 +152,14 @@ export function buildLayout(
   const memberById = new Map(members.map(m => [m.id, m]))
   const parentsOf = new Map<string, string[]>()
   const childrenOf = new Map<string, string[]>()
+  // Only CURRENT spouses are co-placed in the main row.
   const spousesOf = new Map<string, string[]>()
+  // Ex / deceased partners surface separately — rendered as small circles
+  // below the member without affecting layout slot widths.
+  const secondaryPartnersOf = new Map<string, SecondaryPartner[]>()
+
+  const spouseStatusOf = (r: Relationship): SpouseStatus =>
+    (r.status ?? 'current') as SpouseStatus
 
   for (const r of relationships) {
     if (r.type === 'parent-child') {
@@ -146,12 +170,29 @@ export function buildLayout(
       if (!ch.includes(r.member_b_id)) ch.push(r.member_b_id)
     }
     if (r.type === 'spouse') {
-      const add = (a: string, b: string) => {
-        if (!spousesOf.has(a)) spousesOf.set(a, [])
-        if (!spousesOf.get(a)!.includes(b)) spousesOf.get(a)!.push(b)
+      const status = spouseStatusOf(r)
+      if (status === 'current') {
+        const add = (a: string, b: string) => {
+          if (!spousesOf.has(a)) spousesOf.set(a, [])
+          if (!spousesOf.get(a)!.includes(b)) spousesOf.get(a)!.push(b)
+        }
+        add(r.member_a_id, r.member_b_id)
+        add(r.member_b_id, r.member_a_id)
+      } else {
+        // ex / deceased: surface as a secondary partner on BOTH sides so
+        // either member's card shows the relationship indicator.
+        const addSecondary = (ownerId: string, partnerId: string) => {
+          const partner = memberById.get(partnerId)
+          if (!partner) return
+          if (!secondaryPartnersOf.has(ownerId)) secondaryPartnersOf.set(ownerId, [])
+          const list = secondaryPartnersOf.get(ownerId)!
+          if (!list.some(p => p.member.id === partnerId)) {
+            list.push({ member: partner, status })
+          }
+        }
+        addSecondary(r.member_a_id, r.member_b_id)
+        addSecondary(r.member_b_id, r.member_a_id)
       }
-      add(r.member_a_id, r.member_b_id)
-      add(r.member_b_id, r.member_a_id)
     }
   }
 
@@ -411,12 +452,24 @@ export function buildLayout(
 
   // ── Generation Y (cluster-aware) ──────────────────────────────────────
   // Each generation must start LOW enough that the previous generation's
-  // cluster overflow (e.g. arc sag, zigzag 2nd row) cannot bleed into it.
-  // genOverflow[G] = max dy added to any node in generation G by clustering.
+  // cluster overflow (e.g. arc sag, zigzag 2nd row) and any secondary-
+  // partner indicators (ex/deceased circles below the card) cannot bleed
+  // into it. genOverflow[G] = max extra dy needed below generation G.
   const genOverflow = new Map<number, number>()
   for (const [id, dy] of yOffset) {
     const g = genMap.get(id) ?? 0
     if (dy > (genOverflow.get(g) ?? 0)) genOverflow.set(g, dy)
+  }
+  // Secondary partner block extends past the bottom of the card by
+  // (TOP_OFFSET - NODE_H) + SIZE + a safety gap.
+  const secondaryExtra =
+    SECONDARY_PARTNER_TOP_OFFSET - NODE_H + SECONDARY_PARTNER_SIZE + MIN_SIDE_GAP
+  for (const [id, partners] of secondaryPartnersOf) {
+    if (!partners.length) continue
+    const g = genMap.get(id) ?? 0
+    if (secondaryExtra > (genOverflow.get(g) ?? 0)) {
+      genOverflow.set(g, secondaryExtra)
+    }
   }
 
   let maxGen = 0
@@ -432,11 +485,13 @@ export function buildLayout(
 
   const finalNodes: LayoutNode[] = members.map(m => {
     const g = genMap.get(m.id) ?? 0
+    const partners = secondaryPartnersOf.get(m.id)
     return {
       member: m,
       x: xPos.get(m.id) ?? 0,
       y: (genY.get(g) ?? 0) + (yOffset.get(m.id) ?? 0),
       generation: g,
+      secondaryPartners: partners && partners.length ? partners : undefined,
     }
   })
 

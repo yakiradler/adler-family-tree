@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import type { Member } from '../types'
 import type { LineageInfo } from '../lib/lineage'
+import type { SecondaryPartner } from './views/treeLayout'
 import LineageBadge from './LineageBadge'
 import { useLang } from '../i18n/useT'
 
@@ -21,6 +22,13 @@ interface Props {
    * slightly less accurate.
    */
   lineage?: LineageInfo
+  /**
+   * Ex / deceased partners — rendered as a smaller circle row beneath the
+   * card. They do NOT affect layout slot width (the layout engine handles
+   * vertical spacing instead — see treeLayout.ts genOverflow).
+   */
+  secondaryPartners?: SecondaryPartner[]
+  onSecondarySelect?: (memberId: string) => void
 }
 
 export function getRingGradient(m: Member): string {
@@ -84,7 +92,16 @@ export function PersonAvatarIcon({ gender, size }: { gender?: 'male' | 'female';
   )
 }
 
-export default function MemberNode({ member, size = 72, highlighted, onClick, variant = 'default', lineage }: Props) {
+export default function MemberNode({
+  member,
+  size = 72,
+  highlighted,
+  onClick,
+  variant = 'default',
+  lineage,
+  secondaryPartners,
+  onSecondarySelect,
+}: Props) {
   const { lang } = useLang()
   const deceased = !!member.death_date
   const birthYear = member.birth_date ? new Date(member.birth_date).getFullYear() : null
@@ -244,6 +261,104 @@ export default function MemberNode({ member, size = 72, highlighted, onClick, va
           </p>
         )}
       </div>
+
+      {/* Ex / deceased partners — small circles row beneath the card.
+          We stop event propagation so clicking a partner doesn't also
+          re-trigger the parent member's onClick. */}
+      {secondaryPartners && secondaryPartners.length > 0 && (
+        <div
+          className="mt-1.5 flex items-center justify-center gap-1.5"
+          aria-label="ex or deceased partners"
+        >
+          {secondaryPartners.map(({ member: p, status }) => (
+            <SecondaryPartnerBadge
+              key={p.id}
+              partner={p}
+              status={status}
+              onClick={(e) => {
+                e.stopPropagation()
+                onSecondarySelect?.(p.id)
+              }}
+            />
+          ))}
+        </div>
+      )}
     </motion.button>
+  )
+}
+
+/**
+ * Small avatar circle representing an ex or deceased partner. Placed in
+ * a row beneath the main card. Uses a dimmer ring + status icon overlay
+ * so the eye instantly distinguishes "former relationship" from a current
+ * spouse, which is rendered as a full-size adjacent node.
+ */
+function SecondaryPartnerBadge({
+  partner,
+  status,
+  onClick,
+}: {
+  partner: Member
+  status: SecondaryPartner['status']
+  onClick: (e: React.MouseEvent) => void
+}) {
+  const SIZE = 36
+  const isDeceased = status === 'deceased'
+  // Dim the ring slightly for ex (kept color) vs deceased (greyscale).
+  const ringStyle: React.CSSProperties = isDeceased
+    ? { background: 'linear-gradient(135deg,#9CA3AF,#6B7280)' }
+    : { background: getRingGradient(partner), opacity: 0.8 }
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick(e as unknown as React.MouseEvent)
+        }
+      }}
+      className="relative shrink-0 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent,#007AFF)] rounded-full"
+      title={`${partner.first_name} ${partner.last_name} · ${status === 'ex' ? 'ex' : '⸸'}`}
+      style={{ width: SIZE, height: SIZE }}
+    >
+      <div
+        className="rounded-full"
+        style={{ padding: 1.5, ...ringStyle }}
+      >
+        <div className="rounded-full bg-white p-[1px]">
+          <div
+            className="rounded-full overflow-hidden"
+            style={{ width: SIZE - 5, height: SIZE - 5 }}
+          >
+            {partner.photo_url ? (
+              <img
+                src={partner.photo_url}
+                alt=""
+                className={`w-full h-full object-cover ${isDeceased ? 'grayscale' : ''}`}
+              />
+            ) : (
+              <div
+                className={`w-full h-full bg-gradient-to-br ${getFallbackGradient(partner)} flex items-center justify-center ${isDeceased ? 'grayscale' : ''}`}
+              >
+                <PersonAvatarIcon gender={partner.gender} size={SIZE - 5} />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      {/* Status glyph in the bottom-right corner */}
+      <span
+        className="absolute -bottom-0.5 -end-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold leading-none border border-white shadow-sm"
+        style={{
+          background: isDeceased ? '#1F2937' : '#FF9F0A',
+          color: 'white',
+        }}
+        aria-hidden
+      >
+        {isDeceased ? '✝' : '✕'}
+      </span>
+    </div>
   )
 }

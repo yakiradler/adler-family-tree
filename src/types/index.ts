@@ -4,6 +4,13 @@ export type EditRequestStatus = 'pending' | 'approved' | 'rejected'
 export type UserRole = 'admin' | 'user'
 export type Gender = 'male' | 'female'
 export type Lineage = 'kohen' | 'levi' | 'israel'
+/**
+ * Relationship status — only meaningful for `type='spouse'`. A current
+ * spouse is co-placed adjacent to the member in the tree; ex / deceased
+ * partners render as a smaller circle BELOW the member without reserving
+ * horizontal slot width (so divorces don't widen subtrees).
+ */
+export type SpouseStatus = 'current' | 'ex' | 'deceased'
 
 export interface Profile {
   id: string
@@ -39,6 +46,8 @@ export interface Relationship {
   member_a_id: string
   member_b_id: string
   type: RelationshipType
+  /** Spouse-only. Defaults to 'current' if null/undefined. */
+  status?: SpouseStatus | null
 }
 
 export interface EditRequest {
