@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
 import { supabase } from '../lib/supabase'
+import { isAdmin } from '../lib/permissions'
 import { getRingGradient, getFallbackGradient, PersonAvatarIcon } from '../components/MemberNode'
 import type { Member, Relationship } from '../types'
 
@@ -331,7 +332,7 @@ export default function Dashboard({ demoMode }: Props) {
               gradient="from-[#32ADE6] to-[#5AC8FA]"
               onClick={() => navigate('/birthdays')}
             />
-            {profile?.role === 'admin' && (
+            {isAdmin(profile) && (
               <AppTile
                 icon="⚙️"
                 label={lang === 'he' ? 'ניהול' : 'Admin'}

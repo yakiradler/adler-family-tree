@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
 import { getRingGradient, getFallbackGradient, PersonAvatarIcon } from './MemberNode'
+import { canManageRelationships } from '../lib/permissions'
 import type { Member, Gender, RelationshipType, SpouseStatus, Relationship } from '../types'
 
 interface Props {
@@ -68,7 +69,10 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
   }, [members, relationships, member.id])
 
   if (!open) return null
-  const isAdmin = profile?.role === 'admin'
+  // Reuse the same `isAdmin` variable name (it now means
+  // "can manage relationships" via the centralised permission helper —
+  // admins always pass; users + masters with the toggle pass).
+  const isAdmin = canManageRelationships(profile)
 
   // Candidates for picker
   const takenIds = new Set<string>([

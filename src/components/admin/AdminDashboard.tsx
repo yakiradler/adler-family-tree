@@ -6,9 +6,42 @@ import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang, isRTL, type Translations } from '../../i18n/useT'
 import EditMemberModal from '../EditMemberModal'
 import { getRingGradient, getFallbackGradient, PersonAvatarIcon } from '../MemberNode'
-import type { EditRequest, Member, Profile } from '../../types'
+import type { EditRequest, Member, Profile, UserRole, MasterPermissions, AccessRequest } from '../../types'
+import type { PermissionKey } from '../../lib/permissions'
 
-type Tab = 'overview' | 'users' | 'members' | 'requests' | 'system'
+type Tab = 'overview' | 'users' | 'members' | 'requests' | 'access' | 'system'
+
+const ROLE_OPTIONS: { key: UserRole; icon: string; labelKey: 'adminRoleGuest' | 'adminRoleUser' | 'adminRoleMaster' | 'adminRoleAdmin' }[] = [
+  { key: 'guest',  icon: '👤', labelKey: 'adminRoleGuest' },
+  { key: 'user',   icon: '👨‍👩‍👧', labelKey: 'adminRoleUser' },
+  { key: 'master', icon: '⭐', labelKey: 'adminRoleMaster' },
+  { key: 'admin',  icon: '👑', labelKey: 'adminRoleAdmin' },
+]
+
+const PERM_KEYS: PermissionKey[] = [
+  'canEditAnyMember',
+  'canDeleteMembers',
+  'canManageRelationships',
+  'canApproveEditRequests',
+  'canManageInvites',
+]
+
+const PERM_LABEL: Record<PermissionKey, 'permEditAnyMember' | 'permDeleteMembers' | 'permManageRelationships' | 'permApproveEditRequests' | 'permManageInvites'> = {
+  canEditAnyMember: 'permEditAnyMember',
+  canDeleteMembers: 'permDeleteMembers',
+  canManageRelationships: 'permManageRelationships',
+  canApproveEditRequests: 'permApproveEditRequests',
+  canManageInvites: 'permManageInvites',
+}
+
+function roleBadgeClass(role: UserRole): string {
+  switch (role) {
+    case 'admin':  return 'bg-[#007AFF]/15 text-[#007AFF]'
+    case 'master': return 'bg-[#FF9F0A]/15 text-[#FF9F0A]'
+    case 'user':   return 'bg-[#5AC8FA]/15 text-[#32ADE6]'
+    case 'guest':  return 'bg-[#8E8E93]/15 text-[#636366]'
+  }
+}
 
 interface AdminUser extends Profile {
   email?: string
@@ -23,6 +56,7 @@ export default function AdminDashboard() {
   const {
     editRequests, fetchEditRequests, approveEditRequest, rejectEditRequest,
     members, deleteMember, profile,
+    accessRequests, fetchAccessRequests, decideAccessRequest, updateProfileById,
   } = useFamilyStore()
   const { t, lang } = useLang()
   const rtl = isRTL(lang)
@@ -35,15 +69,20 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState('')
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteName, setInviteName] = useState('')
-  const [inviteRole, setInviteRole] = useState<'admin' | 'user'>('user')
+  const [inviteRole, setInviteRole] = useState<UserRole>('user')
   const [inviting, setInviting] = useState(false)
 
   // ─── CRM actions (work in demo via local state; in live via Supabase) ──
-  const changeUserRole = async (u: AdminUser, role: 'admin' | 'user') => {
+  const changeUserRole = async (u: AdminUser, role: UserRole) => {
     setUsers(us => us.map(x => x.id === u.id ? { ...x, role } : x))
     if (SUPABASE_CONFIGURED) {
       await supabase.from('profiles').update({ role }).eq('id', u.id)
     }
+  }
+  const changeMasterPerm = async (u: AdminUser, key: PermissionKey, value: boolean) => {
+    const next: MasterPermissions = { ...(u.master_permissions ?? {}), [key]: value }
+    setUsers(us => us.map(x => x.id === u.id ? { ...x, master_permissions: next } : x))
+    await updateProfileById(u.id, { master_permissions: next })
   }
   const toggleUserActive = async (u: AdminUser) => {
     const cur = (u as unknown as { active?: boolean }).active !== false
@@ -77,14 +116,23 @@ export default function AdminDashboard() {
         created_at: new Date().toISOString(),
       }
       setUsers(us => [newUser, ...us])
-      setInviteEmail(''); setInviteName(''); setInviteRole('user')
+      setInviteEmail(''); setInviteName('')
+      setInviteRole('user')
       alert(`${t.adminInviteSent} ✓`)
     } finally {
       setInviting(false)
     }
   }
 
-  useEffect(() => { fetchEditRequests() }, [])
+  useEffect(() => {
+    fetchEditRequests()
+    if (SUPABASE_CONFIGURED) fetchAccessRequests()
+  }, [])
+
+  const pendingAccess = useMemo(
+    () => accessRequests.filter(r => r.status === 'pending'),
+    [accessRequests],
+  )
 
   // Fetch users from profiles table (or demo fallback)
   useEffect(() => {
@@ -158,6 +206,7 @@ export default function AdminDashboard() {
             ['users', t.adminTabUsers, '👥'],
             ['members', t.adminTabMembers, '🌳'],
             ['requests', t.adminTabRequests, '🔔'],
+            ['access', t.adminTabAccess, '🚪'],
             ['system', t.adminTabSystem, '⚙️'],
           ] as const).map(([key, label, icon]) => (
             <button
@@ -253,23 +302,23 @@ export default function AdminDashboard() {
                     className="w-full px-3 py-2 rounded-xl bg-[#F2F2F7] text-sf-body text-[#1C1C1E] placeholder:text-[#8E8E93] outline-none focus:ring-2 focus:ring-[#007AFF]/50"
                   />
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-[#F2F2F7] rounded-xl p-1 flex gap-1">
-                    {(['user', 'admin'] as const).map(r => (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex-1 min-w-[200px] bg-[#F2F2F7] rounded-xl p-1 flex gap-1">
+                    {ROLE_OPTIONS.map(r => (
                       <button
-                        key={r}
+                        key={r.key}
                         type="button"
-                        onClick={() => setInviteRole(r)}
-                        aria-label={r === 'admin' ? t.adminRoleAdmin : t.adminRoleUser}
-                        className={`flex-1 py-1.5 rounded-lg text-[12px] font-semibold transition ${
-                          inviteRole === r
-                            ? r === 'admin'
-                              ? 'bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white shadow-sm'
-                              : 'bg-white text-[#1C1C1E] shadow-sm'
+                        onClick={() => setInviteRole(r.key)}
+                        aria-label={t[r.labelKey]}
+                        title={t[r.labelKey]}
+                        className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition ${
+                          inviteRole === r.key
+                            ? 'bg-white text-[#1C1C1E] shadow-sm'
                             : 'text-[#636366]'
                         }`}
                       >
-                        {r === 'admin' ? `👑 ${t.adminRoleAdmin}` : `👤 ${t.adminRoleUser}`}
+                        <span className="mr-1">{r.icon}</span>
+                        <span className="hidden sm:inline">{t[r.labelKey]}</span>
                       </button>
                     ))}
                   </div>
@@ -305,6 +354,7 @@ export default function AdminDashboard() {
                       onRoleChange={changeUserRole}
                       onToggleActive={toggleUserActive}
                       onRemove={removeUser}
+                      onMasterPermChange={changeMasterPerm}
                     />
                   ))}
                 </div>
@@ -372,6 +422,33 @@ export default function AdminDashboard() {
                     <RequestCard key={req.id} request={req} index={i} t={t} lang={lang}
                       onApprove={() => approveEditRequest(req.id)}
                       onReject={() => rejectEditRequest(req.id)} />
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {tab === 'access' && (
+            <motion.div
+              key="access"
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}
+              className="space-y-3"
+            >
+              <SectionHeader title={t.adminAccessTitle} desc={t.adminAccessDesc} />
+              {pendingAccess.length === 0 ? (
+                <EmptyBlock icon="✅" text={t.adminAccessNoPending} />
+              ) : (
+                <div className="space-y-3">
+                  {pendingAccess.map((req, i) => (
+                    <AccessRequestCard
+                      key={req.id}
+                      request={req}
+                      index={i}
+                      t={t}
+                      onApprove={(role) => decideAccessRequest(req.id, 'approved', role)}
+                      onReject={() => decideAccessRequest(req.id, 'rejected')}
+                    />
                   ))}
                 </div>
               )}
@@ -475,20 +552,24 @@ function ProgressRow({ label, count, total, color }: { label: string; count: num
 }
 
 function UserRow({
-  user, t, rtl, demo, onRoleChange, onToggleActive, onRemove,
+  user, t, rtl, demo, onRoleChange, onToggleActive, onRemove, onMasterPermChange,
 }: {
   user: AdminUser
   t: Translations
   rtl: boolean
   demo: boolean
-  onRoleChange: (u: AdminUser, role: 'admin' | 'user') => void
+  onRoleChange: (u: AdminUser, role: UserRole) => void
   onToggleActive: (u: AdminUser) => void
   onRemove: (u: AdminUser) => void
+  onMasterPermChange: (u: AdminUser, key: PermissionKey, value: boolean) => void
 }) {
+  const [showPerms, setShowPerms] = useState(false)
   const joined = user.created_at
     ? new Date(user.created_at).toLocaleDateString(rtl ? 'he-IL' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })
     : '—'
   const isActive = (user as unknown as { active?: boolean }).active !== false
+  const roleLabel = ROLE_OPTIONS.find(r => r.key === user.role)
+  const perms = user.master_permissions ?? {}
 
   const handleReset = async () => {
     if (demo) { alert(t.adminDemoAlert); return }
@@ -510,12 +591,8 @@ function UserRow({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-sf-subhead font-semibold text-[#1C1C1E] truncate">{user.full_name}</p>
-            <span className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${
-              user.role === 'admin'
-                ? 'bg-[#007AFF]/15 text-[#007AFF]'
-                : 'bg-[#5AC8FA]/15 text-[#32ADE6]'
-            }`}>
-              {user.role === 'admin' ? t.adminRoleAdmin : t.adminRoleUser}
+            <span className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${roleBadgeClass(user.role)}`}>
+              {roleLabel?.icon} {roleLabel ? t[roleLabel.labelKey] : user.role}
             </span>
             <span className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${
               isActive ? 'bg-[#34C759]/15 text-[#34C759]' : 'bg-[#8E8E93]/15 text-[#636366]'
@@ -528,14 +605,30 @@ function UserRow({
         </div>
       </div>
 
+      {/* Role picker — 4-tier */}
+      <div className="mt-3 bg-[#F2F2F7] rounded-xl p-1 flex gap-1">
+        {ROLE_OPTIONS.map(r => (
+          <button
+            key={r.key}
+            type="button"
+            onClick={() => onRoleChange(user, r.key)}
+            title={t[r.labelKey]}
+            aria-label={t[r.labelKey]}
+            aria-pressed={user.role === r.key}
+            className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition ${
+              user.role === r.key
+                ? 'bg-white text-[#1C1C1E] shadow-sm'
+                : 'text-[#636366] hover:bg-white/40'
+            }`}
+          >
+            <span className="mr-1">{r.icon}</span>
+            <span className="hidden sm:inline">{t[r.labelKey]}</span>
+          </button>
+        ))}
+      </div>
+
       {/* Action strip — labeled buttons */}
-      <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-        <ActionChip
-          label={user.role === 'admin' ? t.adminMakeUser : t.adminMakeAdmin}
-          onClick={() => onRoleChange(user, user.role === 'admin' ? 'user' : 'admin')}
-          color="blue"
-          icon="👑"
-        />
+      <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-1.5">
         <ActionChip
           label={isActive ? t.adminDeactivate : t.adminActivate}
           onClick={() => onToggleActive(user)}
@@ -549,13 +642,94 @@ function UserRow({
           icon="🔑"
         />
         <ActionChip
+          label={showPerms ? t.adminPermsHidden : t.adminTogglePerms}
+          onClick={() => setShowPerms(v => !v)}
+          color="blue"
+          icon="🛡"
+        />
+        <ActionChip
           label={t.adminRemoveUser}
           onClick={() => onRemove(user)}
           color="red"
           icon="🗑"
         />
       </div>
+
+      {/* Master permissions panel — only meaningful for masters,
+          but admins implicitly have everything; shown if user toggles. */}
+      <AnimatePresence initial={false}>
+        {showPerms && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-3 rounded-2xl bg-[#F2F2F7]/60 p-3 space-y-2">
+              <div className="flex items-baseline justify-between">
+                <p className="text-sf-caption font-bold text-[#1C1C1E]">{t.adminMasterPerms}</p>
+                <p className="text-[10px] text-[#8E8E93]">{t.adminMasterPermsDesc}</p>
+              </div>
+              {user.role === 'admin' ? (
+                <p className="text-[11px] text-[#34C759] font-medium">
+                  👑 admin — {Object.values(PERM_LABEL).map(k => t[k]).join(' · ')}
+                </p>
+              ) : user.role === 'guest' ? (
+                <p className="text-[11px] text-[#8E8E93] font-medium">
+                  👤 {t.adminRoleGuest} — read-only
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  {PERM_KEYS.map(k => (
+                    <PermToggle
+                      key={k}
+                      label={t[PERM_LABEL[k]]}
+                      checked={user.role === 'master' ? Boolean(perms[k]) : false}
+                      disabled={user.role !== 'master'}
+                      onChange={(v) => onMasterPermChange(user, k, v)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
+  )
+}
+
+function PermToggle({
+  label, checked, onChange, disabled,
+}: { label: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={() => !disabled && onChange(!checked)}
+      disabled={disabled}
+      className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-[11px] font-semibold transition ${
+        disabled
+          ? 'bg-white/30 text-[#C7C7CC] cursor-not-allowed'
+          : checked
+            ? 'bg-[#34C759]/15 text-[#34C759]'
+            : 'bg-white text-[#636366] hover:bg-white/80'
+      }`}
+    >
+      <span className="truncate">{label}</span>
+      <span
+        aria-hidden
+        className={`w-8 h-5 rounded-full relative transition ${
+          checked ? 'bg-[#34C759]' : 'bg-[#C7C7CC]'
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
+            checked ? 'left-3.5' : 'left-0.5'
+          }`}
+        />
+      </span>
+    </button>
   )
 }
 
@@ -716,6 +890,120 @@ function RequestCard({ request, index, t, lang, onApprove, onReject }: RequestCa
             <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
           </svg>
           {t.reject}
+        </motion.button>
+      </div>
+    </motion.div>
+  )
+}
+
+// ─── Access request card (Phase D) ───────────────────────────────────────────
+
+interface AccessRequestCardProps {
+  request: AccessRequest
+  index: number
+  t: Translations
+  onApprove: (role: UserRole) => void
+  onReject: () => void
+}
+
+function AccessRequestCard({ request, index, t, onApprove, onReject }: AccessRequestCardProps) {
+  const [grantRole, setGrantRole] = useState<UserRole>(request.requested_role)
+  const answers = request.answers ?? {}
+  const relAnswer = (answers as Record<string, unknown>).relationship as string | undefined
+  const purposeAnswer = (answers as Record<string, unknown>).purpose as string | undefined
+  const requestedLabel = ROLE_OPTIONS.find(r => r.key === request.requested_role)
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, x: -20, height: 0, marginBottom: 0 }}
+      transition={{ delay: index * 0.05, duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+      className="glass-strong rounded-3xl p-4 shadow-glass"
+    >
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-sf-subhead font-semibold text-[#1C1C1E] truncate">
+            {request.requester_name ?? request.requester_id.slice(0, 8)}
+          </p>
+          <p className="text-sf-caption text-[#8E8E93] mt-0.5">
+            {t.adminAccessRequestedRole}:{' '}
+            <span className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${roleBadgeClass(request.requested_role)}`}>
+              {requestedLabel?.icon} {requestedLabel ? t[requestedLabel.labelKey] : request.requested_role}
+            </span>
+          </p>
+        </div>
+        <span className="flex-shrink-0 text-sf-caption2 bg-[#5AC8FA]/10 text-[#32ADE6] rounded-full px-2.5 py-1 font-medium">
+          {t.pendingStatus}
+        </span>
+      </div>
+
+      <div className="bg-[#F2F2F7]/80 rounded-2xl p-3 mb-3 space-y-1.5">
+        {relAnswer && (
+          <div className="flex items-baseline gap-2">
+            <span className="text-sf-caption text-[#8E8E93]">{t.adminAccessAnswer_relationship}:</span>
+            <span className="text-sf-caption font-medium text-[#1C1C1E]">{relAnswer}</span>
+          </div>
+        )}
+        {purposeAnswer && (
+          <div className="flex items-baseline gap-2">
+            <span className="text-sf-caption text-[#8E8E93]">{t.adminAccessAnswer_purpose}:</span>
+            <span className="text-sf-caption font-medium text-[#1C1C1E]">{purposeAnswer}</span>
+          </div>
+        )}
+        {request.invite_code && (
+          <div className="flex items-baseline gap-2">
+            <span className="text-sf-caption text-[#8E8E93]">{t.adminAccessInviteCode}:</span>
+            <span className="text-sf-caption font-mono font-medium text-[#1C1C1E]" dir="ltr">
+              {request.invite_code}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Granted-role selector */}
+      <div className="mb-3">
+        <p className="text-[10px] text-[#8E8E93] mb-1.5 font-semibold">{t.adminAccessApproveAs}</p>
+        <div className="bg-[#F2F2F7] rounded-xl p-1 flex gap-1">
+          {ROLE_OPTIONS.map(r => (
+            <button
+              key={r.key}
+              type="button"
+              onClick={() => setGrantRole(r.key)}
+              aria-pressed={grantRole === r.key}
+              aria-label={t[r.labelKey]}
+              className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition ${
+                grantRole === r.key
+                  ? 'bg-white text-[#1C1C1E] shadow-sm'
+                  : 'text-[#636366]'
+              }`}
+            >
+              <span className="mr-1">{r.icon}</span>
+              <span className="hidden sm:inline">{t[r.labelKey]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <motion.button
+          whileTap={{ scale: 0.94 }}
+          onClick={() => onApprove(grantRole)}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-[#34C759] text-white rounded-2xl text-sf-subhead font-semibold shadow-sm hover:bg-[#2DB34A] transition-colors"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M2 7l4 4 6-6" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          {t.adminAccessApprove}
+        </motion.button>
+        <motion.button
+          whileTap={{ scale: 0.94 }}
+          onClick={onReject}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-[#FF3B30]/10 text-[#FF3B30] rounded-2xl text-sf-subhead font-semibold border border-[#FF3B30]/20 hover:bg-[#FF3B30]/20 transition-colors"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+          {t.adminAccessReject}
         </motion.button>
       </div>
     </motion.div>

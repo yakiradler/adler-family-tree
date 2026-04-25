@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang } from '../i18n/useT'
+import { isAdmin } from '../lib/permissions'
 import type { ViewMode } from '../types'
 
 export default function Navigation() {
@@ -89,7 +90,7 @@ export default function Navigation() {
 
         <div className="w-px h-8 bg-white/15 mx-1" />
 
-        {profile?.role === 'admin' && (
+        {isAdmin(profile) && (
           <motion.button
             onClick={() => setViewMode('tree')}
             className="relative flex flex-col items-center gap-0.5 px-3 py-2 rounded-[1.4rem] text-white/40 hover:text-white/70 transition-colors"

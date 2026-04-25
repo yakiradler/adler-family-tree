@@ -5,6 +5,7 @@ import { useLang, isRTL } from '../i18n/useT'
 import { getRingGradient, getFallbackGradient, PersonAvatarIcon } from './MemberNode'
 import EditMemberModal from './EditMemberModal'
 import RelationshipManager from './RelationshipManager'
+import { canEditMember, canManageRelationships } from '../lib/permissions'
 import type { Member } from '../types'
 
 interface Props {
@@ -66,6 +67,22 @@ export default function MemberPanel({ onClose }: Props) {
   }, [member, members, relationships])
 
   if (!member) return null
+
+  // ── Phase D RBAC gates ───────────────────────────────────────────────
+  // The `nuclearFamilyIds` set lets `canEditMember` permit users to edit
+  // their parents/children/spouses without admin rights.
+  const nuclearFamilyIds = new Set<string>([
+    ...spouses.map(s => s.id),
+    ...parents.map(p => p.id),
+    ...children.map(c => c.id),
+  ])
+  const editAllowed = canEditMember(profile, {
+    targetMemberId: member.id,
+    nuclearFamilyIds,
+    // ownMemberId is not yet wired into Profile; nuclearFamilyIds covers the
+    // "edit your immediate family" case until that link is added.
+  })
+  const relAllowed = canManageRelationships(profile)
 
   const age = member.birth_date
     ? (member.death_date
@@ -274,8 +291,9 @@ export default function MemberPanel({ onClose }: Props) {
         </div>
 
         {/* Action buttons: full-width stacked rows so labels are always readable */}
-        {profile?.role === 'admin' && (
+        {(editAllowed || relAllowed) && (
           <div className="px-5 pb-5 pt-1 space-y-2">
+            {editAllowed && (
             <button
               type="button"
               onClick={() => setEditOpen(true)}
@@ -288,6 +306,8 @@ export default function MemberPanel({ onClose }: Props) {
               </svg>
               <span>{t.panelEdit}</span>
             </button>
+            )}
+            {relAllowed && (
             <button
               type="button"
               onClick={() => setRelOpen(true)}
@@ -302,6 +322,7 @@ export default function MemberPanel({ onClose }: Props) {
               </svg>
               <span>{t.relManageBtn}</span>
             </button>
+            )}
           </div>
         )}
       </div>
