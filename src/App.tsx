@@ -10,6 +10,8 @@ import TreePage from './pages/TreePage'
 import BirthdayPage from './pages/BirthdayPage'
 import AdminDashboard from './components/admin/AdminDashboard'
 import ThemeShell from './components/ThemeShell'
+import OnboardingWizard from './components/onboarding/OnboardingWizard'
+import { isOnboarded } from './lib/permissions'
 import { ADLER_MEMBERS, ADLER_RELATIONSHIPS } from './data/adlerFamily'
 import type { Session } from '@supabase/supabase-js'
 
@@ -21,7 +23,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(SUPABASE_CONFIGURED)
   const [demoMode] = useState(!SUPABASE_CONFIGURED)
 
-  const { setProfile, fetchMembers, fetchRelationships, fetchEditRequests } = useFamilyStore()
+  const { profile, setProfile, fetchMembers, fetchRelationships, fetchEditRequests } = useFamilyStore()
   const { lang } = useLang()
   const dir = isRTL(lang) ? 'rtl' : 'ltr'
 
@@ -74,19 +76,29 @@ export default function App() {
   }
 
   const isAuth = demoMode || !!session
+  // Onboarding gate: real authenticated users (not demo) who have a profile
+  // loaded but no `onboarded_at` timestamp must complete the wizard before
+  // any other route renders. Profile may briefly be null while loading —
+  // we only force the wizard once we have a profile.
+  const needsOnboarding =
+    !demoMode && !!session && !!profile && !isOnboarded(profile)
 
   return (
     <div dir={dir} className="min-h-screen">
       <HashRouter>
         <ThemeShell>
-          <Routes>
-            <Route path="/login" element={session ? <Navigate to="/" replace /> : <Auth demoMode={demoMode} />} />
-            <Route path="/" element={isAuth ? <Dashboard demoMode={demoMode} /> : <Navigate to="/login" replace />} />
-            <Route path="/tree" element={isAuth ? <TreePage demoMode={demoMode} /> : <Navigate to="/login" replace />} />
-            <Route path="/birthdays" element={isAuth ? <BirthdayPage demoMode={demoMode} /> : <Navigate to="/login" replace />} />
-            <Route path="/admin" element={isAuth ? <AdminDashboard /> : <Navigate to="/login" replace />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          {needsOnboarding ? (
+            <OnboardingWizard />
+          ) : (
+            <Routes>
+              <Route path="/login" element={session ? <Navigate to="/" replace /> : <Auth demoMode={demoMode} />} />
+              <Route path="/" element={isAuth ? <Dashboard demoMode={demoMode} /> : <Navigate to="/login" replace />} />
+              <Route path="/tree" element={isAuth ? <TreePage demoMode={demoMode} /> : <Navigate to="/login" replace />} />
+              <Route path="/birthdays" element={isAuth ? <BirthdayPage demoMode={demoMode} /> : <Navigate to="/login" replace />} />
+              <Route path="/admin" element={isAuth ? <AdminDashboard /> : <Navigate to="/login" replace />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          )}
         </ThemeShell>
       </HashRouter>
     </div>

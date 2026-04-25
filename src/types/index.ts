@@ -1,7 +1,17 @@
 export type ViewMode = 'tree' | 'schematic' | 'timeline'
 export type RelationshipType = 'parent-child' | 'spouse' | 'sibling'
 export type EditRequestStatus = 'pending' | 'approved' | 'rejected'
-export type UserRole = 'admin' | 'user'
+/**
+ * 4-tier RBAC.
+ *  - guest:  read-only; needs admin approval to do anything else.
+ *  - user:   the standard authenticated member; can edit their own
+ *            profile + their nuclear family (spouse, children).
+ *  - master: family power-user; granular per-feature toggles live in
+ *            profiles.master_permissions, controlled by an admin.
+ *  - admin:  full access (root) on the entire system.
+ */
+export type UserRole = 'guest' | 'user' | 'master' | 'admin'
+export type AccessRequestStatus = 'pending' | 'approved' | 'rejected'
 export type Gender = 'male' | 'female'
 export type Lineage = 'kohen' | 'levi' | 'israel'
 /**
@@ -17,6 +27,40 @@ export interface Profile {
   full_name: string
   avatar_url?: string
   role: UserRole
+  bio?: string
+  /** ISO timestamp; absent ⇒ user has not completed onboarding. */
+  onboarded_at?: string | null
+  /** Tier the user requested during onboarding (admin grants the actual role). */
+  requested_role?: UserRole | null
+  /** Granular per-feature flags managed by admin for `master` users. */
+  master_permissions?: MasterPermissions
+}
+
+/**
+ * Per-feature toggles for `master` users. Admin flips these from the
+ * dashboard. New keys can be added without a migration — the column is
+ * jsonb. Defaults to "all-off"; helpers in src/lib/permissions.ts apply
+ * sensible fallbacks per role.
+ */
+export interface MasterPermissions {
+  canEditAnyMember?: boolean
+  canDeleteMembers?: boolean
+  canManageRelationships?: boolean
+  canApproveEditRequests?: boolean
+  canManageInvites?: boolean
+}
+
+export interface AccessRequest {
+  id: string
+  requester_id: string
+  requester_name?: string
+  requested_role: UserRole
+  answers: Record<string, unknown>
+  invite_code?: string | null
+  status: AccessRequestStatus
+  decided_by?: string | null
+  decided_at?: string | null
+  created_at: string
 }
 
 export interface Member {

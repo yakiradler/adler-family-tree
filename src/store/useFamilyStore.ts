@@ -1,6 +1,9 @@
 import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
-import type { Member, Relationship, EditRequest, ViewMode, Profile } from '../types'
+import type {
+  Member, Relationship, EditRequest, ViewMode, Profile,
+  AccessRequest, UserRole,
+} from '../types'
 
 interface FamilyState {
   profile: Profile | null
@@ -29,6 +32,19 @@ interface FamilyState {
 
   approveEditRequest: (requestId: string) => Promise<void>
   rejectEditRequest: (requestId: string) => Promise<void>
+
+  // ── Onboarding + RBAC (Phase C/D) ───────────────────────────────────
+  accessRequests: AccessRequest[]
+  fetchAccessRequests: () => Promise<void>
+  submitAccessRequest: (
+    payload: Pick<AccessRequest, 'requested_role' | 'answers' | 'invite_code'>,
+  ) => Promise<void>
+  decideAccessRequest: (
+    id: string, decision: 'approved' | 'rejected',
+    grantedRole?: UserRole,
+  ) => Promise<void>
+  completeOnboarding: (patch: Partial<Profile>) => Promise<void>
+  updateProfileById: (id: string, patch: Partial<Profile>) => Promise<void>
 }
 
 export const useFamilyStore = create<FamilyState>((set, get) => ({
@@ -138,5 +154,79 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   rejectEditRequest: async (requestId) => {
     await supabase.from('edit_requests').update({ status: 'rejected' }).eq('id', requestId)
     set((s) => ({ editRequests: s.editRequests.filter((r) => r.id !== requestId) }))
+  },
+
+  // ── Onboarding + RBAC ────────────────────────────────────────────────
+  accessRequests: [],
+
+  fetchAccessRequests: async () => {
+    const { data } = await supabase
+      .from('access_requests')
+      .select(`*, profiles:requester_id(full_name)`)
+      .order('created_at', { ascending: false })
+    const mapped: AccessRequest[] = (data ?? []).map((r: Record<string, unknown>) => ({
+      id: r.id as string,
+      requester_id: r.requester_id as string,
+      requester_name: (r.profiles as { full_name: string } | null)?.full_name ?? 'Unknown',
+      requested_role: r.requested_role as UserRole,
+      answers: (r.answers as Record<string, unknown>) ?? {},
+      invite_code: (r.invite_code as string | null) ?? null,
+      status: r.status as AccessRequest['status'],
+      decided_by: (r.decided_by as string | null) ?? null,
+      decided_at: (r.decided_at as string | null) ?? null,
+      created_at: r.created_at as string,
+    }))
+    set({ accessRequests: mapped })
+  },
+
+  submitAccessRequest: async ({ requested_role, answers, invite_code }) => {
+    const me = get().profile
+    if (!me) return
+    const row = {
+      requester_id: me.id,
+      requested_role,
+      answers,
+      invite_code: invite_code ?? null,
+      status: 'pending' as const,
+    }
+    const { data } = await supabase.from('access_requests').insert(row).select().single()
+    if (data) {
+      set((s) => ({ accessRequests: [data as AccessRequest, ...s.accessRequests] }))
+    }
+  },
+
+  decideAccessRequest: async (id, decision, grantedRole) => {
+    const req = get().accessRequests.find(r => r.id === id)
+    const patch: Record<string, unknown> = {
+      status: decision,
+      decided_at: new Date().toISOString(),
+    }
+    await supabase.from('access_requests').update(patch).eq('id', id)
+    if (decision === 'approved' && req) {
+      const role = grantedRole ?? req.requested_role
+      await supabase.from('profiles').update({ role }).eq('id', req.requester_id)
+    }
+    set((s) => ({
+      accessRequests: s.accessRequests.map(r =>
+        r.id === id ? { ...r, status: decision, decided_at: patch.decided_at as string } : r,
+      ),
+    }))
+  },
+
+  completeOnboarding: async (patch) => {
+    const me = get().profile
+    if (!me) return
+    const finalPatch: Partial<Profile> = {
+      ...patch,
+      onboarded_at: new Date().toISOString(),
+    }
+    await supabase.from('profiles').update(finalPatch).eq('id', me.id)
+    set({ profile: { ...me, ...finalPatch } })
+  },
+
+  updateProfileById: async (id, patch) => {
+    await supabase.from('profiles').update(patch).eq('id', id)
+    const me = get().profile
+    if (me?.id === id) set({ profile: { ...me, ...patch } })
   },
 }))
