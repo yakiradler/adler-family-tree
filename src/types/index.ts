@@ -85,6 +85,15 @@ export interface Member {
    * for Adler descendants (see lineage.ts → `resolveLineage`).
    */
   lineage?: Lineage | null
+  /**
+   * Manual privacy switch — when true the member is excluded from the
+   * tree layout regardless of any active filter. Useful for cases the
+   * family wants to keep on record but not surface on the public tree
+   * (e.g. a discreet first ex-spouse). Members linked through a hidden
+   * person via parent-child still get connected through their other
+   * (visible) parent; the hidden node simply doesn't render.
+   */
+  hidden?: boolean
   created_by: string
 }
 

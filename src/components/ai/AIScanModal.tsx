@@ -1,9 +1,21 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang, isRTL, type Translations } from '../../i18n/useT'
 import { scanFiles, isLiveAIScanConfigured, type AIScanCandidate } from '../../lib/aiVision'
 import type { Gender, Member } from '../../types'
+
+/**
+ * How the new member should be linked into the tree, picked per-candidate
+ * by the user during the conversational review step. `kind` describes the
+ * relationship to `relativeId`. `standalone` skips relationship creation
+ * (the member is added "loose" — exactly the previous default).
+ */
+type PlacementKind = 'standalone' | 'parent' | 'child' | 'spouse' | 'sibling'
+interface Placement {
+  kind: PlacementKind
+  relativeId: string | null
+}
 
 /**
  * AI Scan modal — full-screen overlay with four phases:
@@ -29,6 +41,8 @@ interface PickedFile {
 interface CandidateRow extends AIScanCandidate {
   /** Local UI flag — selected for adding. */
   selected: boolean
+  /** Where this person belongs in the tree (chosen by the user). */
+  placement: Placement
 }
 
 export default function AIScanModal({
@@ -40,7 +54,7 @@ export default function AIScanModal({
 }) {
   const { t, lang } = useLang()
   const rtl = isRTL(lang)
-  const { addMember, profile } = useFamilyStore()
+  const { addMember, addRelationship, members, profile } = useFamilyStore()
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [phase, setPhase] = useState<Phase>('pick')
@@ -92,7 +106,13 @@ export default function AIScanModal({
     setError(null)
     try {
       const result = await scanFiles(files.map((f) => f.file))
-      setCandidates(result.map((c) => ({ ...c, selected: true })))
+      setCandidates(
+        result.map((c) => ({
+          ...c,
+          selected: true,
+          placement: { kind: 'standalone', relativeId: null },
+        })),
+      )
       setPhase('review')
     } catch (err) {
       console.error(err)
@@ -125,7 +145,33 @@ export default function AIScanModal({
           bio: c.notes,
           created_by: creatorId,
         }
-        await addMember(member)
+        const created = await addMember(member)
+        // Wire the placement chosen during the chat — sibling means
+        // "share parents with" so we copy the relative's parent edges.
+        if (created && c.placement.relativeId && c.placement.kind !== 'standalone') {
+          const rid = c.placement.relativeId
+          if (c.placement.kind === 'parent') {
+            await addRelationship({ type: 'parent-child', member_a_id: created.id, member_b_id: rid })
+          } else if (c.placement.kind === 'child') {
+            await addRelationship({ type: 'parent-child', member_a_id: rid, member_b_id: created.id })
+          } else if (c.placement.kind === 'spouse') {
+            await addRelationship({
+              type: 'spouse',
+              member_a_id: rid,
+              member_b_id: created.id,
+              status: 'current',
+            })
+          } else if (c.placement.kind === 'sibling') {
+            // Mirror the sibling's parents onto the new member.
+            const parentIds = useFamilyStore
+              .getState()
+              .relationships.filter((r) => r.type === 'parent-child' && r.member_b_id === rid)
+              .map((r) => r.member_a_id)
+            for (const pid of parentIds) {
+              await addRelationship({ type: 'parent-child', member_a_id: pid, member_b_id: created.id })
+            }
+          }
+        }
       }
       onAdded?.(picked.length)
       handleClose()
@@ -290,11 +336,21 @@ export default function AIScanModal({
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
-                className="space-y-3"
+                className="space-y-4"
               >
-                <div className="flex items-baseline justify-between">
-                  <p className="text-sf-subhead font-bold text-[#1C1C1E]">{t.aiScanResultsTitle}</p>
-                  {candidates.length > 0 && (
+                {/* Intro narration — the AI summarising what it saw across all
+                    files. Acts as the opening chat bubble in a conversation. */}
+                <AIBubble>
+                  <p className="text-[12.5px] leading-relaxed text-[#1C1C1E]">
+                    {lang === 'he'
+                      ? `סרקתי ${files.length} ${files.length === 1 ? 'קובץ' : 'קבצים'} וזיהיתי ${candidates.length} ${candidates.length === 1 ? 'דמות' : 'דמויות'}. עברו אחת-אחת ובחרו איפה למקם כל אחת בעץ — אני אקרא לכל אחת בשם שזיהיתי, וגם הראיתי איזו ראיה הובילה לזיהוי.`
+                      : `I scanned ${files.length} ${files.length === 1 ? 'file' : 'files'} and identified ${candidates.length} ${candidates.length === 1 ? 'person' : 'people'}. Walk through them one by one — I'll explain what hinted at each identification and you can decide where they belong in the tree.`}
+                  </p>
+                </AIBubble>
+
+                {candidates.length > 0 && (
+                  <div className="flex items-baseline justify-between">
+                    <p className="text-sf-subhead font-bold text-[#1C1C1E]">{t.aiScanResultsTitle}</p>
                     <button
                       type="button"
                       onClick={toggleAll}
@@ -304,22 +360,25 @@ export default function AIScanModal({
                         ? lang === 'he' ? 'בטל הכל' : 'Deselect all'
                         : lang === 'he' ? 'בחר הכל' : 'Select all'}
                     </button>
-                  )}
-                </div>
-                <p className="text-[11px] text-[#8E8E93]">{t.aiScanResultsHint}</p>
+                  </div>
+                )}
+
                 {candidates.length === 0 ? (
                   <div className="rounded-3xl bg-[#F2F2F7] p-8 text-center">
                     <p className="text-2xl mb-2">🤷</p>
                     <p className="text-sf-subhead text-[#636366]">{t.aiScanNoResults}</p>
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    {candidates.map((c) => (
-                      <CandidateRowView
+                  <div className="space-y-3">
+                    {candidates.map((c, idx) => (
+                      <ChatCandidate
                         key={c.id}
+                        index={idx + 1}
                         c={c}
+                        members={members}
                         onChange={(patch) => updateCandidate(c.id, patch)}
                         t={t}
+                        lang={lang}
                       />
                     ))}
                   </div>
@@ -400,124 +459,239 @@ function FileTile({
   )
 }
 
-function CandidateRowView({
-  c, onChange, t,
+/**
+ * AI "chat bubble" — used both for the intro narration and per-candidate
+ * observation. Avatar on the start side, soft-violet bubble after.
+ */
+function AIBubble({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-2.5">
+      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#5E5CE6] to-[#BF5AF2] flex items-center justify-center text-white text-sm shadow-sm flex-shrink-0">
+        ✨
+      </div>
+      <div className="flex-1 min-w-0 rounded-2xl rounded-ss-md bg-[#5E5CE6]/8 border border-[#5E5CE6]/15 p-3">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * One candidate rendered as a "chat" pair:
+ *   1. AI bubble narrating what it saw (notes + confidence).
+ *   2. User card — editable name/gender/year + a "place in tree" picker
+ *      with a member dropdown when the placement requires one.
+ */
+function ChatCandidate({
+  index, c, members, onChange, t, lang,
 }: {
+  index: number
   c: CandidateRow
+  members: Member[]
   onChange: (patch: Partial<CandidateRow>) => void
   t: Translations
+  lang: 'he' | 'en'
 }) {
+  const display =
+    `${c.first_name}${c.last_name ? ` ${c.last_name}` : ''}`.trim() ||
+    (lang === 'he' ? 'דמות לא מזוהה' : 'unknown person')
+
+  const sortedMembers = useMemo(
+    () =>
+      [...members].sort((a, b) =>
+        `${a.first_name} ${a.last_name}`.localeCompare(
+          `${b.first_name} ${b.last_name}`,
+          lang === 'he' ? 'he' : 'en',
+        ),
+      ),
+    [members, lang],
+  )
+
+  const placementNeedsMember = c.placement.kind !== 'standalone'
+
+  const placementOptions: Array<{ key: PlacementKind; label: string; icon: string }> = [
+    { key: 'standalone', label: t.aiPlaceStandalone, icon: '🪴' },
+    { key: 'child', label: t.aiPlaceChild, icon: '👶' },
+    { key: 'parent', label: t.aiPlaceParent, icon: '🧓' },
+    { key: 'spouse', label: t.aiPlaceSpouse, icon: '💍' },
+    { key: 'sibling', label: t.aiPlaceSibling, icon: '👯' },
+  ]
+
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 6 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`rounded-2xl p-3 border transition ${
-        c.selected
-          ? 'bg-[#5E5CE6]/8 border-[#5E5CE6]/30'
-          : 'bg-[#F9F9FB] border-transparent'
-      }`}
+      className="space-y-2"
     >
-      <div className="flex items-start gap-3">
-        <button
-          type="button"
-          onClick={() => onChange({ selected: !c.selected })}
-          aria-pressed={c.selected}
-          className={`mt-1 w-5 h-5 rounded-md flex-shrink-0 flex items-center justify-center text-white text-[11px] font-bold transition ${
-            c.selected ? 'bg-[#5E5CE6]' : 'bg-white border border-[#C7C7CC]'
-          }`}
-        >
-          {c.selected ? '✓' : ''}
-        </button>
-        <div className="flex-1 min-w-0 space-y-2">
-          <div className="grid grid-cols-2 gap-2">
-            <LabeledField label={t.aiScanFieldFirstName}>
-              <input
-                type="text"
-                value={c.first_name}
-                onChange={(e) => onChange({ first_name: e.target.value })}
-                className="ai-cand-input"
+      {/* AI narration bubble for this specific candidate */}
+      <AIBubble>
+        <p className="text-[12px] font-semibold text-[#5E5CE6] mb-1">
+          #{index} · {display}
+        </p>
+        <p className="text-[12px] leading-relaxed text-[#1C1C1E]">
+          {c.notes ||
+            (lang === 'he'
+              ? 'זיהיתי את הדמות אך אין לי הערות נוספות.'
+              : 'Recognised the person but have no extra observation.')}
+        </p>
+        {typeof c.confidence === 'number' && (
+          <div className="flex items-center gap-2 mt-2 text-[10.5px] text-[#636366]">
+            <span>{t.aiScanConfidence}</span>
+            <div className="flex-1 h-1.5 rounded-full bg-white/70 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-[#5E5CE6] to-[#BF5AF2] rounded-full"
+                style={{ width: `${Math.round(c.confidence * 100)}%` }}
               />
-            </LabeledField>
-            <LabeledField label={t.aiScanFieldLastName}>
-              <input
-                type="text"
-                value={c.last_name ?? ''}
-                onChange={(e) => onChange({ last_name: e.target.value })}
-                className="ai-cand-input"
-              />
-            </LabeledField>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <LabeledField label={t.aiScanFieldGender}>
-              <select
-                value={c.gender ?? ''}
-                onChange={(e) =>
-                  onChange({
-                    gender: (e.target.value || undefined) as Gender | undefined,
-                  })
-                }
-                className="ai-cand-input"
-              >
-                <option value="">—</option>
-                <option value="male">♂</option>
-                <option value="female">♀</option>
-              </select>
-            </LabeledField>
-            <LabeledField label={t.aiScanFieldBirthYear}>
-              <input
-                type="number"
-                value={c.birth_year ?? ''}
-                onChange={(e) =>
-                  onChange({
-                    birth_year: e.target.value ? parseInt(e.target.value, 10) : undefined,
-                  })
-                }
-                className="ai-cand-input"
-                placeholder="—"
-              />
-            </LabeledField>
-          </div>
-          {c.notes && (
-            <div className="text-[11px] text-[#636366] flex items-baseline gap-2">
-              <span className="text-[#8E8E93] font-semibold">{t.aiScanFieldNotes}:</span>
-              <span className="leading-snug">{c.notes}</span>
             </div>
-          )}
-          {typeof c.confidence === 'number' && (
-            <div className="flex items-center gap-2 text-[10px] text-[#8E8E93]">
-              <span>{t.aiScanConfidence}</span>
-              <div className="flex-1 h-1.5 rounded-full bg-[#E5E5EA] overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-[#5E5CE6] to-[#BF5AF2] rounded-full"
-                  style={{ width: `${Math.round(c.confidence * 100)}%` }}
-                />
-              </div>
-              <span dir="ltr" className="font-mono">
-                {Math.round(c.confidence * 100)}%
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
+            <span dir="ltr" className="font-mono">
+              {Math.round(c.confidence * 100)}%
+            </span>
+          </div>
+        )}
+      </AIBubble>
 
-      <style>{`
-        .ai-cand-input {
-          width: 100%;
-          padding: 0.4rem 0.7rem;
-          border-radius: 0.6rem;
-          background: #FFFFFF;
-          border: 1px solid #E5E5EA;
-          color: #1C1C1E;
-          font-size: 12px;
-          outline: none;
-          transition: box-shadow 0.15s ease, border-color 0.15s ease;
-        }
-        .ai-cand-input:focus {
-          border-color: #5E5CE6;
-          box-shadow: 0 0 0 2px rgba(94, 92, 230, 0.25);
-        }
-      `}</style>
+      {/* User edit + placement card */}
+      <div
+        className={`ms-10 rounded-2xl rounded-ss-md border p-3 transition ${
+          c.selected ? 'bg-white border-[#5E5CE6]/35' : 'bg-[#F9F9FB] border-transparent'
+        }`}
+      >
+        <div className="flex items-start gap-2.5">
+          <button
+            type="button"
+            onClick={() => onChange({ selected: !c.selected })}
+            aria-pressed={c.selected}
+            className={`mt-1 w-5 h-5 rounded-md flex-shrink-0 flex items-center justify-center text-white text-[11px] font-bold transition ${
+              c.selected ? 'bg-[#5E5CE6]' : 'bg-white border border-[#C7C7CC]'
+            }`}
+          >
+            {c.selected ? '✓' : ''}
+          </button>
+          <div className="flex-1 min-w-0 space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <LabeledField label={t.aiScanFieldFirstName}>
+                <input
+                  type="text"
+                  value={c.first_name}
+                  onChange={(e) => onChange({ first_name: e.target.value })}
+                  className="ai-cand-input"
+                />
+              </LabeledField>
+              <LabeledField label={t.aiScanFieldLastName}>
+                <input
+                  type="text"
+                  value={c.last_name ?? ''}
+                  onChange={(e) => onChange({ last_name: e.target.value })}
+                  className="ai-cand-input"
+                />
+              </LabeledField>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <LabeledField label={t.aiScanFieldGender}>
+                <select
+                  value={c.gender ?? ''}
+                  onChange={(e) =>
+                    onChange({
+                      gender: (e.target.value || undefined) as Gender | undefined,
+                    })
+                  }
+                  className="ai-cand-input"
+                >
+                  <option value="">—</option>
+                  <option value="male">♂</option>
+                  <option value="female">♀</option>
+                </select>
+              </LabeledField>
+              <LabeledField label={t.aiScanFieldBirthYear}>
+                <input
+                  type="number"
+                  value={c.birth_year ?? ''}
+                  onChange={(e) =>
+                    onChange({
+                      birth_year: e.target.value ? parseInt(e.target.value, 10) : undefined,
+                    })
+                  }
+                  className="ai-cand-input"
+                  placeholder="—"
+                />
+              </LabeledField>
+            </div>
+
+            {/* Placement picker */}
+            <div className="pt-1 border-t border-black/5">
+              <p className="text-[10px] text-[#8E8E93] font-semibold mb-1.5 uppercase">
+                {t.aiPlaceTitle}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {placementOptions.map((opt) => {
+                  const active = c.placement.kind === opt.key
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() =>
+                        onChange({
+                          placement: {
+                            kind: opt.key,
+                            relativeId: opt.key === 'standalone' ? null : c.placement.relativeId,
+                          },
+                        })
+                      }
+                      className={`px-2.5 py-1.5 rounded-xl text-[11px] font-semibold transition border ${
+                        active
+                          ? 'bg-[#5E5CE6] text-white border-transparent'
+                          : 'bg-[#F2F2F7] text-[#636366] border-transparent hover:bg-[#E5E5EA]'
+                      }`}
+                    >
+                      <span className="me-1" aria-hidden>{opt.icon}</span>
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
+              {placementNeedsMember && (
+                <div className="mt-2">
+                  <p className="text-[10px] text-[#8E8E93] mb-1">{t.aiPlaceRelativePicker}</p>
+                  <select
+                    value={c.placement.relativeId ?? ''}
+                    onChange={(e) =>
+                      onChange({
+                        placement: { ...c.placement, relativeId: e.target.value || null },
+                      })
+                    }
+                    className="ai-cand-input"
+                  >
+                    <option value="">— {t.aiPlaceRelativePickPrompt} —</option>
+                    {sortedMembers.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.first_name} {m.last_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        <style>{`
+          .ai-cand-input {
+            width: 100%;
+            padding: 0.4rem 0.7rem;
+            border-radius: 0.6rem;
+            background: #FFFFFF;
+            border: 1px solid #E5E5EA;
+            color: #1C1C1E;
+            font-size: 12px;
+            outline: none;
+            transition: box-shadow 0.15s ease, border-color 0.15s ease;
+          }
+          .ai-cand-input:focus {
+            border-color: #5E5CE6;
+            box-shadow: 0 0 0 2px rgba(94, 92, 230, 0.25);
+          }
+        `}</style>
+      </div>
     </motion.div>
   )
 }

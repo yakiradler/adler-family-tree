@@ -25,6 +25,7 @@ interface FormState {
   lineage: Lineage | ''
   photo_url: string
   photos: string[]
+  hidden: boolean
 }
 
 function fromMember(m: Member): FormState {
@@ -42,6 +43,7 @@ function fromMember(m: Member): FormState {
     lineage: (m.lineage ?? '') as Lineage | '',
     photo_url: m.photo_url ?? '',
     photos: m.photos ? [...m.photos] : [],
+    hidden: !!m.hidden,
   }
 }
 
@@ -118,6 +120,7 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
       lineage: (form.lineage as Lineage) || null,
       photo_url: form.photo_url || undefined,
       photos: form.photos.length ? form.photos : undefined,
+      hidden: form.hidden,
     })
     setSaving(false)
     onClose()
@@ -312,6 +315,41 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
                     value={form.bio}
                     onChange={e => patch('bio', e.target.value)}
                   />
+                </Field>
+
+                {/* Privacy / discreet hide */}
+                <Field label={t.editPrivacyLabel}>
+                  <button
+                    type="button"
+                    onClick={() => patch('hidden', !form.hidden)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[12.5px] font-semibold transition border ${
+                      form.hidden
+                        ? 'bg-[#1F2937] text-white border-transparent'
+                        : 'bg-[#F2F2F7] text-[#636366] border-transparent hover:bg-[#E5E5EA]'
+                    }`}
+                    aria-pressed={form.hidden}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span aria-hidden>{form.hidden ? '🙈' : '👁️'}</span>
+                      {t.editHideFromTree}
+                    </span>
+                    <span
+                      aria-hidden
+                      className={`w-9 h-5 rounded-full relative transition ${
+                        form.hidden ? 'bg-[#FF9F0A]' : 'bg-[#C7C7CC]'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
+                          form.hidden ? 'left-4.5 right-0.5' : 'left-0.5'
+                        }`}
+                        style={{ left: form.hidden ? 18 : 2 }}
+                      />
+                    </span>
+                  </button>
+                  <p className="text-[10.5px] text-[#8E8E93] mt-1.5 leading-snug">
+                    {t.editHideFromTreeHint}
+                  </p>
                 </Field>
               </Section>
 

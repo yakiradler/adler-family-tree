@@ -157,6 +157,11 @@ export default function TreeView() {
   const canvasW = maxX + offsetX + pad
   const canvasH = maxY + pad * 2
 
+  // Re-fit whenever the layout footprint changes meaningfully — including
+  // filter changes that shrink or grow the rendered subset. Without this,
+  // applying a filter (e.g. "Kohanim") would keep the pan/zoom set for the
+  // full tree, dropping every visible node off the viewport so the canvas
+  // looked empty.
   useEffect(() => {
     if (!wrapRef.current || nodes.length === 0) return
     const w = wrapRef.current.clientWidth
@@ -168,7 +173,7 @@ export default function TreeView() {
     setTx((w - canvasW * s) / 2)
     setTy(70)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [members.length])
+  }, [nodes.length, canvasW, canvasH, layoutMode])
 
   const onWheel = (e: React.WheelEvent) => {
     e.preventDefault()

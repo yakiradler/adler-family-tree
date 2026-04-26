@@ -47,8 +47,14 @@ export function applyTreeFilters(
     return hay.includes(search)
   }
 
+  // Manual hide: a member flagged `hidden` is removed from the tree no
+  // matter what other filters do (the user explicitly hid them).
+  const passesHidden = (m: Member): boolean => !m.hidden
+
   let allowed = new Set<string>(
-    members.filter(m => passesLineage(m) && passesDeceased(m) && passesSearch(m)).map(m => m.id),
+    members
+      .filter(m => passesHidden(m) && passesLineage(m) && passesDeceased(m) && passesSearch(m))
+      .map(m => m.id),
   )
 
   // Focus mode — restrict to ancestors + descendants + spouses of the
