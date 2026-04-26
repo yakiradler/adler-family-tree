@@ -162,3 +162,40 @@ PR נפתח לעצמו preview ב-`https://yakiradler.github.io/adler-family-tre
 - 🐛 באג? — [פתח issue](https://github.com/yakiradler/adler-family-tree/issues/new?template=bug_report.md)
 - 💡 רעיון? — [פתח issue](https://github.com/yakiradler/adler-family-tree/issues/new?template=feature_request.md)
 - ❓ שאלה? — [פתח discussion](https://github.com/yakiradler/adler-family-tree/discussions)
+
+---
+
+## 🤖 Working with AI agents (Claude / GPT / Gemini)
+
+הריפו מכין את עצמו ל-AI agents:
+
+- **`AGENTS.md`** בשורש — briefing מלא בעברית (תפקיד, עקרונות, workflow, red flags). זו ההפניה הראשונה.
+- **`.claude/CLAUDE.md`** — auto-loaded ע"י Claude Code, מפנה ל-`AGENTS.md`.
+- **`ARCHITECTURE.md`** — מודל הנתונים, ה-store, ה-RBAC, מנוע הפריסה. חובה לפני שינוי משמעותי.
+- **`ROADMAP.md`** — חובה לפני פיצ'ר חדש.
+
+### תבנית פתיחה לשיחה חדשה
+
+```
+אני עובד על פרויקט adler-family-tree.
+
+📁 נתיב מקומי: C:\Users\yakir\קלוד קוד\family-tree
+🔗 ריפו: https://github.com/yakiradler/adler-family-tree
+🌐 production: https://yakiradler.github.io/adler-family-tree/
+
+לפני שאתה מתחיל, קרא:
+1. AGENTS.md (briefing מלא)
+2. ARCHITECTURE.md (אם השינוי לא טריוויאלי)
+3. ROADMAP.md (אם זה פיצ'ר חדש)
+
+המשימה שלי:
+[תאר כאן באג / פיצ'ר / שאלה]
+```
+
+### עקרונות חיוניים (העתק את זה אם תרצה)
+
+1. **Optimistic CRUD ב-`useFamilyStore`** — קודם `set()`, אחר כך Supabase ב-`try/catch`. אחרת demo mode נשבר.
+2. **i18n** — כל מחרוזת UI דרך `t.<key>`. אם הוספת key — ל-`he` וגם ל-`en`.
+3. **RBAC** — בדוק `canEditMember` / `canManageRelationships` / `isAdmin` לכל פעולה רגישה.
+4. **smoke test** — `/`, `/tree` עם פילטר "כהנים", MemberPanel + X, סטטוס זוגי + toast.
+5. **commit message** — Conventional Commits, גוף מסביר *למה*, סיום עם `Co-Authored-By: Claude ...`.
