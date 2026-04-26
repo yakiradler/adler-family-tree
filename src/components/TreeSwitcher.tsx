@@ -64,17 +64,22 @@ export default function TreeSwitcher({
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className={`flex items-center gap-2 rounded-2xl bg-white/85 backdrop-blur border border-white/60 shadow-sm px-3 py-2 text-[12px] font-semibold text-[#1C1C1E] hover:bg-white transition ${
+        title={activeLabel}
+        className={`flex items-center gap-1.5 rounded-2xl bg-white/85 backdrop-blur border border-white/60 shadow-sm py-1.5 px-2 sm:px-3 text-[12px] font-semibold text-[#1C1C1E] hover:bg-white transition flex-shrink-0 ${
           variant === 'full' ? 'w-full justify-between' : ''
         }`}
       >
-        <span className="flex items-center gap-2 min-w-0">
+        <span className="flex items-center gap-1.5 min-w-0">
           <span
             className="w-2.5 h-2.5 rounded-full flex-shrink-0"
             style={{ background: activeColor }}
             aria-hidden
           />
-          <span className="truncate">{activeLabel}</span>
+          {/* Hide the label on the smallest viewports so the top-bar
+              doesn't overflow; the colored dot + caret are enough hint. */}
+          <span className="truncate hidden sm:inline max-w-[120px]">
+            {activeLabel}
+          </span>
         </span>
         <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
           <path d="M2 4l3.5 3L9 4" stroke="#636366" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />

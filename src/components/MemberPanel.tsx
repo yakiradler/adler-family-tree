@@ -212,6 +212,14 @@ export default function MemberPanel({ onClose }: Props) {
             <h2 className="text-sf-title2 font-bold text-[#1C1C1E] leading-tight">
               {member.first_name} {member.last_name}
             </h2>
+            {/* "לבית X" — surfaces the maiden name right under the
+                official name. The user asked for a way to see this in
+                the profile rather than only in the search match. */}
+            {member.maiden_name && (
+              <p className="text-sf-caption text-[#8E8E93] mt-0.5 italic">
+                {lang === 'he' ? `לבית ${member.maiden_name}` : `née ${member.maiden_name}`}
+              </p>
+            )}
             {member.nickname && (
               <p className="text-sf-subhead text-[#636366] mt-0.5">"{member.nickname}"</p>
             )}

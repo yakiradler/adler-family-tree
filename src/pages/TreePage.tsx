@@ -40,9 +40,10 @@ export default function TreePage({ demoMode }: Props) {
               {profile?.full_name} · {members.length} {t.dashMembers}
             </p>
           </div>
-          <div className="hidden sm:block">
-            <TreeSwitcher />
-          </div>
+          {/* Tree switcher visible on every viewport so mobile users can
+              navigate between linked family trees too. The compact
+              variant collapses well into the top bar. */}
+          <TreeSwitcher />
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => setSearchOpen(true)}

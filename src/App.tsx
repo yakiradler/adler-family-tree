@@ -44,70 +44,70 @@ export default function App() {
     })
   }, [demoMode, lang])
 
-  // Persistence in demo mode.
+  // Persistence — runs in BOTH demo and Supabase modes.
   //
-  // Without Supabase a refresh would otherwise wipe everything to the
-  // seed — that's why the user kept seeing נתנאל return after he was
-  // marked as ex/hidden. We mirror the writeable slices of the store
-  // (members / relationships / trees) to localStorage every time they
-  // change, and rehydrate from there on the next mount.
+  // In demo mode this is the only persistence layer. In Supabase mode
+  // it acts as a fast hydration cache so a refresh shows the user's
+  // last-known state instantly while Supabase fetches fresh data
+  // asynchronously. This also means a transient Supabase outage no
+  // longer wipes the user's recent edits — they survive in localStorage
+  // and resync once the backend is reachable again.
   //
-  // The effect deliberately depends ONLY on `demoMode` (not `lang`),
-  // so swapping the language doesn't tear down the subscription and
-  // briefly run with stale data — that ghost re-render was a likely
-  // cause of "I marked him as hidden, refreshed, and he came back".
+  // The effect depends ONLY on `demoMode` so swapping the language
+  // doesn't tear down the subscription and briefly run with stale data
+  // (an earlier suspect cause of "marked as hidden, refresh, came back").
   useEffect(() => {
-    if (!demoMode) return
-    const STORAGE_KEY = 'ft-demo-state-v2'
-    const LEGACY_KEY = 'ft-demo-state-v1'
+    const STORAGE_KEY = 'ft-state-v3'
+    const LEGACY_KEYS = ['ft-demo-state-v2', 'ft-demo-state-v1']
 
     // Migrate / hydrate.
     let restored = false
-    try {
-      const raw =
-        window.localStorage.getItem(STORAGE_KEY) ||
-        window.localStorage.getItem(LEGACY_KEY)
-      if (raw) {
-        const parsed = JSON.parse(raw) as {
-          v?: number
-          members?: typeof ADLER_MEMBERS
-          relationships?: typeof ADLER_RELATIONSHIPS
-          trees?: unknown[]
-        }
-        if (Array.isArray(parsed.members) && Array.isArray(parsed.relationships)) {
-          useFamilyStore.setState({
-            members: parsed.members,
-            relationships: parsed.relationships,
-            trees: (parsed.trees as never[]) ?? [],
-          })
-          restored = true
-        }
+    const tryParse = (raw: string | null) => {
+      if (!raw) return null
+      try { return JSON.parse(raw) as { members?: unknown; relationships?: unknown; trees?: unknown } } catch { return null }
+    }
+    let parsed = tryParse(window.localStorage.getItem(STORAGE_KEY))
+    if (!parsed) {
+      for (const k of LEGACY_KEYS) {
+        const p = tryParse(window.localStorage.getItem(k))
+        if (p) { parsed = p; break }
       }
-    } catch { /* corrupted — fall through */ }
+    }
+    if (parsed && Array.isArray(parsed.members) && Array.isArray(parsed.relationships)) {
+      useFamilyStore.setState({
+        members: parsed.members as typeof ADLER_MEMBERS,
+        relationships: parsed.relationships as typeof ADLER_RELATIONSHIPS,
+        trees: (Array.isArray(parsed.trees) ? parsed.trees : []) as never[],
+      })
+      restored = true
+    }
 
-    if (!restored) {
+    // First run + demo mode → seed the Adler family.
+    if (!restored && demoMode) {
       useFamilyStore.setState({
         members: ADLER_MEMBERS,
         relationships: ADLER_RELATIONSHIPS,
       })
     }
 
-    // Persist after every relevant mutation. We compare references so
-    // unrelated state changes (selectedMemberId, viewport, etc.) don't
-    // trigger a write.
+    // Mirror mutations to localStorage. We use reference equality so
+    // unrelated state changes (selectedMemberId, viewport) don't write.
     const write = () => {
       try {
         const s = useFamilyStore.getState()
         window.localStorage.setItem(
           STORAGE_KEY,
           JSON.stringify({
-            v: 2,
+            v: 3,
+            ts: Date.now(),
             members: s.members,
             relationships: s.relationships,
             trees: s.trees,
           }),
         )
-      } catch { /* quota exceeded — silent */ }
+        // Drop legacy entries once we've successfully written v3.
+        for (const k of LEGACY_KEYS) window.localStorage.removeItem(k)
+      } catch { /* quota / private mode — silent */ }
     }
 
     const unsubscribe = useFamilyStore.subscribe((state, prev) => {
@@ -119,9 +119,7 @@ export default function App() {
       write()
     })
 
-    // Save the seed once so a subsequent reload restores it.
-    if (!restored) write()
-
+    if (!restored && demoMode) write()
     return unsubscribe
   }, [demoMode])
 
