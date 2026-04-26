@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useLang, isRTL } from '../i18n/useT'
+import QuickAccessMenu from '../components/QuickAccessMenu'
 
 /**
  * Marketing landing page — the unauthenticated entry point.
@@ -42,13 +43,16 @@ export default function Landing() {
           </div>
           <span className="font-semibold text-[15px] text-[#1C1C1E]">{t.appName}</span>
         </div>
-        <motion.button
-          whileTap={{ scale: 0.93 }}
-          onClick={toggleLang}
-          className="glass px-3 py-1.5 rounded-xl text-[12px] font-semibold text-[#636366] hover:text-[#1C1C1E] transition-colors"
-        >
-          {lang === 'he' ? 'EN' : 'עב'}
-        </motion.button>
+        <div className="flex items-center gap-2">
+          <QuickAccessMenu variant="glass" />
+          <motion.button
+            whileTap={{ scale: 0.93 }}
+            onClick={toggleLang}
+            className="glass px-3 py-1.5 rounded-xl text-[12px] font-semibold text-[#636366] hover:text-[#1C1C1E] transition-colors"
+          >
+            {lang === 'he' ? 'EN' : 'עב'}
+          </motion.button>
+        </div>
       </header>
 
       {/* Hero */}

@@ -153,6 +153,15 @@ export const translations = {
     landingFeature6Body: 'נתונים אישיים — תאריכי לידה, גירושין, שם משפחה קודם — חשופים רק בפרופיל, לעולם לא בעץ.',
     landingFooterTagline: 'בנוי באהבה למשפחה.',
 
+    // Quick-access menu (top of landing + dashboard)
+    quickAccessMenu: 'תפריט',
+    quickAccessPersonal: 'אזור אישי',
+    quickAccessPersonalHint: 'כניסה לחשבון הקיים שלך',
+    quickAccessSignup: 'הרשמה',
+    quickAccessSignupHint: 'יצירת חשבון חדש',
+    quickAccessAdmin: 'התחברות מנהל',
+    quickAccessAdminHint: 'גישה ללוח הניהול',
+
     lineageAuto: 'אוטומטי',
     lineageNone: 'לא מוגדר',
     spouseStatus: 'סטטוס',
@@ -592,6 +601,15 @@ export const translations = {
     landingFeature6Title: 'True Privacy',
     landingFeature6Body: 'Personal details — birth dates, divorces, maiden names — surface only in the profile, never in the tree.',
     landingFooterTagline: 'Built with love for family.',
+
+    // Quick-access menu
+    quickAccessMenu: 'Menu',
+    quickAccessPersonal: 'Personal area',
+    quickAccessPersonalHint: 'Sign in to your existing account',
+    quickAccessSignup: 'Sign up',
+    quickAccessSignupHint: 'Create a new account',
+    quickAccessAdmin: 'Admin login',
+    quickAccessAdminHint: 'Access the admin dashboard',
 
     lineageAuto: 'Auto',
     lineageNone: 'Not set',
