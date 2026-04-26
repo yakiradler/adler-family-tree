@@ -86,10 +86,16 @@ export default function TreePage({ demoMode }: Props) {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: isRTL(lang) ? -40 : 40 }}
               transition={{ type: 'spring', stiffness: 350, damping: 32 }}
-              className={`fixed bottom-4 z-50 w-[calc(100vw-32px)] max-w-sm md:max-w-[400px] ${
+              // Mobile: dock to the bottom (sheet style).
+              // Desktop: anchor to top-20, FIXED width 360px, FIXED max
+              // height so the panel never stretches the full viewport.
+              // The previous combo of `bottom-4 + md:top-20` produced a
+              // panel 720px tall on most screens, which the user
+              // reasonably called "huge".
+              className={`fixed z-50 w-[calc(100vw-32px)] max-w-[360px] bottom-4 md:bottom-auto md:top-20 ${
                 isRTL(lang) ? 'left-4' : 'right-4'
-              } md:top-20`}
-              style={{ maxHeight: 'calc(100vh - 120px)' }}
+              }`}
+              style={{ maxHeight: 'min(640px, calc(100vh - 120px))' }}
             >
               <MemberPanel onClose={() => setSelectedMemberId(null)} />
             </motion.div>

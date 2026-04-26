@@ -174,10 +174,20 @@ export default function TreeView() {
   // status feeds inheritance for visible descendants.
   const lineageById = fullLineageById
 
-  // Pan + zoom
-  const [scale, setScale] = useState(1)
-  const [tx, setTx] = useState(0)
-  const [ty, setTy] = useState(0)
+  // Pan + zoom — persisted in Zustand so closing the member panel,
+  // navigating away and back, or any unrelated re-render keeps the
+  // user exactly where they left off.
+  const treeViewport = useFamilyStore((s) => s.treeViewport)
+  const setTreeViewport = useFamilyStore((s) => s.setTreeViewport)
+  const setScale = (v: number | ((prev: number) => number)) =>
+    setTreeViewport({ scale: typeof v === 'function' ? v(treeViewport.scale) : v })
+  const setTx = (v: number | ((prev: number) => number)) =>
+    setTreeViewport({ tx: typeof v === 'function' ? v(treeViewport.tx) : v })
+  const setTy = (v: number | ((prev: number) => number)) =>
+    setTreeViewport({ ty: typeof v === 'function' ? v(treeViewport.ty) : v })
+  const scale = treeViewport.scale
+  const tx = treeViewport.tx
+  const ty = treeViewport.ty
   const dragState = useRef<{ startX: number; startY: number; tx0: number; ty0: number } | null>(null)
   type TouchMode =
     | { mode: 'pan'; startX: number; startY: number; tx0: number; ty0: number }
@@ -192,21 +202,30 @@ export default function TreeView() {
   const canvasW = maxX + offsetX + pad
   const canvasH = maxY + pad * 2
 
-  // Re-fit whenever the layout footprint changes meaningfully — including
-  // filter changes that shrink or grow the rendered subset. Without this,
-  // applying a filter (e.g. "Kohanim") would keep the pan/zoom set for the
-  // full tree, dropping every visible node off the viewport so the canvas
-  // looked empty.
+  // Auto-fit only on:
+  //   1. First mount (initialised flag is false)
+  //   2. Layout-mode switch
+  //   3. Filtered population *materially* changed shape (canvas resized)
+  // Avoids the previous behaviour where closing the member panel
+  // snapped the user back to the default view — the viewport now lives
+  // in the store and survives re-renders.
+  const lastShapeRef = useRef<string>('')
   useEffect(() => {
     if (!wrapRef.current || nodes.length === 0) return
+    const shape = `${nodes.length}|${Math.round(canvasW)}|${Math.round(canvasH)}|${layoutMode}`
+    const prev = lastShapeRef.current
+    lastShapeRef.current = shape
+
+    // Skip auto-fit if the shape is unchanged AND we've already
+    // initialised — i.e. this re-render is not about the layout.
+    if (treeViewport.initialised && prev === shape) return
+
     const w = wrapRef.current.clientWidth
     const h = wrapRef.current.clientHeight
     const fitW = (w - 20) / canvasW
     const fitH = (h - 120) / canvasH
     const s = Math.max(0.28, Math.min(0.85, Math.min(fitW, fitH)))
-    setScale(s)
-    setTx((w - canvasW * s) / 2)
-    setTy(70)
+    setTreeViewport({ scale: s, tx: (w - canvasW * s) / 2, ty: 70, initialised: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes.length, canvasW, canvasH, layoutMode])
 

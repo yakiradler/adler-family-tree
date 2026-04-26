@@ -212,10 +212,22 @@ export function buildLayout(
 
   const rootIds = new Set(members.filter(m => !parentsOf.has(m.id)).map(m => m.id))
 
+  // Children are grouped under their MOTHER's column by default — the
+  // user explicitly asked for this so a discreet first ex-spouse can
+  // be hidden without orphaning the children. Per-member override via
+  // `connector_parent_id` lets families opt back to the father where
+  // it's the more meaningful anchor (e.g. patrilineal traditions).
   const primaryParentOf = new Map<string, string>()
   for (const [childId, parents] of parentsOf) {
-    const malePrimary = parents.find(p => memberById.get(p)?.gender === 'male')
-    primaryParentOf.set(childId, malePrimary ?? parents[0])
+    const child = memberById.get(childId)
+    const explicit = child?.connector_parent_id
+    const explicitParent = explicit && parents.includes(explicit) ? explicit : null
+    const motherPrimary = parents.find(p => memberById.get(p)?.gender === 'female')
+    const fatherPrimary = parents.find(p => memberById.get(p)?.gender === 'male')
+    primaryParentOf.set(
+      childId,
+      explicitParent ?? motherPrimary ?? fatherPrimary ?? parents[0],
+    )
   }
 
   const ownerChildrenOf = new Map<string, string[]>()

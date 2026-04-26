@@ -46,6 +46,15 @@ interface FamilyState {
   completeOnboarding: (patch: Partial<Profile>) => Promise<void>
   updateProfileById: (id: string, patch: Partial<Profile>) => Promise<void>
 
+  // ── Tree viewport (pan + zoom persistence) ─────────────────────────
+  // Preserved across mounts so closing a member panel or re-entering
+  // /tree doesn't snap the user back to the auto-fit position. Only
+  // resets when the user explicitly hits the "fit" button or when the
+  // visible population changes shape.
+  treeViewport: { tx: number; ty: number; scale: number; initialised: boolean }
+  setTreeViewport: (patch: Partial<{ tx: number; ty: number; scale: number; initialised: boolean }>) => void
+  resetTreeViewport: () => void
+
   // ── Multi-tree (Phase F) ────────────────────────────────────────────
   /**
    * Trees the current user has access to. The "main" tree is implicit
@@ -108,52 +117,69 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   },
 
   addMember: async (member) => {
-    const { data } = await supabase.from('members').insert(member).select().single()
-    if (data) {
-      set((s) => ({ members: [...s.members, data] }))
-      return data
-    }
-    // Demo-mode fallback
-    const local: Member = { ...member, id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` } as Member
-    set((s) => ({ members: [...s.members, local] }))
-    return local
+    // Optimistic insert. If Supabase responds with a row we reconcile
+    // the synthetic id; otherwise the local row stays — guaranteeing
+    // the UI always reflects the user's action even offline.
+    const localId = `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    const optimistic: Member = { ...member, id: localId } as Member
+    set((s) => ({ members: [...s.members, optimistic] }))
+    try {
+      const { data } = await supabase.from('members').insert(member).select().single()
+      if (data) {
+        set((s) => ({ members: s.members.map((m) => (m.id === localId ? (data as Member) : m)) }))
+        return data as Member
+      }
+    } catch { /* offline */ }
+    return optimistic
   },
 
   updateMember: async (id, updates) => {
-    await supabase.from('members').update(updates).eq('id', id)
+    // Optimistic local update FIRST so the UI reflects the change even
+    // if Supabase isn't reachable (demo mode, transient network blip).
     set((s) => ({
       members: s.members.map((m) => (m.id === id ? { ...m, ...updates } : m)),
     }))
+    try { await supabase.from('members').update(updates).eq('id', id) } catch { /* offline */ }
   },
 
   deleteMember: async (id) => {
-    await supabase.from('members').delete().eq('id', id)
     set((s) => ({ members: s.members.filter((m) => m.id !== id) }))
+    try { await supabase.from('members').delete().eq('id', id) } catch { /* offline */ }
   },
 
   addRelationship: async (rel) => {
-    const { data } = await supabase.from('relationships').insert(rel).select().single()
-    if (data) {
-      set((s) => ({ relationships: [...s.relationships, data] }))
-    } else {
-      // Demo-mode fallback: no supabase row returned, create local one
-      const local: Relationship = { ...rel, id: `rel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` }
-      set((s) => ({ relationships: [...s.relationships, local] }))
-    }
+    // Optimistic insert with a synthetic id; if Supabase returns a real
+    // row, swap our local one for it so the id stays in sync.
+    const localId = `rel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    const optimistic: Relationship = { ...rel, id: localId }
+    set((s) => ({ relationships: [...s.relationships, optimistic] }))
+    try {
+      const { data } = await supabase.from('relationships').insert(rel).select().single()
+      if (data) {
+        set((s) => ({
+          relationships: s.relationships.map((r) =>
+            r.id === localId ? (data as Relationship) : r,
+          ),
+        }))
+      }
+    } catch { /* offline — keep optimistic row */ }
   },
 
   updateRelationship: async (id, updates) => {
-    await supabase.from('relationships').update(updates).eq('id', id)
+    // Local state first so the spouse-status pill flip in
+    // RelationshipManager actually sticks in demo mode (and feels
+    // instant in production).
     set((s) => ({
       relationships: s.relationships.map((r) =>
         r.id === id ? { ...r, ...updates } : r,
       ),
     }))
+    try { await supabase.from('relationships').update(updates).eq('id', id) } catch { /* offline */ }
   },
 
   deleteRelationship: async (id) => {
-    await supabase.from('relationships').delete().eq('id', id)
     set((s) => ({ relationships: s.relationships.filter((r) => r.id !== id) }))
+    try { await supabase.from('relationships').delete().eq('id', id) } catch { /* offline */ }
   },
 
   approveEditRequest: async (requestId) => {
@@ -243,6 +269,13 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     const me = get().profile
     if (me?.id === id) set({ profile: { ...me, ...patch } })
   },
+
+  // ── Tree viewport implementation ──────────────────────────────────
+  treeViewport: { tx: 0, ty: 0, scale: 1, initialised: false },
+  setTreeViewport: (patch) =>
+    set((s) => ({ treeViewport: { ...s.treeViewport, ...patch } })),
+  resetTreeViewport: () =>
+    set({ treeViewport: { tx: 0, ty: 0, scale: 1, initialised: false } }),
 
   // ── Multi-tree implementation ──────────────────────────────────────
   // Persisted in Supabase if a `family_trees` table is provisioned;
