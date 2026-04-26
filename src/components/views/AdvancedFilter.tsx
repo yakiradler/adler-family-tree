@@ -68,10 +68,10 @@ export default function AdvancedFilter({
         whileTap={{ scale: 0.95 }}
         aria-label={t.filterTitle}
         title={t.filterTitle}
-        className={`flex items-center gap-1.5 rounded-full px-3 py-2 shadow-glass-sm font-semibold text-[12px] transition ${
+        className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 shadow-glass font-semibold text-[12.5px] border transition ${
           active
-            ? 'bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white'
-            : 'glass-strong text-[#1C1C1E]'
+            ? 'bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white border-transparent'
+            : 'bg-white/95 text-[#1C1C1E] border-white/70 hover:bg-white'
         }`}
       >
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">

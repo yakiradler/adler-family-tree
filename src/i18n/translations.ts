@@ -106,6 +106,10 @@ export const translations = {
     filterMatchedCount: 'תוצאות',
     filterFocusPerson: 'מיקוד באדם',
     filterFocusClear: 'נקה מיקוד',
+    treeSearchTitle: 'חיפוש בעץ',
+    treeSearchPlaceholder: 'הקלד שם, שם משפחה או שם נעורים…',
+    treeSearchEmpty: 'לא נמצאו חברים תואמים',
+    treeSearchHint: 'בחר חבר כדי לפתוח את הכרטיס שלו',
 
     // AI Scan
     aiScanTitle: 'סריקת AI',
@@ -559,6 +563,10 @@ export const translations = {
     filterMatchedCount: 'matched',
     filterFocusPerson: 'Focus on person',
     filterFocusClear: 'Clear focus',
+    treeSearchTitle: 'Search the tree',
+    treeSearchPlaceholder: 'Type a first, last, or maiden name…',
+    treeSearchEmpty: 'No matching members',
+    treeSearchHint: 'Tap a member to open their card',
 
     // AI Scan
     aiScanTitle: 'AI Scan',

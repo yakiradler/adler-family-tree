@@ -5,6 +5,7 @@ import { useLang, isRTL } from '../i18n/useT'
 import TreeView from '../components/views/TreeView'
 import MemberPanel from '../components/MemberPanel'
 import AddMemberModal from '../components/AddMemberModal'
+import TreeSearchModal from '../components/TreeSearchModal'
 import { useState } from 'react'
 
 interface Props { demoMode: boolean }
@@ -15,6 +16,7 @@ export default function TreePage({ demoMode }: Props) {
   const dir = isRTL(lang) ? 'rtl' : 'ltr'
   const navigate = useNavigate()
   const [addOpen, setAddOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
 
   return (
     <div dir={dir} className="min-h-screen bg-[#F2F2F7]">
@@ -37,6 +39,18 @@ export default function TreePage({ demoMode }: Props) {
               {profile?.full_name} · {members.length} {t.dashMembers}
             </p>
           </div>
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => setSearchOpen(true)}
+            title={t.treeSearchTitle}
+            aria-label={t.treeSearchTitle}
+            className="w-8 h-8 rounded-xl bg-white/70 flex items-center justify-center border border-white/60 hover:bg-white/90 transition"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <circle cx="6" cy="6" r="4.2" stroke="#636366" strokeWidth="1.6" />
+              <path d="M9.2 9.2l2.6 2.6" stroke="#636366" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </motion.button>
           <motion.button whileTap={{ scale: 0.93 }} onClick={() => setAddOpen(true)}
             className="w-8 h-8 bg-gradient-to-br from-[#007AFF] to-[#32ADE6] rounded-xl flex items-center justify-center shadow-md">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -80,6 +94,7 @@ export default function TreePage({ demoMode }: Props) {
       </div>
 
       <AddMemberModal open={addOpen} onClose={() => setAddOpen(false)} />
+      <TreeSearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   )
 }
