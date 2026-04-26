@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
@@ -32,6 +32,16 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
   // is 'current' so behavior matches pre-Phase B exactly.
   const [spouseStatusDraft, setSpouseStatusDraft] = useState<SpouseStatus>('current')
   const [busy, setBusy] = useState(false)
+  // Brief visual confirmation that a change was persisted. The store is
+  // optimistic + Supabase try/catch, so by the time we render this the
+  // mutation has already landed in local state. Fades out after 2.2s.
+  const [savedTick, setSavedTick] = useState(0)
+  const flashSaved = () => setSavedTick((n) => n + 1)
+  useEffect(() => {
+    if (!savedTick) return
+    const id = window.setTimeout(() => setSavedTick(0), 2200)
+    return () => window.clearTimeout(id)
+  }, [savedTick])
 
   // Derived relatives
   const { parents, spouses, children, siblings, parentRels, spouseRels, childRels } = useMemo(() => {
@@ -115,6 +125,7 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
           status: spouseStatusDraft,
         })
       }
+      flashSaved()
       closePicker()
     } finally {
       setBusy(false)
@@ -144,6 +155,7 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
             status: spouseStatusDraft,
           })
         }
+        flashSaved()
       }
       closePicker()
     } finally {
@@ -154,6 +166,7 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
   const removeRel = async (relId: string) => {
     if (!window.confirm(t.relConfirmRemove)) return
     await deleteRelationship(relId)
+    flashSaved()
   }
 
   const findParentRel = (parentId: string) =>
@@ -179,8 +192,31 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
           exit={{ y: 40, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 420, damping: 32 }}
           onClick={e => e.stopPropagation()}
-          className="w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
+          className="relative w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
         >
+          {/* Saved-toast — fades in/out for ~2.2s after each successful
+              relationship mutation. Anchored at the top so it floats over
+              the colourful header without obscuring the close button. */}
+          <AnimatePresence>
+            {savedTick > 0 && (
+              <motion.div
+                key={`saved-${savedTick}`}
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                role="status"
+                aria-live="polite"
+                className="absolute top-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#34C759] text-white text-[12px] font-bold shadow-lg pointer-events-none"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M2.5 6.5l2.5 2.5L9.5 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {t.relSavedToast}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Header */}
           <div className="relative px-5 pt-4 pb-3 bg-gradient-to-br from-[#007AFF] via-[#32ADE6] to-[#5AC8FA] text-white">
             <div className="absolute -top-10 -right-6 w-28 h-28 bg-white/15 rounded-full blur-2xl" />
@@ -259,6 +295,7 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
                 onRemove={removeRel}
                 onChangeStatus={async (relId, status) => {
                   await updateRelationship(relId, { status })
+                  flashSaved()
                 }}
                 isAdmin={isAdmin}
                 lang={lang}
