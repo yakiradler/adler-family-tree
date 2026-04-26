@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useLang, isRTL } from '../i18n/useT'
+import { useLang } from '../i18n/useT'
 import { useAuthState } from '../hooks/useAuthState'
 
 /**
@@ -24,8 +24,7 @@ export default function QuickAccessMenu({
   /** 'glass' (light translucent, used on Landing) or 'solid' (used in app shell). */
   variant?: 'glass' | 'solid'
 }) {
-  const { t, lang } = useLang()
-  const rtl = isRTL(lang)
+  const { t } = useLang()
   const navigate = useNavigate()
   const { isAuth, target } = useAuthState()
   const [open, setOpen] = useState(false)
@@ -121,7 +120,10 @@ export default function QuickAccessMenu({
             exit={{ opacity: 0, y: -6, scale: 0.97 }}
             transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
             className="absolute z-30 mt-2 w-[260px] rounded-2xl bg-white/95 backdrop-blur-2xl border border-white/60 shadow-glass-lg p-1.5"
-            style={{ [rtl ? 'right' : 'left']: 0 } as React.CSSProperties}
+            // Always anchor the dropdown to the right edge of the trigger,
+            // because both Landing and Dashboard place this menu in the
+            // top-right corner regardless of language direction.
+            style={{ right: 0 } as React.CSSProperties}
           >
             {items.map((it) => (
               <button

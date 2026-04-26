@@ -218,6 +218,8 @@ export const translations = {
     dashApps: 'אפליקציות',
     dashAbout: 'על המשפחה',
     dashAboutText: 'מערכת ניהול משפחתית שמרכזת את העץ, ימי ההולדת, והסיפורים של המשפחה במקום אחד.',
+    dashCompleteProfile: 'השלם את הפרופיל שלך',
+    dashCompleteProfileHint: 'מלא את שאלון ההצטרפות כדי לאפשר למנהל לאשר את הגישה שלך.',
 
     // Member Panel (Instagram-style)
     photos: 'תמונות',
@@ -667,6 +669,8 @@ export const translations = {
     dashApps: 'Apps',
     dashAbout: 'About the Family',
     dashAboutText: 'A family management system bringing together your family tree, birthdays, and stories in one place.',
+    dashCompleteProfile: 'Complete your profile',
+    dashCompleteProfileHint: 'Finish the onboarding questionnaire so an admin can approve your access.',
 
     // Member Panel (Instagram-style)
     photos: 'Photos',

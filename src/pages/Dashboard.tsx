@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
 import { supabase } from '../lib/supabase'
-import { isAdmin } from '../lib/permissions'
+import { isAdmin, isOnboarded } from '../lib/permissions'
 import { getRingGradient, getFallbackGradient, PersonAvatarIcon } from '../components/MemberNode'
 import AIScanModal from '../components/ai/AIScanModal'
 import type { Member, Relationship } from '../types'
@@ -202,6 +202,29 @@ export default function Dashboard({ demoMode }: Props) {
       </div>
 
       <div className="px-4 space-y-5 max-w-lg mx-auto">
+        {/* ─── INCOMPLETE-PROFILE BANNER ─── */}
+        {!demoMode && profile && !isOnboarded(profile) && (
+          <motion.button
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => navigate('/onboarding')}
+            className="w-full text-start glass-strong rounded-3xl p-4 flex items-center gap-3 shadow-glass border border-[#5E5CE6]/25 bg-gradient-to-br from-[#5E5CE6]/8 to-[#BF5AF2]/8 hover:shadow-glass-lg transition"
+          >
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#5E5CE6] to-[#BF5AF2] flex items-center justify-center shadow-md flex-shrink-0">
+              <span className="text-xl">📝</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sf-subhead font-bold text-[#1C1C1E] leading-tight">{t.dashCompleteProfile}</p>
+              <p className="text-sf-caption text-[#636366] mt-0.5">{t.dashCompleteProfileHint}</p>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="flex-shrink-0">
+              <path d={isRTL(lang) ? 'M9 3L5 7l4 4' : 'M5 3l4 4-4 4'} stroke="#5E5CE6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </motion.button>
+        )}
+
         {/* ─── BRANCHES RAIL (Instagram stories style) ─── */}
         {founders.length > 0 && (
           <motion.section

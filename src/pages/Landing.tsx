@@ -35,9 +35,15 @@ export default function Landing() {
       {/* Soft color wash on top of the tree to keep text legible */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/55 via-white/30 to-white/70" />
 
-      {/* Top bar */}
-      <header className="relative z-20 flex items-center justify-between px-5 sm:px-8 py-5">
-        <div className="flex items-center gap-2">
+      {/*
+        Top bar — physical positioning so the layout is identical in
+        Hebrew and English: logo always visual-left, hamburger menu
+        always visual-right (per the explicit user request "hamburger
+        on right, logo on left"). Tailwind's `left-*` / `right-*`
+        utilities are physical and do not mirror with `dir`.
+      */}
+      <header className="relative z-20 h-[68px] px-5 sm:px-8">
+        <div className="absolute top-1/2 -translate-y-1/2 left-5 sm:left-8 flex items-center gap-2">
           <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#007AFF] to-[#32ADE6] flex items-center justify-center shadow-md shadow-blue-200/50">
             <svg width="18" height="18" viewBox="0 0 32 32" fill="none">
               <circle cx="16" cy="10" r="4" fill="white" opacity="0.9" />
@@ -49,7 +55,7 @@ export default function Landing() {
           </div>
           <span className="font-semibold text-[15px] text-[#1C1C1E]">{t.appName}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="absolute top-1/2 -translate-y-1/2 right-5 sm:right-8 flex items-center gap-2">
           <QuickAccessMenu variant="glass" />
           <motion.button
             whileTap={{ scale: 0.93 }}

@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { useFamilyStore } from '../store/useFamilyStore'
-import { isOnboarded } from '../lib/permissions'
 
 const SUPABASE_CONFIGURED =
   !!import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_URL !== ''
@@ -17,7 +15,6 @@ const SUPABASE_CONFIGURED =
  * if signed in but not yet onboarded, `/login` otherwise.
  */
 export function useAuthState() {
-  const profile = useFamilyStore((s) => s.profile)
   const [hasSession, setHasSession] = useState<boolean>(false)
 
   useEffect(() => {
@@ -41,12 +38,7 @@ export function useAuthState() {
   // user already stepped into the demo, or shows the Auth screen
   // (which offers "continue as demo").
   const isAuth = hasSession
-  const onboarded = isOnboarded(profile)
-  const target = !isAuth
-    ? '/login'
-    : !onboarded
-    ? '/onboarding'
-    : '/home'
+  const target = isAuth ? '/home' : '/login'
 
-  return { isAuth, onboarded, target }
+  return { isAuth, target }
 }
