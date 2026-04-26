@@ -23,6 +23,11 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [authLoading, setAuthLoading] = useState(SUPABASE_CONFIGURED)
   const [demoMode] = useState(!SUPABASE_CONFIGURED)
+  // `demoMode` is the *capability* flag (Supabase not wired). `demoEntered`
+  // is the *session* flag — the user chose to step inside the demo from the
+  // landing/auth screen. Without this split, first-time visitors would skip
+  // the marketing landing entirely whenever Supabase wasn't configured.
+  const [demoEntered, setDemoEntered] = useState(false)
 
   const { profile, setProfile, fetchMembers, fetchRelationships, fetchEditRequests } = useFamilyStore()
   const { lang } = useLang()
@@ -76,7 +81,7 @@ export default function App() {
     )
   }
 
-  const isAuth = demoMode || !!session
+  const isAuth = (demoMode && demoEntered) || !!session
   // Onboarding gate: real authenticated users (not demo) who have a profile
   // loaded but no `onboarded_at` timestamp must complete the wizard before
   // any other route renders. Profile may briefly be null while loading —
@@ -101,7 +106,7 @@ export default function App() {
                 - "/welcome" → Direct link to landing even for authed users
                               (lets them re-read the marketing if curious).
               */}
-              <Route path="/login" element={session ? <Navigate to="/" replace /> : <Auth demoMode={demoMode} />} />
+              <Route path="/login" element={isAuth ? <Navigate to="/" replace /> : <Auth demoMode={demoMode} onDemoEnter={() => setDemoEntered(true)} />} />
               <Route path="/welcome" element={<Landing />} />
               <Route path="/" element={isAuth ? <Dashboard demoMode={demoMode} /> : <Landing />} />
               <Route path="/tree" element={isAuth ? <TreePage demoMode={demoMode} /> : <Navigate to="/login" replace />} />

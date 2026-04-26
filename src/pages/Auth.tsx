@@ -6,9 +6,13 @@ import { useLang } from '../i18n/useT'
 
 type AuthMode = 'login' | 'signup'
 
-interface Props { demoMode?: boolean }
+interface Props {
+  demoMode?: boolean
+  /** Called when the user steps into the demo (form submit or "continue as demo"). */
+  onDemoEnter?: () => void
+}
 
-export default function Auth({ demoMode = false }: Props) {
+export default function Auth({ demoMode = false, onDemoEnter }: Props) {
   const navigate = useNavigate()
   const location = useLocation()
   // Landing CTA links to /login?signup=1 — open straight on the signup tab.
@@ -42,6 +46,7 @@ export default function Auth({ demoMode = false }: Props) {
             : 'Signup demo successful! Once Supabase is connected, accounts will sync for real.')
           await new Promise((r) => setTimeout(r, 900))
         }
+        onDemoEnter?.()
         navigate('/')
         return
       }
@@ -155,7 +160,7 @@ export default function Auth({ demoMode = false }: Props) {
           <div className="mt-4 flex flex-col items-center gap-2">
             <button
               type="button"
-              onClick={() => navigate('/')}
+              onClick={() => { onDemoEnter?.(); navigate('/') }}
               className="text-[12px] text-[#007AFF] font-semibold underline decoration-[#007AFF]/40 underline-offset-2 hover:decoration-[#007AFF] transition"
             >
               {lang === 'he' ? 'המשך כהדגמה (ללא הרשמה)' : 'Continue as demo (no signup)'}
