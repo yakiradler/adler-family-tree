@@ -4,6 +4,7 @@ import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
 import { getRingGradient, getFallbackGradient, PersonAvatarIcon } from './MemberNode'
 import EditMemberModal from './EditMemberModal'
+import JumpToFamilyTreeButton from './JumpToFamilyTreeButton'
 import RelationshipManager from './RelationshipManager'
 import LineageBadge from './LineageBadge'
 import { canEditMember, canManageRelationships } from '../lib/permissions'
@@ -352,8 +353,13 @@ export default function MemberPanel({ onClose }: Props) {
         </div>
 
         {/* Action buttons: full-width stacked rows so labels are always readable */}
-        {(editAllowed || relAllowed) && (
+        {(editAllowed || relAllowed || member.last_name) && (
           <div className="px-5 pb-5 pt-1 space-y-2">
+            {/* Surname-aware tree jump — only renders if the member's
+                surname doesn't match the active tree (handled inside
+                the component). Lets families navigate between linked
+                trees without leaving the profile card. */}
+            <JumpToFamilyTreeButton member={member} />
             {editAllowed && (
             <button
               type="button"

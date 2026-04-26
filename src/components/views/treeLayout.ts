@@ -255,12 +255,30 @@ export function buildLayout(
     ownerChildrenOf.set(pid, kids)
   }
 
+  // Children of the *couple*, grouped by which side of the couple they
+  // biologically belong to. Order in the resulting array (per the user's
+  // explicit request: "each spouse's children should be on their own
+  // side"):
+  //   1. children whose primary parent is `m` (m's own bio kids)
+  //   2. shared children — both m and a spouse are in their parents
+  //   3. each spouse's bio kids that m is NOT a parent of
+  // Within each group we keep the existing sibling sort (birth order →
+  // birth date → name). Because the page is RTL by default, group #1
+  // ends up on the visual-right (mother's side) and the spouse's
+  // exclusive kids on the visual-left.
   const familyChildrenOf = new Map<string, string[]>()
   for (const m of members) {
     const owned = ownerChildrenOf.get(m.id) ?? []
-    const fromSpouses = (spousesOf.get(m.id) ?? []).flatMap(sp => ownerChildrenOf.get(sp) ?? [])
-    const all = [...new Set([...owned, ...fromSpouses])]
-    all.sort(siblingSort)
+    const ownedSet = new Set(owned)
+    const spouses = spousesOf.get(m.id) ?? []
+    const ownGroup: string[] = [...owned].sort(siblingSort)
+    const spouseGroups: string[][] = []
+    for (const sp of spouses) {
+      const spOwned = ownerChildrenOf.get(sp) ?? []
+      const exclusive = spOwned.filter((c) => !ownedSet.has(c))
+      if (exclusive.length > 0) spouseGroups.push([...exclusive].sort(siblingSort))
+    }
+    const all = [...new Set([...ownGroup, ...spouseGroups.flat()])]
     if (all.length > 0) familyChildrenOf.set(m.id, all)
   }
 

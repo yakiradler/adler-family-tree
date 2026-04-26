@@ -54,9 +54,13 @@ export function getRingShadow(m: Member): string {
 
 export function getFallbackGradient(m: Member): string {
   // Tailwind classes for avatar silhouette background (when no photo).
-  if (m.gender === 'male') return 'from-blue-500 via-indigo-500 to-violet-500'
-  if (m.gender === 'female') return 'from-pink-400 via-fuchsia-400 to-sky-400'
-  return 'from-teal-400 via-sky-500 to-blue-500'
+  // Gradients stay within a single hue family on the bottom edge so we
+  // don't get the "mystery cyan quarter" the user reported (the previous
+  // female palette ended in `sky-400`, which clipped at the avatar
+  // bottom-edge looked like a stray decoration).
+  if (m.gender === 'male') return 'from-[#3463E8] via-[#5B6FFF] to-[#3F2BB3]'
+  if (m.gender === 'female') return 'from-[#FF5EAE] via-[#E94A9C] to-[#A93388]'
+  return 'from-[#06D6A0] via-[#0BA887] to-[#0A6B5B]'
 }
 
 export function getInitials(first: string, last: string) {
@@ -65,29 +69,53 @@ export function getInitials(first: string, last: string) {
   return (f + l).toUpperCase() || '·'
 }
 
-/** Gender-aware silhouette avatar used when no photo exists. */
+/**
+ * Gender-aware silhouette avatar used when no photo exists.
+ * Redrawn so the difference is unmistakable at a glance — the user
+ * reported the previous icons looked nearly identical and the bottom
+ * gradient corner was confusing. The new pair fills the avatar
+ * cleanly (no clipped shoulders) and gives each gender a distinct
+ * silhouette: female has visible long hair + ponytail outline, male
+ * has a short-hair top and squarer shoulder line.
+ */
 export function PersonAvatarIcon({ gender, size }: { gender?: 'male' | 'female'; size: number }) {
-  // Size the SVG to fill ~70% of the circle; white fill on gradient bg.
-  const s = Math.round(size * 0.7)
+  // Fill ~78% of the circle so the figure reads clearly even at small
+  // tree-zoom levels.
+  const s = Math.round(size * 0.78)
   if (gender === 'female') {
     return (
       <svg width={s} height={s} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        {/* Hair back */}
-        <path d="M4.5 18.5c0-5 2.7-8.5 7.5-8.5s7.5 3.5 7.5 8.5v2.5H4.5v-2.5z" fill="white" opacity="0.85" />
-        {/* Head */}
-        <circle cx="12" cy="8" r="4.2" fill="white" />
-        {/* Hair top */}
-        <path d="M7.4 8.3c0-3 2-5.3 4.6-5.3s4.6 2.3 4.6 5.3c-1.4-1.3-2.9-1.9-4.6-1.9-1.7 0-3.2 0.6-4.6 1.9z" fill="white" />
-        {/* Shoulders */}
-        <path d="M4 22c0-4 3.5-7 8-7s8 3 8 7" fill="white" />
+        {/* Long hair flowing past shoulders */}
+        <path
+          d="M5 13c0-4.5 3-8 7-8s7 3.5 7 8v8c0 0.5-0.4 1-1 1H6c-0.6 0-1-0.4-1-1v-8z"
+          fill="white"
+          opacity="0.9"
+        />
+        {/* Head — slightly higher so the hair frames it */}
+        <circle cx="12" cy="9.2" r="3.7" fill="white" />
+        {/* Neck + upper torso (shows where shoulders meet, distinct from male) */}
+        <path
+          d="M9.5 13.5c0 1.4 1.1 2.5 2.5 2.5s2.5-1.1 2.5-2.5"
+          stroke="white"
+          strokeWidth="0.9"
+          opacity="0.55"
+          fill="none"
+        />
       </svg>
     )
   }
-  // Male / default
+  // Male / default — short hair + broader shoulders
   return (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="8.5" r="4" fill="white" />
-      <path d="M4 22c0-4.4 3.6-7 8-7s8 2.6 8 7" fill="white" />
+      {/* Short hair cap on top of head */}
+      <path d="M7.5 7.2c0.5-2.4 2.4-4 4.5-4s4 1.6 4.5 4c-1-0.4-2.5-0.7-4.5-0.7s-3.5 0.3-4.5 0.7z" fill="white" />
+      {/* Head */}
+      <circle cx="12" cy="9.4" r="3.6" fill="white" />
+      {/* Wider, squarer shoulders to read as masculine */}
+      <path
+        d="M3.8 22v-1.5c0-3 3.6-5 8.2-5s8.2 2 8.2 5V22"
+        fill="white"
+      />
     </svg>
   )
 }
@@ -195,20 +223,10 @@ export default function MemberNode({
               </div>
             )}
 
-            {/* Gender dot */}
-            {member.gender && (
-              <div
-                className="absolute bottom-0 w-5 h-5 rounded-full border-2 border-white flex items-center justify-center text-[10px] leading-none"
-                style={{
-                  [member.gender === 'male' ? 'right' : 'left']: -2,
-                  bottom: -2,
-                  background: member.gender === 'male' ? '#007AFF' : '#5AC8FA',
-                  color: 'white',
-                } as React.CSSProperties}
-              >
-                {member.gender === 'male' ? '♂' : '♀'}
-              </div>
-            )}
+            {/* Gender is now communicated by the silhouette (or the
+                photo) + the gradient ring — the tiny corner badge was
+                visually noisy and several users mistook it for a stray
+                decoration, so it was removed. */}
           </div>
         </div>
       </div>
