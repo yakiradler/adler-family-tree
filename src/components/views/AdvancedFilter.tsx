@@ -59,7 +59,10 @@ export default function AdvancedFilter({
 
   return (
     <div
-      className="absolute top-3 z-20"
+      // Sits BELOW the floating tree top-bar (which is ~64px tall) so the
+      // chip is never hidden behind it. Anchored to the visual-right in
+      // RTL and visual-left in LTR.
+      className="absolute top-[72px] z-20"
       style={{ [rtl ? 'right' : 'left']: 12 } as React.CSSProperties}
     >
       <motion.button
