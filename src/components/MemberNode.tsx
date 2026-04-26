@@ -72,50 +72,42 @@ export function getInitials(first: string, last: string) {
 /**
  * Gender-aware silhouette avatar used when no photo exists.
  *
- * Both glyphs are drawn at viewBox 0..24 with a fully-grounded body
- * line at y=22 so neither figure ends in mid-air (the previous female
- * silhouette had a translucent torso outline that several users
- * compared to a ghost). Distinguishing cues:
- *   • female — round ponytail mass behind the head, neck-to-shoulder
- *     curve scoops in then flares to a wide V (a dress-like outline).
- *   • male   — flat hairline cap, straight neck, square shoulders.
+ * Drawn in the universally-recognisable bathroom-sign idiom — male is
+ * a circle head over a rectangular torso (trouser-cut), female is a
+ * circle head over a TRIANGULAR skirt cut. The user complained the
+ * previous figure-with-shoulders pair looked like ghosts; the
+ * triangular skirt is the single most reliable cue for "female" in
+ * pictograms.
  */
 export function PersonAvatarIcon({ gender, size }: { gender?: 'male' | 'female'; size: number }) {
-  // Fill ~80% of the circle so the figure reads cleanly even at low zoom.
-  const s = Math.round(size * 0.8)
+  // Fill ~82% of the circle so the silhouette reads at low zoom.
+  const s = Math.round(size * 0.82)
   if (gender === 'female') {
     return (
       <svg width={s} height={s} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        {/* Hair mass behind the head — bigger than the head itself, with
-            two side lobes so it visibly reads as a hair shape (vs. a
-            generic blob that looked spectral in the previous version). */}
+        {/* Round head */}
+        <circle cx="12" cy="6.8" r="3.4" fill="white" />
+        {/* Triangular dress / skirt — the canonical "this is a woman"
+            cue on every public restroom sign on earth. Wide hem, narrow
+            shoulders, points back up to the head. */}
         <path
-          d="M5.4 11.8c0-3.9 3-7 6.6-7s6.6 3.1 6.6 7c0 1.4-0.4 2.6-1.1 3.6h-11c-0.7-1-1.1-2.2-1.1-3.6z"
-          fill="white"
-        />
-        {/* Hair side lobes (frames cheeks) */}
-        <path d="M6 11c-0.5 1.5-0.7 3-0.4 4.5l1.6 0.5v-5z" fill="white" />
-        <path d="M18 11c0.5 1.5 0.7 3 0.4 4.5l-1.6 0.5v-5z" fill="white" />
-        {/* Face — sits slightly forward of the hair mass */}
-        <circle cx="12" cy="9.6" r="3.4" fill="white" />
-        {/* Dress / shoulders — V-shape that flares to bottom for an
-            obviously feminine outline. Solid fill, no see-through arc. */}
-        <path
-          d="M7.5 15.5c-2.5 1.5-4 4-4 6.5h17c0-2.5-1.5-5-4-6.5l-2 1c-0.6 0.3-1.4 0.5-2.5 0.5s-1.9-0.2-2.5-0.5l-2-1z"
+          d="M12 10.6c-1.6 0-2.8 0.6-3.6 1.7L4.6 22h14.8l-3.8-9.7c-0.8-1.1-2-1.7-3.6-1.7z"
           fill="white"
         />
       </svg>
     )
   }
-  // Male / default — short hair + broader shoulders
+  // Male / default — RECTANGULAR torso (no skirt flare)
   return (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      {/* Short hair cap that hugs the top of the head */}
-      <path d="M7.4 7.4c0.6-2.5 2.4-4.2 4.6-4.2s4 1.7 4.6 4.2c-1-0.4-2.6-0.8-4.6-0.8s-3.6 0.4-4.6 0.8z" fill="white" />
-      {/* Head */}
-      <circle cx="12" cy="9.6" r="3.5" fill="white" />
-      {/* Squarer shoulders, grounded at y=22 */}
-      <path d="M3.8 22v-1.4c0-3 3.6-5.2 8.2-5.2s8.2 2.2 8.2 5.2V22h-16.4z" fill="white" />
+      {/* Round head */}
+      <circle cx="12" cy="6.8" r="3.4" fill="white" />
+      {/* Rectangular torso with a small upper-shoulder taper. Sides
+          parallel — explicitly NOT a skirt — so it reads "male". */}
+      <path
+        d="M12 10.6c-2.6 0-4 1.2-4.4 3.4L7 22h10l-0.6-8c-0.4-2.2-1.8-3.4-4.4-3.4z"
+        fill="white"
+      />
     </svg>
   )
 }

@@ -34,7 +34,14 @@ export default function JumpToFamilyTreeButton({ member }: { member: Member }) {
   // Match heuristic: last_name (trimmed, case/diacritic-insensitive)
   // against `tree.name`. We do a soft equality so "Adler" / "אדלר" /
   // " adler " all collapse.
-  const targetName = (member.last_name || '').trim()
+  //
+  // When the member has no surname (e.g. נתנאל who is recorded with
+  // an empty `last_name` because his family details are unknown), fall
+  // back to the FIRST name so the user can still spin up a tree for
+  // him. The user explicitly asked: "נתנאל לא נותן לפתוח לו עץ
+  // משפחה כמו לכולם".
+  const rawSurname = (member.last_name || '').trim()
+  const targetName = rawSurname || (member.first_name || '').trim()
   const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
 
   const activeTree: FamilyTree | null =

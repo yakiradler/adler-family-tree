@@ -32,34 +32,49 @@ export default function App() {
   const { lang } = useLang()
   const dir = isRTL(lang) ? 'rtl' : 'ltr'
 
-  // Seed demo data + persist edits across refreshes.
-  //
-  // In demo mode there's no Supabase backing the store, so a refresh
-  // wipes everything to the original seed (which is why the user kept
-  // seeing נתנאל reappear after marking him as ex). To make demo edits
-  // sticky we now mirror members/relationships/trees to localStorage and
-  // restore them on mount; the seed only loads on first run (or if the
-  // user explicitly clears the cache via admin → system → "Clear cache").
+  // Profile-only side effect — runs on language change so the
+  // displayed family name follows the active locale. Members,
+  // relationships and trees are owned by the persistence effect below.
   useEffect(() => {
     if (!demoMode) return
-    const STORAGE_KEY = 'ft-demo-state-v1'
     useFamilyStore.getState().setProfile({
       id: 'demo',
       full_name: lang === 'he' ? 'משפחת אדלר' : 'Adler Family',
       role: 'admin',
     })
+  }, [demoMode, lang])
 
-    // 1) Restore from localStorage if present, otherwise seed.
+  // Persistence in demo mode.
+  //
+  // Without Supabase a refresh would otherwise wipe everything to the
+  // seed — that's why the user kept seeing נתנאל return after he was
+  // marked as ex/hidden. We mirror the writeable slices of the store
+  // (members / relationships / trees) to localStorage every time they
+  // change, and rehydrate from there on the next mount.
+  //
+  // The effect deliberately depends ONLY on `demoMode` (not `lang`),
+  // so swapping the language doesn't tear down the subscription and
+  // briefly run with stale data — that ghost re-render was a likely
+  // cause of "I marked him as hidden, refreshed, and he came back".
+  useEffect(() => {
+    if (!demoMode) return
+    const STORAGE_KEY = 'ft-demo-state-v2'
+    const LEGACY_KEY = 'ft-demo-state-v1'
+
+    // Migrate / hydrate.
     let restored = false
     try {
-      const raw = window.localStorage.getItem(STORAGE_KEY)
+      const raw =
+        window.localStorage.getItem(STORAGE_KEY) ||
+        window.localStorage.getItem(LEGACY_KEY)
       if (raw) {
         const parsed = JSON.parse(raw) as {
+          v?: number
           members?: typeof ADLER_MEMBERS
           relationships?: typeof ADLER_RELATIONSHIPS
           trees?: unknown[]
         }
-        if (parsed.members && parsed.relationships) {
+        if (Array.isArray(parsed.members) && Array.isArray(parsed.relationships)) {
           useFamilyStore.setState({
             members: parsed.members,
             relationships: parsed.relationships,
@@ -68,32 +83,47 @@ export default function App() {
           restored = true
         }
       }
-    } catch { /* corrupted localStorage — fall through to seed */ }
+    } catch { /* corrupted — fall through */ }
 
     if (!restored) {
-      useFamilyStore.setState({ members: ADLER_MEMBERS, relationships: ADLER_RELATIONSHIPS })
+      useFamilyStore.setState({
+        members: ADLER_MEMBERS,
+        relationships: ADLER_RELATIONSHIPS,
+      })
     }
 
-    // 2) Subscribe to mutations and persist after every change.
+    // Persist after every relevant mutation. We compare references so
+    // unrelated state changes (selectedMemberId, viewport, etc.) don't
+    // trigger a write.
+    const write = () => {
+      try {
+        const s = useFamilyStore.getState()
+        window.localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            v: 2,
+            members: s.members,
+            relationships: s.relationships,
+            trees: s.trees,
+          }),
+        )
+      } catch { /* quota exceeded — silent */ }
+    }
+
     const unsubscribe = useFamilyStore.subscribe((state, prev) => {
       if (
         state.members === prev.members &&
         state.relationships === prev.relationships &&
         state.trees === prev.trees
       ) return
-      try {
-        window.localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify({
-            members: state.members,
-            relationships: state.relationships,
-            trees: state.trees,
-          }),
-        )
-      } catch { /* quota exceeded — fail silently */ }
+      write()
     })
+
+    // Save the seed once so a subsequent reload restores it.
+    if (!restored) write()
+
     return unsubscribe
-  }, [demoMode, lang])
+  }, [demoMode])
 
   // Supabase auth
   useEffect(() => {
