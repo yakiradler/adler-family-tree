@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
@@ -26,6 +26,7 @@ interface FormState {
   photo_url: string
   photos: string[]
   hidden: boolean
+  connector_parent_id: string | ''
 }
 
 function fromMember(m: Member): FormState {
@@ -44,6 +45,7 @@ function fromMember(m: Member): FormState {
     photo_url: m.photo_url ?? '',
     photos: m.photos ? [...m.photos] : [],
     hidden: !!m.hidden,
+    connector_parent_id: m.connector_parent_id ?? '',
   }
 }
 
@@ -57,7 +59,18 @@ function readFileAsDataUrl(file: File): Promise<string> {
 }
 
 export default function EditMemberModal({ open, onClose, member }: Props) {
-  const { updateMember } = useFamilyStore()
+  const { updateMember, members, relationships } = useFamilyStore()
+  // Parents of this member — used by the "connector parent" picker so
+  // the user can choose which parent the descending tree-line draws
+  // from (default: mother).
+  const parents = useMemo(
+    () =>
+      relationships
+        .filter((r) => r.type === 'parent-child' && r.member_b_id === member.id)
+        .map((r) => members.find((m) => m.id === r.member_a_id))
+        .filter(Boolean) as Member[],
+    [relationships, members, member.id],
+  )
   const { t, lang } = useLang()
   const rtl = isRTL(lang)
   const [form, setForm] = useState<FormState>(() => fromMember(member))
@@ -121,6 +134,7 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
       photo_url: form.photo_url || undefined,
       photos: form.photos.length ? form.photos : undefined,
       hidden: form.hidden,
+      connector_parent_id: form.connector_parent_id || null,
     })
     setSaving(false)
     onClose()
@@ -316,6 +330,27 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
                     onChange={e => patch('bio', e.target.value)}
                   />
                 </Field>
+
+                {/* Connector-parent picker — only meaningful when both
+                    parents are known. Renders the parent's gender icon
+                    so the user can tell mother from father at a glance. */}
+                {parents.length >= 2 && (
+                  <Field label={t.editConnectorParent}>
+                    <select
+                      value={form.connector_parent_id}
+                      onChange={(e) => patch('connector_parent_id', e.target.value)}
+                      className="w-full bg-[#F2F2F7] border border-transparent rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40 focus:bg-white focus:border-[#007AFF]/30 transition"
+                    >
+                      <option value="">{t.editConnectorParentAuto}</option>
+                      {parents.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.gender === 'female' ? '♀' : p.gender === 'male' ? '♂' : '·'}{' '}
+                          {p.first_name} {p.last_name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                )}
 
                 {/* Privacy / discreet hide */}
                 <Field label={t.editPrivacyLabel}>

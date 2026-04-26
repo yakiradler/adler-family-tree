@@ -146,6 +146,14 @@ export const translations = {
     aiPlaceSibling: 'אח/ות של…',
     aiPlaceRelativePicker: 'בחר את החבר היחס מהעץ',
     aiPlaceRelativePickPrompt: 'בחר חבר',
+    treeSwitcherTitle: 'עצי משפחה',
+    treeSwitcherDefault: 'עץ ראשי',
+    treeSwitcherDefaultHint: 'כל החברים שלא משויכים לעץ צדדי',
+    treeSwitcherCreate: 'צור עץ חדש',
+    treeSwitcherNewName: 'שם העץ (למשל: משפחת האם)',
+    treeSwitcherNewDesc: 'תיאור קצר (אופציונלי)',
+    editConnectorParent: 'מאיזה הורה לצייר את הקו לעץ?',
+    editConnectorParentAuto: 'אוטומטי (מהאם)',
 
     // Landing page
     landingHeroTitle: 'הסיפור של המשפחה שלך,',
@@ -614,6 +622,14 @@ export const translations = {
     aiPlaceSibling: 'Sibling of\u2026',
     aiPlaceRelativePicker: 'Pick the relative from the tree',
     aiPlaceRelativePickPrompt: 'Pick a member',
+    treeSwitcherTitle: 'Family trees',
+    treeSwitcherDefault: 'Main tree',
+    treeSwitcherDefaultHint: 'Everyone not assigned to a side tree',
+    treeSwitcherCreate: 'Create a new tree',
+    treeSwitcherNewName: 'Tree name (e.g. Maternal family)',
+    treeSwitcherNewDesc: 'Short description (optional)',
+    editConnectorParent: 'Draw the tree-line from which parent?',
+    editConnectorParentAuto: 'Automatic (mother)',
 
     // Landing page
     landingHeroTitle: 'Your family story,',

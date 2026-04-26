@@ -94,7 +94,38 @@ export interface Member {
    * (visible) parent; the hidden node simply doesn't render.
    */
   hidden?: boolean
+  /**
+   * Connector preference: which parent the child's tree-line should
+   * descend from when both parents are present. Set per-member from
+   * the edit dialog. When unset the renderer defaults to the MOTHER
+   * (female parent), falling back to the first available parent.
+   */
+  connector_parent_id?: string | null
+  /**
+   * Optional grouping for multi-tree households. Members without a
+   * tree_id belong to the default ("main") tree. The shell exposes a
+   * switcher so the user can navigate between trees they have access
+   * to without losing the unified database.
+   */
+  tree_id?: string | null
   created_by: string
+}
+
+/**
+ * A named family tree — used to group members for households that
+ * track several lineages side by side (e.g. paternal + maternal +
+ * spouse's family). Members carry a `tree_id`; the active tree
+ * filters the rendered population.
+ */
+export interface FamilyTree {
+  id: string
+  name: string
+  /** Tagline rendered next to the name in the switcher. */
+  description?: string
+  /** Hex accent — colors the tree connectors and the active dot in the switcher. */
+  color?: string
+  created_by: string
+  created_at?: string
 }
 
 export interface Relationship {

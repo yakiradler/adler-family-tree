@@ -6,6 +6,7 @@ import TreeView from '../components/views/TreeView'
 import MemberPanel from '../components/MemberPanel'
 import AddMemberModal from '../components/AddMemberModal'
 import TreeSearchModal from '../components/TreeSearchModal'
+import TreeSwitcher from '../components/TreeSwitcher'
 import { useState } from 'react'
 
 interface Props { demoMode: boolean }
@@ -38,6 +39,9 @@ export default function TreePage({ demoMode }: Props) {
             <p className="text-[11px] text-[#8E8E93] mt-0.5 truncate">
               {profile?.full_name} · {members.length} {t.dashMembers}
             </p>
+          </div>
+          <div className="hidden sm:block">
+            <TreeSwitcher />
           </div>
           <motion.button
             whileTap={{ scale: 0.9 }}

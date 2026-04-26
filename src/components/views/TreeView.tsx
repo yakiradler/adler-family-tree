@@ -15,6 +15,22 @@ import { applyTreeFilters } from './applyTreeFilters'
 
 export type { LayoutMode } from './treeLayout'
 
+// ─── Per-layout colour theme ─────────────────────────────────────────────────
+// Each layout mode gets a distinct connector palette so switching the
+// view also shifts the visual atmosphere — the user explicitly asked
+// for "a hue change between tree layout modes". Picked deliberately:
+// classic = signature blue, grid = emerald (tabular calm), arc = amber
+// (warm storytelling), staggered = violet (playful).
+const LAYOUT_THEMES: Record<
+  LayoutMode,
+  { pcStops: [string, string, string]; spStops: [string, string]; bgTint: string }
+> = {
+  classic:   { pcStops: ['#2B6BFF', '#6C47FF', '#19C6FF'], spStops: ['#FF5EAE', '#6C47FF'], bgTint: 'rgba(43,107,255,0.04)' },
+  grid:      { pcStops: ['#10B981', '#059669', '#22D3EE'], spStops: ['#F472B6', '#10B981'], bgTint: 'rgba(16,185,129,0.05)' },
+  arc:       { pcStops: ['#F59E0B', '#FB923C', '#F43F5E'], spStops: ['#FB923C', '#F43F5E'], bgTint: 'rgba(245,158,11,0.05)' },
+  staggered: { pcStops: ['#8B5CF6', '#D946EF', '#22D3EE'], spStops: ['#EC4899', '#8B5CF6'], bgTint: 'rgba(139,92,246,0.05)' },
+}
+
 // ─── Connectors ───────────────────────────────────────────────────────────────
 
 function buildConnectors(nodes: LayoutNode[], relationships: Relationship[]) {
@@ -39,9 +55,14 @@ function buildConnectors(nodes: LayoutNode[], relationships: Relationship[]) {
   interface LineD { d: string }
   const lines: LineD[] = []
 
-  // Orthogonal elbow: from parents' midpoint down, across, then down to the
-  // top edge of the child's name-card. Works regardless of the child's
-  // layout row (grid/arc/staggered) because it uses the child's actual y.
+  // Orthogonal elbow drawn from the *anchor parent* (NOT the midpoint).
+  // Anchor priority:
+  //   1. explicit `child.member.connector_parent_id`  — manual override
+  //   2. the child's mother (parent with gender 'female')
+  //   3. the first parent we have a layout node for
+  // This implements the user's request: "every child's connector should
+  // come from the mother by default, with a way to change it per
+  // member." Falling back to the father preserves single-parent trees.
   const CARD_TOP_OFFSET = AVATAR - 10
   for (const [childId, pars] of childToParents) {
     const child = posMap.get(childId)
@@ -49,13 +70,17 @@ function buildConnectors(nodes: LayoutNode[], relationships: Relationship[]) {
     const parents = pars.map(p => posMap.get(p)).filter(Boolean) as LayoutNode[]
     if (parents.length === 0) continue
 
+    const explicit = child.member.connector_parent_id
+    const anchor =
+      (explicit && parents.find(p => p.member.id === explicit)) ||
+      parents.find(p => p.member.gender === 'female') ||
+      parents[0]
+
     const childCX = Math.round(child.x + NODE_W / 2)
     const childTopY = Math.round(child.y + CARD_TOP_OFFSET)
 
-    const pxMin = Math.min(...parents.map(p => p.x + NODE_W / 2))
-    const pxMax = Math.max(...parents.map(p => p.x + NODE_W / 2))
-    const parentCX = Math.round((pxMin + pxMax) / 2)
-    const parentBottomY = Math.round(parents[0].y + NODE_H + 2)
+    const parentCX = Math.round(anchor.x + NODE_W / 2)
+    const parentBottomY = Math.round(anchor.y + NODE_H + 2)
 
     const gap = childTopY - parentBottomY
     const midY = Math.round(parentBottomY + gap * 0.6)
@@ -91,7 +116,17 @@ const isLayoutMode = (v: unknown): v is LayoutMode =>
   v === 'classic' || v === 'grid' || v === 'arc' || v === 'staggered'
 
 export default function TreeView() {
-  const { members, relationships, selectedMemberId, setSelectedMemberId } = useFamilyStore()
+  const { members: allMembers, relationships, selectedMemberId, setSelectedMemberId, activeTreeId } = useFamilyStore()
+  // Narrow the population to the currently active tree. `null` means
+  // the default/main tree which is everyone without a tree_id; an
+  // explicit id picks that named tree.
+  const members = useMemo(
+    () =>
+      activeTreeId == null
+        ? allMembers.filter((m) => !m.tree_id)
+        : allMembers.filter((m) => m.tree_id === activeTreeId),
+    [allMembers, activeTreeId],
+  )
   const { t } = useLang()
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -178,7 +213,7 @@ export default function TreeView() {
   const onWheel = (e: React.WheelEvent) => {
     e.preventDefault()
     const delta = -e.deltaY * 0.0015
-    const newScale = Math.max(0.25, Math.min(2, scale * (1 + delta)))
+    const newScale = Math.max(0.05, Math.min(8, scale * (1 + delta)))
     const rect = wrapRef.current!.getBoundingClientRect()
     const cx = e.clientX - rect.left
     const cy = e.clientY - rect.top
@@ -239,7 +274,7 @@ export default function TreeView() {
       const [a, b] = [e.touches[0], e.touches[1]]
       const dist = Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY) || 1
       const factor = dist / st.initialDist
-      const newScale = Math.max(0.25, Math.min(2.5, st.initialScale * factor))
+      const newScale = Math.max(0.05, Math.min(8, st.initialScale * factor))
       const nxWorld = (st.cx - st.tx0) / st.initialScale
       const nyWorld = (st.cy - st.ty0) / st.initialScale
       setTx(st.cx - nxWorld * newScale)
@@ -273,7 +308,7 @@ export default function TreeView() {
   }
 
   const zoomBy = (factor: number) => {
-    const newScale = Math.max(0.25, Math.min(2, scale * factor))
+    const newScale = Math.max(0.05, Math.min(8, scale * factor))
     const w = wrapRef.current?.clientWidth ?? 0
     const h = wrapRef.current?.clientHeight ?? 0
     const cx = w / 2, cy = h / 2
@@ -285,6 +320,8 @@ export default function TreeView() {
   }
 
   if (members.length === 0) return <EmptyState t={t} />
+
+  const theme = LAYOUT_THEMES[layoutMode]
 
   return (
     <div
@@ -309,7 +346,7 @@ export default function TreeView() {
           'radial-gradient(at 92% 12%, rgba(255,140,200,0.28) 0px, transparent 55%),' +
           'radial-gradient(at 78% 92%, rgba(120,255,220,0.25) 0px, transparent 55%),' +
           'radial-gradient(at 8% 96%, rgba(180,130,255,0.30) 0px, transparent 55%),' +
-          'linear-gradient(135deg, #F4F7FF 0%, #FBF7FF 55%, #FFF5FA 100%)',
+          `linear-gradient(135deg, #F4F7FF 0%, #FBF7FF 55%, #FFF5FA 100%), ${theme.bgTint}`,
       }}
     >
       <div
@@ -338,13 +375,13 @@ export default function TreeView() {
         >
           <defs>
             <linearGradient id="pc-grad" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="#2B6BFF" stopOpacity="0.95" />
-              <stop offset="55%" stopColor="#6C47FF" stopOpacity="0.85" />
-              <stop offset="100%" stopColor="#19C6FF" stopOpacity="0.9" />
+              <stop offset="0%" stopColor={theme.pcStops[0]} stopOpacity="0.95" />
+              <stop offset="55%" stopColor={theme.pcStops[1]} stopOpacity="0.85" />
+              <stop offset="100%" stopColor={theme.pcStops[2]} stopOpacity="0.9" />
             </linearGradient>
             <linearGradient id="sp-grad" x1="0" x2="1" y1="0" y2="0">
-              <stop offset="0%" stopColor="#FF5EAE" stopOpacity="0.85" />
-              <stop offset="100%" stopColor="#6C47FF" stopOpacity="0.85" />
+              <stop offset="0%" stopColor={theme.spStops[0]} stopOpacity="0.85" />
+              <stop offset="100%" stopColor={theme.spStops[1]} stopOpacity="0.85" />
             </linearGradient>
             <filter id="pc-glow" x="-20%" y="-20%" width="140%" height="140%">
               <feGaussianBlur stdDeviation="1.2" result="blur" />

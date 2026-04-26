@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
 import type {
   Member, Relationship, EditRequest, ViewMode, Profile,
-  AccessRequest, UserRole,
+  AccessRequest, UserRole, FamilyTree,
 } from '../types'
 
 interface FamilyState {
@@ -45,6 +45,20 @@ interface FamilyState {
   ) => Promise<void>
   completeOnboarding: (patch: Partial<Profile>) => Promise<void>
   updateProfileById: (id: string, patch: Partial<Profile>) => Promise<void>
+
+  // ── Multi-tree (Phase F) ────────────────────────────────────────────
+  /**
+   * Trees the current user has access to. The "main" tree is implicit
+   * (every Member without a tree_id belongs to it) so this list is
+   * additive — adding a tree doesn't migrate the existing population.
+   */
+  trees: FamilyTree[]
+  /** null = the main/default tree (members without tree_id). */
+  activeTreeId: string | null
+  setActiveTreeId: (id: string | null) => void
+  addTree: (tree: Omit<FamilyTree, 'id'>) => Promise<FamilyTree | null>
+  updateTree: (id: string, patch: Partial<FamilyTree>) => Promise<void>
+  deleteTree: (id: string) => Promise<void>
 }
 
 export const useFamilyStore = create<FamilyState>((set, get) => ({
@@ -228,5 +242,51 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     await supabase.from('profiles').update(patch).eq('id', id)
     const me = get().profile
     if (me?.id === id) set({ profile: { ...me, ...patch } })
+  },
+
+  // ── Multi-tree implementation ──────────────────────────────────────
+  // Persisted in Supabase if a `family_trees` table is provisioned;
+  // otherwise everything lives in-memory which is fine for demo + the
+  // first migration window. Members carry an optional `tree_id` so the
+  // active tree filter can drop in without a schema migration.
+  trees: [],
+  activeTreeId:
+    typeof window !== 'undefined'
+      ? window.localStorage.getItem('ft-active-tree-id') || null
+      : null,
+  setActiveTreeId: (id) => {
+    try {
+      if (id) window.localStorage.setItem('ft-active-tree-id', id)
+      else window.localStorage.removeItem('ft-active-tree-id')
+    } catch { /* ignore quota */ }
+    set({ activeTreeId: id })
+  },
+  addTree: async (tree) => {
+    const localId = `tree-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    const optimistic: FamilyTree = { ...tree, id: localId }
+    set((s) => ({ trees: [...s.trees, optimistic] }))
+    try {
+      const { data, error } = await supabase
+        .from('family_trees')
+        .insert(tree)
+        .select('*')
+        .single()
+      if (!error && data) {
+        set((s) => ({ trees: s.trees.map((t) => (t.id === localId ? (data as FamilyTree) : t)) }))
+        return data as FamilyTree
+      }
+    } catch { /* offline / no table — keep optimistic row */ }
+    return optimistic
+  },
+  updateTree: async (id, patch) => {
+    set((s) => ({ trees: s.trees.map((t) => (t.id === id ? { ...t, ...patch } : t)) }))
+    try { await supabase.from('family_trees').update(patch).eq('id', id) } catch { /* ignore */ }
+  },
+  deleteTree: async (id) => {
+    set((s) => ({
+      trees: s.trees.filter((t) => t.id !== id),
+      activeTreeId: s.activeTreeId === id ? null : s.activeTreeId,
+    }))
+    try { await supabase.from('family_trees').delete().eq('id', id) } catch { /* ignore */ }
   },
 }))
