@@ -5,11 +5,12 @@ import { supabase } from '../../lib/supabase'
 import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang, isRTL, type Translations } from '../../i18n/useT'
 import EditMemberModal from '../EditMemberModal'
+import InviteCodeManager from './InviteCodeManager'
 import { getRingGradient, getFallbackGradient, PersonAvatarIcon } from '../MemberNode'
 import type { EditRequest, Member, Profile, UserRole, MasterPermissions, AccessRequest } from '../../types'
 import type { PermissionKey } from '../../lib/permissions'
 
-type Tab = 'overview' | 'users' | 'members' | 'requests' | 'access' | 'system'
+type Tab = 'overview' | 'users' | 'members' | 'requests' | 'access' | 'invites' | 'system'
 
 const ROLE_OPTIONS: { key: UserRole; icon: string; labelKey: 'adminRoleGuest' | 'adminRoleUser' | 'adminRoleMaster' | 'adminRoleAdmin' }[] = [
   { key: 'guest',  icon: '👤', labelKey: 'adminRoleGuest' },
@@ -207,6 +208,7 @@ export default function AdminDashboard() {
             ['members', t.adminTabMembers, '🌳'],
             ['requests', t.adminTabRequests, '🔔'],
             ['access', t.adminTabAccess, '🚪'],
+            ['invites', t.adminTabInvites, '🔑'],
             ['system', t.adminTabSystem, '⚙️'],
           ] as const).map(([key, label, icon]) => (
             <button
@@ -455,6 +457,18 @@ export default function AdminDashboard() {
             </motion.div>
           )}
 
+          {tab === 'invites' && (
+            <motion.div
+              key="invites"
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}
+              className="space-y-3"
+            >
+              <SectionHeader title={t.adminInvitesTitle} desc={t.adminInvitesDesc} />
+              <InviteCodeManager />
+            </motion.div>
+          )}
+
           {tab === 'system' && (
             <motion.div
               key="system"
@@ -488,6 +502,16 @@ export default function AdminDashboard() {
                   </svg>
                 </button>
               </div>
+
+              <SpecialAdminControls
+                t={t}
+                membersCount={members.length}
+                onRefresh={() => {
+                  const s = useFamilyStore.getState()
+                  s.fetchMembers(); s.fetchRelationships(); s.fetchEditRequests()
+                  if (SUPABASE_CONFIGURED) s.fetchAccessRequests()
+                }}
+              />
             </motion.div>
           )}
         </AnimatePresence>
@@ -820,6 +844,115 @@ function EmptyBlock({ icon, text }: { icon: string; text: string }) {
         <span className="text-2xl">{icon}</span>
       </div>
       <p className="text-sf-subhead text-[#8E8E93]">{text}</p>
+    </div>
+  )
+}
+
+/**
+ * Special-controls panel — maintenance actions surfaced only to admins.
+ * Kept simple on purpose: refresh store, clear cache, show build/env info.
+ * Anything destructive prompts via window.confirm before executing.
+ */
+function SpecialAdminControls({
+  t, membersCount, onRefresh,
+}: {
+  t: Translations
+  membersCount: number
+  onRefresh: () => void
+}) {
+  const [refreshing, setRefreshing] = useState(false)
+  const buildVersion = (import.meta.env.VITE_APP_VERSION as string | undefined) ?? 'dev'
+
+  const doRefresh = async () => {
+    setRefreshing(true)
+    try {
+      await Promise.resolve(onRefresh())
+    } finally {
+      setTimeout(() => setRefreshing(false), 500)
+    }
+  }
+
+  const clearCache = async () => {
+    if (!window.confirm(t.adminClearCacheConfirm)) return
+    try {
+      // Best-effort: remove our app's localStorage keys, sign out of Supabase,
+      // then hard-reload so the app re-initialises clean.
+      localStorage.clear()
+      sessionStorage.clear()
+      if (SUPABASE_CONFIGURED) {
+        try { await supabase.auth.signOut() } catch {}
+      }
+    } finally {
+      window.location.reload()
+    }
+  }
+
+  return (
+    <div className="glass-strong rounded-3xl p-5 shadow-glass space-y-3">
+      <div>
+        <h3 className="text-sf-subhead font-bold text-[#1C1C1E]">⚡ {t.adminSpecialTitle}</h3>
+        <p className="text-[11px] text-[#8E8E93] mt-0.5">{t.adminSpecialDesc}</p>
+      </div>
+
+      {/* Info grid */}
+      <div className="grid grid-cols-3 gap-2">
+        <InfoTile label={t.adminBuildVersion} value={buildVersion} />
+        <InfoTile
+          label={t.adminBuildEnv}
+          value={SUPABASE_CONFIGURED ? t.adminEnvLive : t.adminEnvDemo}
+          tone={SUPABASE_CONFIGURED ? 'green' : 'cyan'}
+        />
+        <InfoTile label={t.adminTotalRecords} value={String(membersCount)} />
+      </div>
+
+      <div className="h-px bg-[#E5E5EA]" />
+
+      {/* Action buttons */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={doRefresh}
+          disabled={refreshing}
+          className="flex items-center justify-center gap-2 py-2.5 rounded-2xl bg-[#007AFF]/10 text-[#007AFF] text-[12px] font-semibold hover:bg-[#007AFF]/20 disabled:opacity-50 transition"
+        >
+          <motion.span
+            animate={refreshing ? { rotate: 360 } : { rotate: 0 }}
+            transition={refreshing ? { duration: 0.8, repeat: Infinity, ease: 'linear' } : { duration: 0 }}
+            aria-hidden
+          >
+            🔄
+          </motion.span>
+          {t.adminRefreshData}
+        </button>
+        <button
+          type="button"
+          onClick={clearCache}
+          className="flex items-center justify-center gap-2 py-2.5 rounded-2xl bg-[#FF3B30]/10 text-[#FF3B30] text-[12px] font-semibold hover:bg-[#FF3B30]/20 transition"
+        >
+          <span aria-hidden>🧹</span>
+          {t.adminClearCache}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function InfoTile({
+  label, value, tone = 'gray',
+}: {
+  label: string
+  value: string
+  tone?: 'gray' | 'green' | 'cyan'
+}) {
+  const toneClass = {
+    gray:  'bg-[#F2F2F7] text-[#1C1C1E]',
+    green: 'bg-[#34C759]/15 text-[#34C759]',
+    cyan:  'bg-[#32ADE6]/15 text-[#32ADE6]',
+  }[tone]
+  return (
+    <div className={`rounded-2xl p-2.5 ${toneClass}`}>
+      <p className="text-[10px] font-semibold opacity-70 uppercase tracking-wider">{label}</p>
+      <p className="text-sf-subhead font-bold mt-0.5 truncate" dir="ltr">{value}</p>
     </div>
   )
 }

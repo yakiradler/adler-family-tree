@@ -1,28 +1,48 @@
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang } from '../../i18n/useT'
 import { supabase } from '../../lib/supabase'
-import type { UserRole } from '../../types'
+import type { UserRole, Lineage } from '../../types'
 
 /**
- * Three-step onboarding wizard. Shown by App.tsx after the very first
+ * Four-step onboarding wizard. Shown by App.tsx after the very first
  * login (i.e. when `profile.onboarded_at` is null). Persists answers via:
- *   - profiles.bio / avatar_url / requested_role / onboarded_at
- *   - access_requests row (pending → admin queue)
+ *   - profiles.full_name / bio / avatar_url / requested_role / onboarded_at
+ *   - access_requests row (with personal details in `answers` JSON, so the
+ *     admin sees them when reviewing and can copy them onto the user's
+ *     Member record on approval)
+ *
+ * Step layout:
+ *   1 — Join (invite code or new tree)
+ *   2 — Personal details   ← required: first/last name, email, birth date
+ *   3 — Bio + avatar
+ *   4 — Family role / access
+ *   5 — Submitted (terminal)
  *
  * The wizard never grants permissions itself — admin approval in the
  * Phase D dashboard is what flips `profiles.role`.
  */
-type Step = 1 | 2 | 3 | 4  // 4 = "submitted, waiting" terminal state
+type Step = 1 | 2 | 3 | 4 | 5  // 5 = "submitted, waiting" terminal state
 
 type JoinChoice = '' | 'invite' | 'new'
 
 interface AnswerState {
   joinChoice: JoinChoice
   inviteCode: string
+  // Personal details (step 2)
+  firstName: string
+  lastName: string
+  email: string          // pre-filled from auth, read-only
+  birthDate: string      // YYYY-MM-DD
+  maidenName: string
+  gender: '' | 'male' | 'female'
+  phone: string
+  lineage: '' | Lineage
+  // Bio + avatar (step 3)
   bio: string
   avatar_url: string
+  // Access (step 4)
   relationship: '' | 'self' | 'partner' | 'friend' | 'other'
   purpose: '' | 'browse' | 'contribute' | 'manage'
   requestedRole: '' | UserRole
@@ -31,12 +51,22 @@ interface AnswerState {
 const blank: AnswerState = {
   joinChoice: '',
   inviteCode: '',
+  firstName: '',
+  lastName: '',
+  email: '',
+  birthDate: '',
+  maidenName: '',
+  gender: '',
+  phone: '',
+  lineage: '',
   bio: '',
   avatar_url: '',
   relationship: '',
   purpose: '',
   requestedRole: '',
 }
+
+const TOTAL_STEPS = 4
 
 export default function OnboardingWizard() {
   const { profile, completeOnboarding, submitAccessRequest } = useFamilyStore()
@@ -47,7 +77,25 @@ export default function OnboardingWizard() {
   const [error, setError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  // Suggest a default role from the answers — user can override on step 3.
+  // Pre-fill name + email from existing auth state. Splitting full_name on
+  // the first space is a sensible default — user can edit either field.
+  // Email comes from the auth user record (read-only in the UI).
+  useEffect(() => {
+    if (!profile) return
+    const fullName = profile.full_name ?? ''
+    const [first, ...rest] = fullName.trim().split(/\s+/)
+    setA((s) => ({
+      ...s,
+      firstName: s.firstName || first || '',
+      lastName: s.lastName || rest.join(' '),
+    }))
+    void supabase.auth.getUser().then(({ data }) => {
+      const e = data.user?.email
+      if (e) setA((s) => ({ ...s, email: s.email || e }))
+    })
+  }, [profile])
+
+  // Suggest a default role from the answers — user can override on step 4.
   const suggestedRole: UserRole = useMemo(() => {
     if (a.purpose === 'browse' || a.relationship === 'friend') return 'guest'
     if (a.purpose === 'manage') return 'master'
@@ -59,8 +107,14 @@ export default function OnboardingWizard() {
   const canAdvance = (() => {
     if (step === 1) return a.joinChoice !== '' &&
       (a.joinChoice === 'new' || a.inviteCode.trim().length > 0)
-    if (step === 2) return true   // bio + avatar are optional
-    if (step === 3) return a.relationship !== '' && a.purpose !== ''
+    if (step === 2) return (
+      a.firstName.trim().length > 0 &&
+      a.lastName.trim().length > 0 &&
+      a.email.trim().length > 0 &&
+      a.birthDate.trim().length > 0
+    )
+    if (step === 3) return true   // bio + avatar are optional
+    if (step === 4) return a.relationship !== '' && a.purpose !== ''
     return false
   })()
 
@@ -80,10 +134,7 @@ export default function OnboardingWizard() {
           (data.expires_at == null || new Date(data.expires_at) > new Date()) &&
           (data.uses_left == null || data.uses_left > 0)
         if (!valid) {
-          // Don't hard-block in demo or when no invites table seeded — let
-          // them through with a soft warning, since admin will review anyway.
           if (data === null) {
-            // No row found — show inline error.
             setError(t.onbInviteInvalid)
             return
           }
@@ -92,8 +143,8 @@ export default function OnboardingWizard() {
         setBusy(false)
       }
     }
-    if (step === 3) return submit()
-    setStep((s) => Math.min(3, (s + 1)) as Step)
+    if (step === 4) return submit()
+    setStep((s) => Math.min(TOTAL_STEPS, (s + 1)) as Step)
   }
 
   const back = () => setStep((s) => Math.max(1, (s - 1)) as Step)
@@ -102,13 +153,17 @@ export default function OnboardingWizard() {
     if (!profile) return
     setBusy(true)
     try {
+      const fullName = `${a.firstName.trim()} ${a.lastName.trim()}`.trim()
       // 1. Persist profile-level fields + mark onboarding complete.
       await completeOnboarding({
+        full_name: fullName || profile.full_name,
         bio: a.bio.trim() || undefined,
         avatar_url: a.avatar_url || undefined,
         requested_role: effectiveRole,
       })
-      // 2. File the access request for admin review.
+      // 2. File the access request for admin review. Personal details are
+      //    parked in `answers.personal` so the reviewing admin can copy
+      //    them onto the matching Member record when approving.
       await submitAccessRequest({
         requested_role: effectiveRole,
         invite_code: a.joinChoice === 'invite' ? a.inviteCode.trim() : null,
@@ -116,9 +171,19 @@ export default function OnboardingWizard() {
           joinChoice: a.joinChoice,
           relationship: a.relationship,
           purpose: a.purpose,
+          personal: {
+            first_name: a.firstName.trim(),
+            last_name: a.lastName.trim(),
+            email: a.email.trim(),
+            birth_date: a.birthDate,
+            maiden_name: a.maidenName.trim() || null,
+            gender: a.gender || null,
+            phone: a.phone.trim() || null,
+            lineage: a.lineage || null,
+          },
         },
       })
-      setStep(4)
+      setStep(5)
     } finally {
       setBusy(false)
     }
@@ -140,10 +205,10 @@ export default function OnboardingWizard() {
         className="w-full max-w-md bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 overflow-hidden"
       >
         {/* Progress strip */}
-        {step < 4 && (
+        {step <= TOTAL_STEPS && (
           <div className="px-6 pt-5">
             <div className="flex items-center gap-1.5">
-              {[1, 2, 3].map((s) => (
+              {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((s) => (
                 <div
                   key={s}
                   className={`flex-1 h-1.5 rounded-full transition-all ${
@@ -153,7 +218,7 @@ export default function OnboardingWizard() {
               ))}
             </div>
             <p className="text-[11px] text-[#8E8E93] mt-2">
-              {t.onbStep} {step} {t.onbOf} 3
+              {t.onbStep} {step} {t.onbOf} {TOTAL_STEPS}
             </p>
           </div>
         )}
@@ -206,6 +271,141 @@ export default function OnboardingWizard() {
             {step === 2 && (
               <StepShell
                 key="s2"
+                title={t.onbStepPersonalTitle}
+                desc={t.onbStepPersonalDesc}
+              >
+                {/* Required block */}
+                <div className="grid grid-cols-2 gap-2">
+                  <Field
+                    label={t.onbFirstName}
+                    required
+                    requiredHint={t.onbRequiredHint}
+                  >
+                    <input
+                      type="text"
+                      autoFocus
+                      value={a.firstName}
+                      onChange={(e) => setA((s) => ({ ...s, firstName: e.target.value }))}
+                      className="onb-input"
+                    />
+                  </Field>
+                  <Field
+                    label={t.onbLastName}
+                    required
+                    requiredHint={t.onbRequiredHint}
+                  >
+                    <input
+                      type="text"
+                      value={a.lastName}
+                      onChange={(e) => setA((s) => ({ ...s, lastName: e.target.value }))}
+                      className="onb-input"
+                    />
+                  </Field>
+                </div>
+                <Field
+                  label={t.onbEmailLabel}
+                  required
+                  requiredHint={t.onbRequiredHint}
+                >
+                  <input
+                    type="email"
+                    value={a.email}
+                    onChange={(e) => setA((s) => ({ ...s, email: e.target.value }))}
+                    readOnly={!!a.email}
+                    className="onb-input read-only:bg-[#F9F9FB] read-only:text-[#636366]"
+                  />
+                </Field>
+                <Field
+                  label={t.onbBirthDate}
+                  required
+                  requiredHint={t.onbRequiredHint}
+                >
+                  <input
+                    type="date"
+                    value={a.birthDate}
+                    onChange={(e) => setA((s) => ({ ...s, birthDate: e.target.value }))}
+                    className="onb-input"
+                  />
+                </Field>
+
+                {/* Optional block */}
+                <div className="pt-2 border-t border-black/5 space-y-2.5">
+                  <Field
+                    label={t.onbMaidenNameField}
+                    hint={t.onbMaidenNameHint}
+                    requiredHint={t.onbOptionalHint}
+                  >
+                    <input
+                      type="text"
+                      value={a.maidenName}
+                      onChange={(e) => setA((s) => ({ ...s, maidenName: e.target.value }))}
+                      className="onb-input"
+                    />
+                  </Field>
+                  <Field label={t.onbGenderLabel} requiredHint={t.onbOptionalHint}>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {([
+                        ['male', t.onbGenderMale],
+                        ['female', t.onbGenderFemale],
+                      ] as const).map(([key, lbl]) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setA((s) => ({ ...s, gender: key }))}
+                          className={`py-2 rounded-xl text-[12px] font-semibold transition ${
+                            a.gender === key
+                              ? 'bg-[var(--accent,#007AFF)] text-white'
+                              : 'bg-[#F2F2F7] text-[#636366] hover:bg-[#E5E5EA]'
+                          }`}
+                        >
+                          {lbl}
+                        </button>
+                      ))}
+                    </div>
+                  </Field>
+                  <Field label={t.onbPhone} requiredHint={t.onbOptionalHint}>
+                    <input
+                      type="tel"
+                      value={a.phone}
+                      onChange={(e) => setA((s) => ({ ...s, phone: e.target.value }))}
+                      className="onb-input"
+                      dir="ltr"
+                    />
+                  </Field>
+                  <Field
+                    label={t.onbLineageOnbLabel}
+                    hint={t.onbLineageOnbHint}
+                    requiredHint={t.onbOptionalHint}
+                  >
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {([
+                        ['', t.onbLineageOnbNone],
+                        ['kohen', t.onbLineageOnbKohen],
+                        ['levi', t.onbLineageOnbLevi],
+                        ['israel', t.onbLineageOnbIsrael],
+                      ] as const).map(([key, lbl]) => (
+                        <button
+                          key={key || 'none'}
+                          type="button"
+                          onClick={() => setA((s) => ({ ...s, lineage: key }))}
+                          className={`py-2 rounded-xl text-[11px] font-semibold transition ${
+                            a.lineage === key
+                              ? 'bg-[var(--accent,#007AFF)] text-white'
+                              : 'bg-[#F2F2F7] text-[#636366] hover:bg-[#E5E5EA]'
+                          }`}
+                        >
+                          {lbl}
+                        </button>
+                      ))}
+                    </div>
+                  </Field>
+                </div>
+              </StepShell>
+            )}
+
+            {step === 3 && (
+              <StepShell
+                key="s3"
                 title={t.onbStep2Title}
                 desc={t.onbStep2Desc}
               >
@@ -256,9 +456,9 @@ export default function OnboardingWizard() {
               </StepShell>
             )}
 
-            {step === 3 && (
+            {step === 4 && (
               <StepShell
-                key="s3"
+                key="s4"
                 title={t.onbStep3Title}
                 desc={t.onbStep3Desc}
               >
@@ -291,7 +491,7 @@ export default function OnboardingWizard() {
               </StepShell>
             )}
 
-            {step === 4 && (
+            {step === 5 && (
               <motion.div
                 key="done"
                 initial={{ opacity: 0, scale: 0.95 }}
@@ -309,14 +509,15 @@ export default function OnboardingWizard() {
         </div>
 
         {/* Footer */}
-        {step < 4 && (
+        {step <= TOTAL_STEPS && (
           <div className="px-6 pb-5 pt-1 flex gap-2 border-t border-black/5">
             {step > 1 && (
               <button
                 onClick={back}
                 disabled={busy}
-                className="flex-1 py-3 rounded-2xl bg-[#F2F2F7] text-[#1C1C1E] text-sf-subhead font-semibold disabled:opacity-50"
+                className="flex items-center justify-center gap-1.5 flex-1 py-3 rounded-2xl bg-[#F2F2F7] text-[#1C1C1E] text-sf-subhead font-semibold disabled:opacity-50 active:scale-[0.98] transition"
               >
+                <BackArrow />
                 {t.onbBack}
               </button>
             )}
@@ -325,11 +526,68 @@ export default function OnboardingWizard() {
               disabled={!canAdvance || busy}
               className="flex-[2] py-3 rounded-2xl bg-[var(--accent,#007AFF)] text-white text-sf-subhead font-semibold disabled:opacity-50 active:scale-[0.98] transition"
             >
-              {busy ? '…' : step === 3 ? t.onbFinish : t.onbNext}
+              {busy ? '…' : step === TOTAL_STEPS ? t.onbFinish : t.onbNext}
             </button>
           </div>
         )}
       </motion.div>
+
+      {/* Tiny stylesheet for the recurring text-input look — keeps the JSX
+          above readable without dragging Tailwind's @apply into a global. */}
+      <style>{`
+        .onb-input {
+          width: 100%;
+          padding: 0.625rem 1rem;
+          border-radius: 1rem;
+          background: #F2F2F7;
+          color: #1C1C1E;
+          outline: none;
+          transition: box-shadow 0.15s ease;
+        }
+        .onb-input::placeholder { color: #8E8E93; }
+        .onb-input:focus {
+          box-shadow: 0 0 0 2px var(--accent, #007AFF);
+        }
+      `}</style>
+    </div>
+  )
+}
+
+function BackArrow() {
+  // Direction-agnostic chevron — flips automatically in RTL via [dir]
+  // selector inheritance from the document.
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden
+      style={{ transform: 'scaleX(var(--rtl-flip, 1))' }}>
+      <path d="M9 3L5 7l4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function Field({
+  label, hint, required, requiredHint, children,
+}: {
+  label: string
+  hint?: string
+  required?: boolean
+  requiredHint?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-1">
+        <label className="text-[11px] font-semibold text-[#1C1C1E]">
+          {label}
+          {required && <span className="text-[#FF3B30] ms-1">*</span>}
+        </label>
+        {requiredHint && (
+          <span className={`text-[10px] ${required ? 'text-[#FF3B30]' : 'text-[#8E8E93]'}`}>
+            {requiredHint}
+          </span>
+        )}
+      </div>
+      {children}
+      {hint && <p className="text-[10px] text-[#8E8E93] mt-1">{hint}</p>}
     </div>
   )
 }

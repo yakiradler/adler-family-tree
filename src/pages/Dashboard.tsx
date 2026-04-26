@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
@@ -6,6 +6,7 @@ import { useLang, isRTL } from '../i18n/useT'
 import { supabase } from '../lib/supabase'
 import { isAdmin } from '../lib/permissions'
 import { getRingGradient, getFallbackGradient, PersonAvatarIcon } from '../components/MemberNode'
+import AIScanModal from '../components/ai/AIScanModal'
 import type { Member, Relationship } from '../types'
 
 interface Props { demoMode: boolean }
@@ -99,6 +100,7 @@ export default function Dashboard({ demoMode }: Props) {
   const { t, lang, toggleLang } = useLang()
   const dir = isRTL(lang) ? 'rtl' : 'ltr'
   const navigate = useNavigate()
+  const [aiScanOpen, setAiScanOpen] = useState(false)
 
   const upcoming = useMemo(() => getUpcomingBirthdays(members), [members])
   const generations = useMemo(() => computeGenerations(members, relationships), [members, relationships])
@@ -332,6 +334,12 @@ export default function Dashboard({ demoMode }: Props) {
               gradient="from-[#32ADE6] to-[#5AC8FA]"
               onClick={() => navigate('/birthdays')}
             />
+            <AppTile
+              icon="✨"
+              label={t.aiScanTitle}
+              gradient="from-[#5E5CE6] to-[#BF5AF2]"
+              onClick={() => setAiScanOpen(true)}
+            />
             {isAdmin(profile) && (
               <AppTile
                 icon="⚙️"
@@ -361,6 +369,16 @@ export default function Dashboard({ demoMode }: Props) {
           </div>
         </motion.section>
       </div>
+
+      {/* AI Scan modal — mounted at the page root so backdrop covers everything. */}
+      <AIScanModal
+        open={aiScanOpen}
+        onClose={() => setAiScanOpen(false)}
+        onAdded={(count) => {
+          // Tiny toast-style alert keeps this dependency-free.
+          setTimeout(() => alert(`${count} ${t.aiScanAddedCount} ✓`), 50)
+        }}
+      />
     </div>
   )
 }

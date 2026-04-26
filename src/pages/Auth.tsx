@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useLang } from '../i18n/useT'
@@ -10,7 +10,12 @@ interface Props { demoMode?: boolean }
 
 export default function Auth({ demoMode = false }: Props) {
   const navigate = useNavigate()
-  const [mode, setMode] = useState<AuthMode>('login')
+  const location = useLocation()
+  // Landing CTA links to /login?signup=1 — open straight on the signup tab.
+  // Note: HashRouter puts the query in `location.search` via the wrapper.
+  const initialMode: AuthMode =
+    new URLSearchParams(location.search).get('signup') === '1' ? 'signup' : 'login'
+  const [mode, setMode] = useState<AuthMode>(initialMode)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')

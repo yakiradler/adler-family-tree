@@ -5,6 +5,7 @@ import { supabase } from './lib/supabase'
 import { useFamilyStore } from './store/useFamilyStore'
 import { useLang, isRTL } from './i18n/useT'
 import Auth from './pages/Auth'
+import Landing from './pages/Landing'
 import Dashboard from './pages/Dashboard'
 import TreePage from './pages/TreePage'
 import BirthdayPage from './pages/BirthdayPage'
@@ -91,8 +92,18 @@ export default function App() {
             <OnboardingWizard />
           ) : (
             <Routes>
+              {/*
+                Routing model:
+                - "/"        → Dashboard for authenticated users; Landing
+                              (marketing) for everyone else. The CTAs on
+                              the landing page route into "/login".
+                - "/login"   → Auth page (login + signup tabs).
+                - "/welcome" → Direct link to landing even for authed users
+                              (lets them re-read the marketing if curious).
+              */}
               <Route path="/login" element={session ? <Navigate to="/" replace /> : <Auth demoMode={demoMode} />} />
-              <Route path="/" element={isAuth ? <Dashboard demoMode={demoMode} /> : <Navigate to="/login" replace />} />
+              <Route path="/welcome" element={<Landing />} />
+              <Route path="/" element={isAuth ? <Dashboard demoMode={demoMode} /> : <Landing />} />
               <Route path="/tree" element={isAuth ? <TreePage demoMode={demoMode} /> : <Navigate to="/login" replace />} />
               <Route path="/birthdays" element={isAuth ? <BirthdayPage demoMode={demoMode} /> : <Navigate to="/login" replace />} />
               <Route path="/admin" element={isAuth ? <AdminDashboard /> : <Navigate to="/login" replace />} />
