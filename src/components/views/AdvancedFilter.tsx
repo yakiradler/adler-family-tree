@@ -131,20 +131,6 @@ export default function AdvancedFilter({
               </div>
             </div>
 
-            {/* Toggles */}
-            <FilterToggle
-              label={t.filterShowFormer}
-              icon="💔"
-              checked={filters.showFormerSpouses}
-              onChange={(v) => set({ showFormerSpouses: v })}
-            />
-            <FilterToggle
-              label={t.filterHideDeceased}
-              icon="🕯️"
-              checked={filters.hideDeceased}
-              onChange={(v) => set({ hideDeceased: v })}
-            />
-
             {/* Name search */}
             <div>
               <p className="text-[10px] font-semibold text-[#8E8E93] uppercase mb-1.5">
@@ -194,6 +180,30 @@ export default function AdvancedFilter({
               )}
             </div>
 
+            {/* Visibility toggles — moved to the bottom and rendered as
+                compact rounded chips so they don't dominate the popover.
+                The user reported the previous full-width "💔 הצג גרושים"
+                row felt overweighted relative to the rest of the filters. */}
+            <div className="pt-2 border-t border-[#E5E5EA]">
+              <p className="text-[10px] font-semibold text-[#8E8E93] uppercase mb-1.5">
+                {t.filterVisibility}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                <FilterChip
+                  label={t.filterShowFormer}
+                  icon="💔"
+                  active={filters.showFormerSpouses}
+                  onToggle={(v) => set({ showFormerSpouses: v })}
+                />
+                <FilterChip
+                  label={t.filterHideDeceased}
+                  icon="🕯️"
+                  active={filters.hideDeceased}
+                  onToggle={(v) => set({ hideDeceased: v })}
+                />
+              </div>
+            </div>
+
             {/* Footer */}
             <div className="flex items-center justify-between pt-1 border-t border-[#E5E5EA]">
               <span className="text-[10px] text-[#8E8E93]">
@@ -215,40 +225,34 @@ export default function AdvancedFilter({
   )
 }
 
-function FilterToggle({
-  label, icon, checked, onChange,
+/**
+ * Compact toggle pill — used at the bottom of the filter popover for
+ * visibility flags (show divorces, hide deceased). Designed to feel
+ * like a chip you tap, not a heavy switch row, so these secondary
+ * filters sit lower in the visual hierarchy than the primary ones.
+ */
+function FilterChip({
+  label, icon, active, onToggle,
 }: {
   label: string
   icon: string
-  checked: boolean
-  onChange: (v: boolean) => void
+  active: boolean
+  onToggle: (v: boolean) => void
 }) {
   return (
     <button
       type="button"
-      onClick={() => onChange(!checked)}
-      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-[11px] font-semibold transition ${
-        checked
-          ? 'bg-[#34C759]/15 text-[#34C759]'
-          : 'bg-[#F2F2F7] text-[#636366] hover:bg-[#E5E5EA]'
+      onClick={() => onToggle(!active)}
+      aria-pressed={active}
+      className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10.5px] font-semibold transition border ${
+        active
+          ? 'bg-[#34C759]/15 text-[#0A8434] border-[#34C759]/30'
+          : 'bg-[#F2F2F7] text-[#636366] border-transparent hover:bg-[#E5E5EA]'
       }`}
     >
-      <span className="flex items-center gap-2">
-        <span aria-hidden>{icon}</span>
-        {label}
-      </span>
-      <span
-        aria-hidden
-        className={`w-8 h-5 rounded-full relative transition ${
-          checked ? 'bg-[#34C759]' : 'bg-[#C7C7CC]'
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
-            checked ? 'left-3.5' : 'left-0.5'
-          }`}
-        />
-      </span>
+      <span aria-hidden>{icon}</span>
+      <span>{label}</span>
+      {active && <span className="text-[#0A8434] font-bold ms-0.5">✓</span>}
     </button>
   )
 }

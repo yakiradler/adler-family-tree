@@ -22,8 +22,10 @@ import type { Member, FamilyTree } from '../types'
  * (issue #15) this hook becomes the single source of truth.
  */
 export default function JumpToFamilyTreeButton({ member }: { member: Member }) {
-  const { trees, activeTreeId, setActiveTreeId, addTree, profile, submitAccessRequest } =
-    useFamilyStore()
+  const {
+    trees, activeTreeId, setActiveTreeId, addTree, updateMember, profile,
+    submitAccessRequest,
+  } = useFamilyStore()
   const { lang } = useLang()
   const [busy, setBusy] = useState(false)
   const [confirm, setConfirm] = useState<'create' | 'request' | null>(null)
@@ -69,6 +71,12 @@ export default function JumpToFamilyTreeButton({ member }: { member: Member }) {
         created_by: profile?.id ?? 'demo',
       })
       if (created) {
+        // Carry the founding member into the new tree so it isn't empty
+        // — the user explicitly asked for "כשיוצרים עץ מאדם, תעביר גם
+        // את הכרטיסיה שלו". Without this, switching to the freshly
+        // created tree would render an empty canvas with nothing to
+        // anchor on.
+        await updateMember(member.id, { tree_id: created.id })
         setActiveTreeId(created.id)
         setOutcome('created')
       }

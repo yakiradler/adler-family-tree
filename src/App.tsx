@@ -32,15 +32,67 @@ export default function App() {
   const { lang } = useLang()
   const dir = isRTL(lang) ? 'rtl' : 'ltr'
 
-  // Seed demo data
+  // Seed demo data + persist edits across refreshes.
+  //
+  // In demo mode there's no Supabase backing the store, so a refresh
+  // wipes everything to the original seed (which is why the user kept
+  // seeing נתנאל reappear after marking him as ex). To make demo edits
+  // sticky we now mirror members/relationships/trees to localStorage and
+  // restore them on mount; the seed only loads on first run (or if the
+  // user explicitly clears the cache via admin → system → "Clear cache").
   useEffect(() => {
     if (!demoMode) return
+    const STORAGE_KEY = 'ft-demo-state-v1'
     useFamilyStore.getState().setProfile({
       id: 'demo',
       full_name: lang === 'he' ? 'משפחת אדלר' : 'Adler Family',
       role: 'admin',
     })
-    useFamilyStore.setState({ members: ADLER_MEMBERS, relationships: ADLER_RELATIONSHIPS })
+
+    // 1) Restore from localStorage if present, otherwise seed.
+    let restored = false
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as {
+          members?: typeof ADLER_MEMBERS
+          relationships?: typeof ADLER_RELATIONSHIPS
+          trees?: unknown[]
+        }
+        if (parsed.members && parsed.relationships) {
+          useFamilyStore.setState({
+            members: parsed.members,
+            relationships: parsed.relationships,
+            trees: (parsed.trees as never[]) ?? [],
+          })
+          restored = true
+        }
+      }
+    } catch { /* corrupted localStorage — fall through to seed */ }
+
+    if (!restored) {
+      useFamilyStore.setState({ members: ADLER_MEMBERS, relationships: ADLER_RELATIONSHIPS })
+    }
+
+    // 2) Subscribe to mutations and persist after every change.
+    const unsubscribe = useFamilyStore.subscribe((state, prev) => {
+      if (
+        state.members === prev.members &&
+        state.relationships === prev.relationships &&
+        state.trees === prev.trees
+      ) return
+      try {
+        window.localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            members: state.members,
+            relationships: state.relationships,
+            trees: state.trees,
+          }),
+        )
+      } catch { /* quota exceeded — fail silently */ }
+    })
+    return unsubscribe
   }, [demoMode, lang])
 
   // Supabase auth

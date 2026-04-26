@@ -90,6 +90,35 @@ export default function MemberPanel({ onClose }: Props) {
     }
   }, [member, members, relationships])
 
+  // Descendants by generation depth — used by the stat pills so a
+  // grandparent shows {ילדים, נכדים}, a great-grandparent additionally
+  // shows {נינים}, and so on. Walks the parent-child DAG breadth-first
+  // and bucketises by depth so each member is counted exactly once.
+  const descendantsByGen = useMemo(() => {
+    const out: number[] = []
+    if (!member) return out
+    let frontier = new Set<string>([member.id])
+    const visited = new Set<string>([member.id])
+    // Cap at 5 generations down — anything deeper is mostly noise on
+    // small screens and rarely meaningful for a family tree CRM.
+    for (let depth = 0; depth < 5; depth++) {
+      const next = new Set<string>()
+      for (const id of frontier) {
+        for (const r of relationships) {
+          if (r.type !== 'parent-child' || r.member_a_id !== id) continue
+          if (!visited.has(r.member_b_id)) {
+            visited.add(r.member_b_id)
+            next.add(r.member_b_id)
+          }
+        }
+      }
+      if (next.size === 0) break
+      out.push(next.size)
+      frontier = next
+    }
+    return out
+  }, [member, relationships])
+
   // Lineage info — male-only badge + daughterOf marker.
   const lineageInfo = useMemo(() => {
     if (!member) return null
@@ -207,12 +236,28 @@ export default function MemberPanel({ onClose }: Props) {
           </div>
         </div>
 
-        {/* Quick stat pills */}
+        {/* Quick stat pills — primary row */}
         <div className="px-5 mt-4 grid grid-cols-3 gap-2">
           <StatPill value={relationCount} label={t.family} />
           <StatPill value={children.length} label={t.genChildren} />
           <StatPill value={photos.length} label={t.photos} />
         </div>
+        {/* Descendant generations — only shown when there's at least
+            one grandchild. The labels evolve down the line:
+            ילדים → נכדים → נינים → בני־נינים → דור 5+. We skip depth=0
+            (children — already in the primary row) and start at depth=1. */}
+        {descendantsByGen.length > 1 && (
+          <div className="px-5 mt-2 grid grid-cols-4 gap-2">
+            {descendantsByGen.slice(1).map((count, i) => {
+              const label =
+                i === 0 ? t.descendantsGen1
+                : i === 1 ? t.descendantsGen2
+                : i === 2 ? t.descendantsGen3
+                : t.descendantsGen4
+              return <StatPill key={i} value={count} label={label} />
+            })}
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="px-5 mt-4">

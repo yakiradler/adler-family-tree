@@ -3,7 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Lock the document zoom so the page chrome (top-bar buttons,
+         filter chip, zoom controls) doesn't also scale when the user
+         pinches inside the tree. The tree has its own internal zoom
+         which we keep working via JS. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
     <title>family-tree</title>
   </head>
   <body>
