@@ -83,38 +83,92 @@ export default function App() {
 
   const isAuth = (demoMode && demoEntered) || !!session
   // Onboarding gate: real authenticated users (not demo) who have a profile
-  // loaded but no `onboarded_at` timestamp must complete the wizard before
-  // any other route renders. Profile may briefly be null while loading —
-  // we only force the wizard once we have a profile.
+  // loaded but no `onboarded_at` timestamp still need to complete the wizard
+  // before any in-app route renders. Profile may briefly be null while
+  // loading; we only treat the wizard as needed once we have a profile.
   const needsOnboarding =
     !demoMode && !!session && !!profile && !isOnboarded(profile)
+
+  // Helper: where should an authenticated user land after login?
+  const homeOrOnboarding = needsOnboarding ? '/onboarding' : '/home'
 
   return (
     <div dir={dir} className="min-h-screen">
       <HashRouter>
         <ThemeShell>
-          {needsOnboarding ? (
-            <OnboardingWizard />
-          ) : (
-            <Routes>
-              {/*
-                Routing model:
-                - "/"        → Dashboard for authenticated users; Landing
-                              (marketing) for everyone else. The CTAs on
-                              the landing page route into "/login".
-                - "/login"   → Auth page (login + signup tabs).
-                - "/welcome" → Direct link to landing even for authed users
-                              (lets them re-read the marketing if curious).
-              */}
-              <Route path="/login" element={isAuth ? <Navigate to="/" replace /> : <Auth demoMode={demoMode} onDemoEnter={() => setDemoEntered(true)} />} />
-              <Route path="/welcome" element={<Landing />} />
-              <Route path="/" element={isAuth ? <Dashboard demoMode={demoMode} /> : <Landing />} />
-              <Route path="/tree" element={isAuth ? <TreePage demoMode={demoMode} /> : <Navigate to="/login" replace />} />
-              <Route path="/birthdays" element={isAuth ? <BirthdayPage demoMode={demoMode} /> : <Navigate to="/login" replace />} />
-              <Route path="/admin" element={isAuth ? <AdminDashboard /> : <Navigate to="/login" replace />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          )}
+          <Routes>
+            {/*
+              Routing model:
+              - "/"           → Marketing Landing for ALL visitors
+                                (authed or not). The Landing's CTAs and
+                                Quick-Access menu route smartly based on
+                                auth + onboarding state.
+              - "/home"       → Dashboard. Requires auth; if not onboarded,
+                                redirects to /onboarding.
+              - "/onboarding" → Onboarding wizard. Requires auth.
+              - "/login"      → Auth page (login + signup tabs).
+            */}
+            <Route path="/" element={<Landing />} />
+            <Route
+              path="/login"
+              element={
+                isAuth
+                  ? <Navigate to={homeOrOnboarding} replace />
+                  : <Auth demoMode={demoMode} onDemoEnter={() => setDemoEntered(true)} />
+              }
+            />
+            <Route
+              path="/onboarding"
+              element={
+                !isAuth
+                  ? <Navigate to="/login" replace />
+                  : needsOnboarding
+                  ? <OnboardingWizard />
+                  : <Navigate to="/home" replace />
+              }
+            />
+            <Route
+              path="/home"
+              element={
+                !isAuth
+                  ? <Navigate to="/login" replace />
+                  : needsOnboarding
+                  ? <Navigate to="/onboarding" replace />
+                  : <Dashboard demoMode={demoMode} />
+              }
+            />
+            <Route
+              path="/tree"
+              element={
+                !isAuth
+                  ? <Navigate to="/login" replace />
+                  : needsOnboarding
+                  ? <Navigate to="/onboarding" replace />
+                  : <TreePage demoMode={demoMode} />
+              }
+            />
+            <Route
+              path="/birthdays"
+              element={
+                !isAuth
+                  ? <Navigate to="/login" replace />
+                  : needsOnboarding
+                  ? <Navigate to="/onboarding" replace />
+                  : <BirthdayPage demoMode={demoMode} />
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                !isAuth
+                  ? <Navigate to="/login" replace />
+                  : needsOnboarding
+                  ? <Navigate to="/onboarding" replace />
+                  : <AdminDashboard />
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </ThemeShell>
       </HashRouter>
     </div>

@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useLang, isRTL } from '../i18n/useT'
 import QuickAccessMenu from '../components/QuickAccessMenu'
+import { useAuthState } from '../hooks/useAuthState'
 
 /**
  * Marketing landing page — the unauthenticated entry point.
@@ -20,6 +21,11 @@ export default function Landing() {
   const { t, lang, toggleLang } = useLang()
   const rtl = isRTL(lang)
   const dir = rtl ? 'rtl' : 'ltr'
+  const { isAuth, target } = useAuthState()
+  // Primary CTA: signed-in users continue into the app (or finish onboarding);
+  // visitors are dropped on the signup tab so the funnel is one click long.
+  const primaryCtaPath = isAuth ? target : '/login?signup=1'
+  const secondaryCtaPath = isAuth ? target : '/login'
 
   return (
     <div dir={dir} className="relative min-h-screen overflow-hidden bg-mesh-gradient">
@@ -77,7 +83,7 @@ export default function Landing() {
             <motion.button
               whileHover={{ y: -2 }}
               whileTap={{ scale: 0.97 }}
-              onClick={() => navigate('/login?signup=1')}
+              onClick={() => navigate(primaryCtaPath)}
               className="group relative overflow-hidden rounded-full px-7 py-3.5 bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white text-[15px] font-semibold shadow-lg shadow-blue-300/40"
             >
               <span className="relative z-10 inline-flex items-center gap-2">
@@ -103,10 +109,10 @@ export default function Landing() {
 
             <motion.button
               whileTap={{ scale: 0.97 }}
-              onClick={() => navigate('/login')}
+              onClick={() => navigate(secondaryCtaPath)}
               className="glass-strong rounded-full px-6 py-3.5 text-[14px] font-semibold text-[#1C1C1E] hover:bg-white/95 transition"
             >
-              {t.landingCTASecondary}
+              {isAuth ? t.landingCTAReturning : t.landingCTASecondary}
             </motion.button>
           </div>
         </motion.div>

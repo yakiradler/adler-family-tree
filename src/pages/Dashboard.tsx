@@ -144,7 +144,7 @@ export default function Dashboard({ demoMode }: Props) {
             </button>
             {!demoMode && (
               <button
-                onClick={() => supabase.auth.signOut()}
+                onClick={async () => { await supabase.auth.signOut(); navigate('/') }}
                 title={t.signOut}
                 className="w-8 h-8 bg-white/70 backdrop-blur border border-white/50 rounded-xl flex items-center justify-center hover:bg-white/90 transition"
               >

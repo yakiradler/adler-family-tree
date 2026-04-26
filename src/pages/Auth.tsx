@@ -47,7 +47,7 @@ export default function Auth({ demoMode = false, onDemoEnter }: Props) {
           await new Promise((r) => setTimeout(r, 900))
         }
         onDemoEnter?.()
-        navigate('/')
+        navigate('/home')
         return
       }
       if (mode === 'signup') {
@@ -160,7 +160,7 @@ export default function Auth({ demoMode = false, onDemoEnter }: Props) {
           <div className="mt-4 flex flex-col items-center gap-2">
             <button
               type="button"
-              onClick={() => { onDemoEnter?.(); navigate('/') }}
+              onClick={() => { onDemoEnter?.(); navigate('/home') }}
               className="text-[12px] text-[#007AFF] font-semibold underline decoration-[#007AFF]/40 underline-offset-2 hover:decoration-[#007AFF] transition"
             >
               {lang === 'he' ? 'המשך כהדגמה (ללא הרשמה)' : 'Continue as demo (no signup)'}

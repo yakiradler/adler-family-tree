@@ -1,4 +1,5 @@
 import { useState, useRef, useMemo, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang } from '../../i18n/useT'
@@ -71,6 +72,7 @@ const TOTAL_STEPS = 4
 export default function OnboardingWizard() {
   const { profile, completeOnboarding, submitAccessRequest } = useFamilyStore()
   const { t } = useLang()
+  const navigate = useNavigate()
   const [step, setStep] = useState<Step>(1)
   const [a, setA] = useState<AnswerState>(blank)
   const [busy, setBusy] = useState(false)
@@ -503,6 +505,12 @@ export default function OnboardingWizard() {
                 </div>
                 <h2 className="text-sf-title2 font-bold text-[#1C1C1E]">{t.onbSubmitted}</h2>
                 <p className="text-sf-subhead text-[#636366] mt-2">{t.onbSubmittedDesc}</p>
+                <button
+                  onClick={() => navigate('/home')}
+                  className="mt-6 px-6 py-3 rounded-2xl bg-[var(--accent,#007AFF)] text-white text-sf-subhead font-semibold active:scale-[0.98] transition"
+                >
+                  {t.onbContinueToHome}
+                </button>
               </motion.div>
             )}
           </AnimatePresence>

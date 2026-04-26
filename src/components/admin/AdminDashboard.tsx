@@ -175,7 +175,7 @@ export default function AdminDashboard() {
         <div className="glass rounded-2xl px-3 py-2 flex items-center gap-3 shadow-glass-sm">
           <motion.button
             whileTap={{ scale: 0.9 }}
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/home')}
             className="w-8 h-8 rounded-xl bg-white/70 flex items-center justify-center border border-white/60"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">

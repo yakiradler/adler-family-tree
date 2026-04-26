@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLang, isRTL } from '../i18n/useT'
+import { useAuthState } from '../hooks/useAuthState'
 
 /**
  * Quick-access dropdown surfaced in highly visible places (Landing header,
@@ -26,6 +27,7 @@ export default function QuickAccessMenu({
   const { t, lang } = useLang()
   const rtl = isRTL(lang)
   const navigate = useNavigate()
+  const { isAuth, target } = useAuthState()
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -64,7 +66,9 @@ export default function QuickAccessMenu({
       icon: '👤',
       label: t.quickAccessPersonal,
       hint: t.quickAccessPersonalHint,
-      path: '/login',
+      // When already signed in, the personal area is the dashboard (or
+      // the onboarding wizard if the profile isn't yet finalised).
+      path: isAuth ? target : '/login',
       accent: 'from-[#007AFF] to-[#32ADE6]',
     },
     {
@@ -80,7 +84,9 @@ export default function QuickAccessMenu({
       icon: '🛠️',
       label: t.quickAccessAdmin,
       hint: t.quickAccessAdminHint,
-      path: '/login',
+      // Admins log in through the same Auth screen; if already signed in
+      // we send them to /admin directly (the route guards do the rest).
+      path: isAuth ? '/admin' : '/login',
       accent: 'from-[#5E5CE6] to-[#BF5AF2]',
     },
   ]
