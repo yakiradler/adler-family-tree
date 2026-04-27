@@ -1042,9 +1042,21 @@ interface AccessRequestCardProps {
 function AccessRequestCard({ request, index, t, onApprove, onReject }: AccessRequestCardProps) {
   const [grantRole, setGrantRole] = useState<UserRole>(request.requested_role)
   const answers = request.answers ?? {}
-  const relAnswer = (answers as Record<string, unknown>).relationship as string | undefined
-  const purposeAnswer = (answers as Record<string, unknown>).purpose as string | undefined
+  const a = answers as Record<string, unknown>
+  const relAnswer = a.relationship as string | undefined
+  const purposeAnswer = a.purpose as string | undefined
   const requestedLabel = ROLE_OPTIONS.find(r => r.key === request.requested_role)
+  // Tree-access requests are filed by JumpToFamilyTreeButton when a
+  // non-admin tries to open a tree they don't have access to. We
+  // surface them with a distinct purple chip so an admin scanning the
+  // queue can tell them apart from onboarding requests at a glance.
+  const isTreeAccess = a.kind === 'tree-access'
+  const treeAccessTarget = isTreeAccess ? (a.target_tree_name as string | undefined) : undefined
+  const treeAccessNote = isTreeAccess ? (a.note as string | undefined) : undefined
+  const viaMember =
+    isTreeAccess && a.via_member && typeof a.via_member === 'object'
+      ? (a.via_member as { name?: string }).name
+      : undefined
   return (
     <motion.div
       layout
@@ -1065,12 +1077,37 @@ function AccessRequestCard({ request, index, t, onApprove, onReject }: AccessReq
             </span>
           </p>
         </div>
-        <span className="flex-shrink-0 text-sf-caption2 bg-[#5AC8FA]/10 text-[#32ADE6] rounded-full px-2.5 py-1 font-medium">
-          {t.pendingStatus}
-        </span>
+        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+          <span className="text-sf-caption2 bg-[#5AC8FA]/10 text-[#32ADE6] rounded-full px-2.5 py-1 font-medium">
+            {t.pendingStatus}
+          </span>
+          {isTreeAccess && (
+            <span className="text-[10px] bg-[#5E5CE6]/12 text-[#5E5CE6] rounded-full px-2 py-0.5 font-bold">
+              🌲 {t.adminAccessTreeKind}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="bg-[#F2F2F7]/80 rounded-2xl p-3 mb-3 space-y-1.5">
+        {isTreeAccess && treeAccessTarget && (
+          <div className="flex items-baseline gap-2">
+            <span className="text-sf-caption text-[#8E8E93]">{t.adminAccessTreeTarget}:</span>
+            <span className="text-sf-caption font-bold text-[#5E5CE6]">{treeAccessTarget}</span>
+          </div>
+        )}
+        {isTreeAccess && viaMember && (
+          <div className="flex items-baseline gap-2">
+            <span className="text-sf-caption text-[#8E8E93]">{t.adminAccessTreeVia}:</span>
+            <span className="text-sf-caption font-medium text-[#1C1C1E]">{viaMember}</span>
+          </div>
+        )}
+        {isTreeAccess && treeAccessNote && (
+          <div className="flex items-baseline gap-2">
+            <span className="text-sf-caption text-[#8E8E93]">📝</span>
+            <span className="text-sf-caption text-[#1C1C1E] leading-snug">{treeAccessNote}</span>
+          </div>
+        )}
         {relAnswer && (
           <div className="flex items-baseline gap-2">
             <span className="text-sf-caption text-[#8E8E93]">{t.adminAccessAnswer_relationship}:</span>

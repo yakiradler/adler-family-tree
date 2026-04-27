@@ -119,7 +119,14 @@ export default function App() {
       write()
     })
 
-    if (!restored && demoMode) write()
+    // ALWAYS write once after the effect sets up — this serves two
+    // purposes:
+    //   • on first run (no prior storage) it writes the seed so the
+    //     user's next refresh has something to restore;
+    //   • on a v1/v2 → v3 migration it writes the migrated payload
+    //     under the new key (and the previous lines also drop the
+    //     legacy keys), so the next reload doesn't re-read stale data.
+    write()
     return unsubscribe
   }, [demoMode])
 
