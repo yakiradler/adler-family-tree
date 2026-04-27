@@ -442,12 +442,33 @@ export function buildLayout(
         cursorX += subtreeWidth(c) + H_GAP
       }
       // 2. Leaves clustered to the right of the non-leaves.
+      // We previously placed leaves directly via xPos.set, bypassing
+      // `assign`. That meant their spouses (set up in `placeSpousesAround`
+      // inside `assign`) NEVER got positioned, and Framer animated them
+      // into the default x=0 — i.e. all spouses ended up snapped to the
+      // visual-right edge of the canvas. Fix: place each leaf and its
+      // spouses inline so the couple stays adjacent in cluster modes.
       const leavesBase = cursorX
       for (let i = 0; i < leaves.length; i++) {
         const p = cluster.placements[i]
-        xPos.set(leaves[i], leavesBase + p.dx)
-        if (p.dy) yOffset.set(leaves[i], p.dy)
-        placed.add(leaves[i])
+        const leafId = leaves[i]
+        xPos.set(leafId, leavesBase + p.dx)
+        if (p.dy) yOffset.set(leafId, p.dy)
+        placed.add(leafId)
+        // Tuck the leaf's spouses immediately to its visual end. The
+        // cluster's `dx` already includes spacing for one node; we
+        // append spouses at increasing x so they remain glued to their
+        // partner regardless of the cluster's overall shape.
+        const leafSpouses = (spousesOf.get(leafId) ?? []).filter(
+          (sp) => !layoutRoots.includes(sp) && !placed.has(sp),
+        )
+        let spX = leavesBase + p.dx + NODE_W + COUPLE_GAP
+        for (const sp of leafSpouses) {
+          xPos.set(sp, spX)
+          if (p.dy) yOffset.set(sp, p.dy)
+          placed.add(sp)
+          spX += NODE_W + COUPLE_GAP
+        }
       }
       // 3. Parent centered above EVERYTHING (non-leaves + leaf cluster).
       const allLeftEdges: number[] = []

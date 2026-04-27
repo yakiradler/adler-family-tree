@@ -11,6 +11,7 @@ import TreePage from './pages/TreePage'
 import BirthdayPage from './pages/BirthdayPage'
 import AdminDashboard from './components/admin/AdminDashboard'
 import ThemeShell from './components/ThemeShell'
+import PersistenceIndicator from './components/PersistenceIndicator'
 import OnboardingWizard from './components/onboarding/OnboardingWizard'
 import { ADLER_MEMBERS, ADLER_RELATIONSHIPS } from './data/adlerFamily'
 import type { Session } from '@supabase/supabase-js'
@@ -43,6 +44,16 @@ export default function App() {
       role: 'admin',
     })
   }, [demoMode, lang])
+
+  // Dev-only: expose the store on window for browser-harness debugging
+  // (browser DevTools and the Preview MCP test harness can poke at the
+  // store without going through the UI). Stripped from production by
+  // the import.meta.env.DEV check at build time.
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      ;(window as unknown as { __ftStore?: typeof useFamilyStore }).__ftStore = useFamilyStore
+    }
+  }, [])
 
   // Persistence — runs in BOTH demo and Supabase modes.
   //
@@ -92,9 +103,13 @@ export default function App() {
 
     // Mirror mutations to localStorage. We use reference equality so
     // unrelated state changes (selectedMemberId, viewport) don't write.
+    // Failures (quota exceeded, private-mode) are SURFACED to the user
+    // via a custom event so the UI can flash a "save failed" toast —
+    // we used to swallow them silently, which is why a refresh would
+    // wipe a user's edits without any warning.
     const write = () => {
+      const s = useFamilyStore.getState()
       try {
-        const s = useFamilyStore.getState()
         window.localStorage.setItem(
           STORAGE_KEY,
           JSON.stringify({
@@ -105,9 +120,33 @@ export default function App() {
             trees: s.trees,
           }),
         )
-        // Drop legacy entries once we've successfully written v3.
         for (const k of LEGACY_KEYS) window.localStorage.removeItem(k)
-      } catch { /* quota / private mode — silent */ }
+        window.dispatchEvent(new CustomEvent('ft-saved'))
+      } catch (err) {
+        const reason =
+          err instanceof Error && err.name === 'QuotaExceededError'
+            ? 'quota'
+            : 'unknown'
+        window.dispatchEvent(new CustomEvent('ft-save-failed', { detail: { reason } }))
+        // Last-ditch attempt: if quota exceeded, drop the photo arrays
+        // (which dwarf everything else) and retry. The user keeps their
+        // text data and the failure becomes visible.
+        if (reason === 'quota') {
+          try {
+            window.localStorage.setItem(
+              STORAGE_KEY,
+              JSON.stringify({
+                v: 3,
+                ts: Date.now(),
+                _photosStripped: true,
+                members: s.members.map((m) => ({ ...m, photos: undefined, photo_url: undefined })),
+                relationships: s.relationships,
+                trees: s.trees,
+              }),
+            )
+          } catch { /* still won't fit — give up */ }
+        }
+      }
     }
 
     const unsubscribe = useFamilyStore.subscribe((state, prev) => {
@@ -171,6 +210,9 @@ export default function App() {
 
   return (
     <div dir={dir} className="min-h-screen">
+      {/* Persistence toast — fixed-positioned, listens for save events
+          dispatched by the store-subscriber. */}
+      <PersistenceIndicator />
       <HashRouter>
         <ThemeShell>
           <Routes>
