@@ -327,9 +327,17 @@ export function buildLayout(
     processedAsSpouse.add(id)
   }
 
-  // A child is a "leaf" iff it has no familyChildrenOf entry (no descendants
-  // through itself or any spouse).
-  const isLeaf = (id: string) => !(familyChildrenOf.get(id)?.length)
+  // A "leaf" for layout purposes = no descendants AND no spouse. We
+  // exclude married childless members from the leaf cluster because the
+  // cluster's `dx` placements are sized for ONE node per slot — when a
+  // leaf has a spouse, the partner overflows out of the slot and the
+  // user perceives it as "spouses jumping to the side". By promoting
+  // married childless members to non-leaves, each gets its own
+  // horizontal subtree slot wide enough for the couple, keeping the
+  // pair glued together in every layout mode.
+  const isLeaf = (id: string) =>
+    !(familyChildrenOf.get(id)?.length) &&
+    !((spousesOf.get(id) ?? []).length)
 
   // Split children into non-leaves (need horizontal subtree slots) and
   // leaves (can be clustered). This lets the alternate modes actually trigger
