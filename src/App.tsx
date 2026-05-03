@@ -84,17 +84,31 @@ export default function App() {
         if (p) { parsed = p; break }
       }
     }
-    if (parsed && Array.isArray(parsed.members) && Array.isArray(parsed.relationships)) {
+    // Treat an empty parsed payload as "no usable state" — early
+     // builds occasionally wrote out [] when fetchMembers raced ahead
+     // of hydration, and we don't want a stale empty snapshot to
+     // suppress the Adler seed forever.
+    const hasUsableState =
+      parsed &&
+      Array.isArray(parsed.members) &&
+      Array.isArray(parsed.relationships) &&
+      parsed.members.length > 0
+    if (hasUsableState) {
       useFamilyStore.setState({
-        members: parsed.members as typeof ADLER_MEMBERS,
-        relationships: parsed.relationships as typeof ADLER_RELATIONSHIPS,
-        trees: (Array.isArray(parsed.trees) ? parsed.trees : []) as never[],
+        members: parsed!.members as typeof ADLER_MEMBERS,
+        relationships: parsed!.relationships as typeof ADLER_RELATIONSHIPS,
+        trees: (Array.isArray(parsed!.trees) ? parsed!.trees : []) as never[],
       })
       restored = true
     }
 
-    // First run + demo mode → seed the Adler family.
-    if (!restored && demoMode) {
+    // First run (or recovered-from-empty) → seed the Adler family.
+    // We seed in BOTH demo and Supabase modes: in production the
+    // backing Supabase project is empty, so without a seed the user
+    // would land on a blank tree. Supabase mode then enriches /
+    // overwrites this only on first sync, never on refresh
+    // (see useFamilyStore.fetchMembers).
+    if (!restored) {
       useFamilyStore.setState({
         members: ADLER_MEMBERS,
         relationships: ADLER_RELATIONSHIPS,
