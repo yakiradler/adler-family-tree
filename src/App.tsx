@@ -85,19 +85,19 @@ export default function App() {
       }
     }
     // Treat an empty parsed payload as "no usable state" — early
-     // builds occasionally wrote out [] when fetchMembers raced ahead
-     // of hydration, and we don't want a stale empty snapshot to
-     // suppress the Adler seed forever.
-    const hasUsableState =
+    // builds occasionally wrote out [] when fetchMembers raced ahead
+    // of hydration, and we don't want a stale empty snapshot to
+    // suppress the Adler seed forever.
+    if (
       parsed &&
       Array.isArray(parsed.members) &&
-      Array.isArray(parsed.relationships) &&
-      parsed.members.length > 0
-    if (hasUsableState) {
+      parsed.members.length > 0 &&
+      Array.isArray(parsed.relationships)
+    ) {
       useFamilyStore.setState({
-        members: parsed!.members as typeof ADLER_MEMBERS,
-        relationships: parsed!.relationships as typeof ADLER_RELATIONSHIPS,
-        trees: (Array.isArray(parsed!.trees) ? parsed!.trees : []) as never[],
+        members: parsed.members as typeof ADLER_MEMBERS,
+        relationships: parsed.relationships as typeof ADLER_RELATIONSHIPS,
+        trees: (Array.isArray(parsed.trees) ? parsed.trees : []) as never[],
       })
       restored = true
     }
