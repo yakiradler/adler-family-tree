@@ -5,6 +5,26 @@ import type {
   AccessRequest, UserRole, FamilyTree,
 } from '../types'
 
+// Surface Supabase write failures to the UI. Until now every mutation
+// swallowed errors silently in a try/catch, which is why an
+// RLS-blocked update could appear to "save" (optimistic local state +
+// green toast) but vanish on refresh once fetchMembers/fetchRelationships
+// pulled the unchanged server state back. The PersistenceIndicator
+// listens for this event and shows a red "save failed" pill so the
+// user knows their change didn't reach the database.
+function reportSupabaseFailure(op: string, err: unknown) {
+  if (typeof window === 'undefined') return
+  const message =
+    err instanceof Error ? err.message
+    : typeof err === 'object' && err && 'message' in err ? String((err as { message: unknown }).message)
+    : 'unknown'
+  // eslint-disable-next-line no-console
+  console.warn(`[supabase ${op}]`, err)
+  window.dispatchEvent(
+    new CustomEvent('ft-supabase-failed', { detail: { op, message } }),
+  )
+}
+
 interface FamilyState {
   profile: Profile | null
   members: Member[]
@@ -84,14 +104,47 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   setSelectedMemberId: (selectedMemberId) => set({ selectedMemberId }),
 
   fetchMembers: async () => {
+    // Sync from Supabase WITHOUT clobbering the local store. The
+    // localStorage layer hydrates first (App.tsx), so by the time we
+    // run there's already an authoritative state. We only overlay the
+    // server payload on top, and we keep any local-only members that
+    // the server doesn't know about (offline edits, optimistic inserts
+    // that haven't propagated, RLS-blocked rows, schema-missing rows).
+    //
+    // Earlier this did `set({ members: data ?? [] })`, which on a
+    // refresh would silently wipe the user's last edits whenever the
+    // Supabase query returned an empty array (RLS, missing table) or
+    // returned the server's older snapshot — exactly the "I changed
+    // a spouse status and refresh undid it" bug we're fixing.
     set({ isLoading: true })
-    const { data } = await supabase.from('members').select('*').order('birth_date', { ascending: true })
-    set({ members: data ?? [], isLoading: false })
+    const { data, error } = await supabase
+      .from('members')
+      .select('*')
+      .order('birth_date', { ascending: true })
+    if (error || !Array.isArray(data) || data.length === 0) {
+      set({ isLoading: false })
+      return
+    }
+    set((s) => {
+      const serverIds = new Set((data as Member[]).map((m) => m.id))
+      const localOnly = s.members.filter((m) => !serverIds.has(m.id))
+      return {
+        members: [...(data as Member[]), ...localOnly],
+        isLoading: false,
+      }
+    })
   },
 
   fetchRelationships: async () => {
-    const { data } = await supabase.from('relationships').select('*')
-    set({ relationships: data ?? [] })
+    // Same merge strategy as fetchMembers — never clobber a populated
+    // local store with an empty/older server response.
+    const { data, error } = await supabase.from('relationships').select('*')
+    if (error || !Array.isArray(data) || data.length === 0) return
+    set((s) => {
+      const serverIds = new Set((data as Relationship[]).map((r) => r.id))
+      const localOnly = s.relationships.filter((r) => !serverIds.has(r.id))
+      return { relationships: [...(data as Relationship[]), ...localOnly] }
+    })
   },
 
   fetchEditRequests: async () => {
@@ -124,12 +177,13 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     const optimistic: Member = { ...member, id: localId } as Member
     set((s) => ({ members: [...s.members, optimistic] }))
     try {
-      const { data } = await supabase.from('members').insert(member).select().single()
+      const { data, error } = await supabase.from('members').insert(member).select().single()
+      if (error) reportSupabaseFailure('addMember', error)
       if (data) {
         set((s) => ({ members: s.members.map((m) => (m.id === localId ? (data as Member) : m)) }))
         return data as Member
       }
-    } catch { /* offline */ }
+    } catch (err) { reportSupabaseFailure('addMember', err) }
     return optimistic
   },
 
@@ -139,12 +193,18 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     set((s) => ({
       members: s.members.map((m) => (m.id === id ? { ...m, ...updates } : m)),
     }))
-    try { await supabase.from('members').update(updates).eq('id', id) } catch { /* offline */ }
+    try {
+      const { error } = await supabase.from('members').update(updates).eq('id', id)
+      if (error) reportSupabaseFailure('updateMember', error)
+    } catch (err) { reportSupabaseFailure('updateMember', err) }
   },
 
   deleteMember: async (id) => {
     set((s) => ({ members: s.members.filter((m) => m.id !== id) }))
-    try { await supabase.from('members').delete().eq('id', id) } catch { /* offline */ }
+    try {
+      const { error } = await supabase.from('members').delete().eq('id', id)
+      if (error) reportSupabaseFailure('deleteMember', error)
+    } catch (err) { reportSupabaseFailure('deleteMember', err) }
   },
 
   addRelationship: async (rel) => {
@@ -154,7 +214,8 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     const optimistic: Relationship = { ...rel, id: localId }
     set((s) => ({ relationships: [...s.relationships, optimistic] }))
     try {
-      const { data } = await supabase.from('relationships').insert(rel).select().single()
+      const { data, error } = await supabase.from('relationships').insert(rel).select().single()
+      if (error) reportSupabaseFailure('addRelationship', error)
       if (data) {
         set((s) => ({
           relationships: s.relationships.map((r) =>
@@ -162,7 +223,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
           ),
         }))
       }
-    } catch { /* offline — keep optimistic row */ }
+    } catch (err) { reportSupabaseFailure('addRelationship', err) }
   },
 
   updateRelationship: async (id, updates) => {
@@ -174,12 +235,18 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
         r.id === id ? { ...r, ...updates } : r,
       ),
     }))
-    try { await supabase.from('relationships').update(updates).eq('id', id) } catch { /* offline */ }
+    try {
+      const { error } = await supabase.from('relationships').update(updates).eq('id', id)
+      if (error) reportSupabaseFailure('updateRelationship', error)
+    } catch (err) { reportSupabaseFailure('updateRelationship', err) }
   },
 
   deleteRelationship: async (id) => {
     set((s) => ({ relationships: s.relationships.filter((r) => r.id !== id) }))
-    try { await supabase.from('relationships').delete().eq('id', id) } catch { /* offline */ }
+    try {
+      const { error } = await supabase.from('relationships').delete().eq('id', id)
+      if (error) reportSupabaseFailure('deleteRelationship', error)
+    } catch (err) { reportSupabaseFailure('deleteRelationship', err) }
   },
 
   approveEditRequest: async (requestId) => {
