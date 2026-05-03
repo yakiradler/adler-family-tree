@@ -265,25 +265,37 @@ export default function App() {
                   : <Auth demoMode={demoMode} onDemoEnter={() => setDemoEntered(true)} />
               }
             />
+            {/*
+              Protected routes redirect to "/" (the Landing marketing
+              page), NOT to "/login". Two reasons:
+                • Sign-out should drop the user on the public face of
+                  the site, not on a bare auth screen.
+                • A logged-out visitor who pastes a deep link should
+                  also see the marketing page first; from there they
+                  can pick "התחבר" or "הרשמה" themselves.
+              Eliminates the sign-out race where the route guard fires
+              before the click handler's navigate('/') and momentarily
+              flashes /login.
+            */}
             <Route
               path="/onboarding"
-              element={!isAuth ? <Navigate to="/login" replace /> : <OnboardingWizard />}
+              element={!isAuth ? <Navigate to="/" replace /> : <OnboardingWizard />}
             />
             <Route
               path="/home"
-              element={!isAuth ? <Navigate to="/login" replace /> : <Dashboard demoMode={demoMode} />}
+              element={!isAuth ? <Navigate to="/" replace /> : <Dashboard demoMode={demoMode} />}
             />
             <Route
               path="/tree"
-              element={!isAuth ? <Navigate to="/login" replace /> : <TreePage demoMode={demoMode} />}
+              element={!isAuth ? <Navigate to="/" replace /> : <TreePage demoMode={demoMode} />}
             />
             <Route
               path="/birthdays"
-              element={!isAuth ? <Navigate to="/login" replace /> : <BirthdayPage demoMode={demoMode} />}
+              element={!isAuth ? <Navigate to="/" replace /> : <BirthdayPage demoMode={demoMode} />}
             />
             <Route
               path="/admin"
-              element={!isAuth ? <Navigate to="/login" replace /> : <AdminDashboard />}
+              element={!isAuth ? <Navigate to="/" replace /> : <AdminDashboard />}
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
