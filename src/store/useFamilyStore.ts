@@ -104,18 +104,24 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   setSelectedMemberId: (selectedMemberId) => set({ selectedMemberId }),
 
   fetchMembers: async () => {
-    // Sync from Supabase WITHOUT clobbering the local store. The
-    // localStorage layer hydrates first (App.tsx), so by the time we
-    // run there's already an authoritative state. We only overlay the
-    // server payload on top, and we keep any local-only members that
-    // the server doesn't know about (offline edits, optimistic inserts
-    // that haven't propagated, RLS-blocked rows, schema-missing rows).
+    // ── localStorage is the source of truth ──────────────────────────
+    // Original code did `set({ members: data ?? [] })`, which silently
+    // wiped local edits whenever Supabase returned [] (RLS, missing
+    // table) or its older snapshot. The intermediate "merge" fix kept
+    // local-only rows but still let server rows OVERWRITE locally
+    // edited rows, so a spouse-status change that didn't make it past
+    // RLS got reverted on the next refresh — same bug, subtler form.
     //
-    // Earlier this did `set({ members: data ?? [] })`, which on a
-    // refresh would silently wipe the user's last edits whenever the
-    // Supabase query returned an empty array (RLS, missing table) or
-    // returned the server's older snapshot — exactly the "I changed
-    // a spouse status and refresh undid it" bug we're fixing.
+    // We now treat the store (hydrated from localStorage in App.tsx)
+    // as authoritative. Supabase is only consulted to seed an empty
+    // store on first run; after that, fetch never touches existing
+    // rows. Admin can force a full reload via the AdminDashboard
+    // "refresh store" button if a real cross-device sync is needed.
+    const current = get().members
+    if (current.length > 0) {
+      set({ isLoading: false })
+      return
+    }
     set({ isLoading: true })
     const { data, error } = await supabase
       .from('members')
@@ -125,26 +131,16 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       set({ isLoading: false })
       return
     }
-    set((s) => {
-      const serverIds = new Set((data as Member[]).map((m) => m.id))
-      const localOnly = s.members.filter((m) => !serverIds.has(m.id))
-      return {
-        members: [...(data as Member[]), ...localOnly],
-        isLoading: false,
-      }
-    })
+    set({ members: data as Member[], isLoading: false })
   },
 
   fetchRelationships: async () => {
-    // Same merge strategy as fetchMembers — never clobber a populated
-    // local store with an empty/older server response.
+    // Same authority rule as fetchMembers — only seed an empty store.
+    const current = get().relationships
+    if (current.length > 0) return
     const { data, error } = await supabase.from('relationships').select('*')
     if (error || !Array.isArray(data) || data.length === 0) return
-    set((s) => {
-      const serverIds = new Set((data as Relationship[]).map((r) => r.id))
-      const localOnly = s.relationships.filter((r) => !serverIds.has(r.id))
-      return { relationships: [...(data as Relationship[]), ...localOnly] }
-    })
+    set({ relationships: data as Relationship[] })
   },
 
   fetchEditRequests: async () => {
