@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { flushSync } from 'react-dom'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
@@ -37,22 +38,48 @@ export default function Auth({ demoMode = false, onDemoEnter }: Props) {
     setLoading(true)
     try {
       if (demoMode) {
-        // No real backend yet — simulate success and route to demo dashboard so
-        // the user still experiences the full flow end-to-end.
+        // No real backend yet — simulate success and route the user
+        // through the rest of the funnel so the demo experience matches
+        // what production will do once Supabase is wired up:
+        //   • signup → onboarding wizard (collects family details, then
+        //     drops the user on /home itself)
+        //   • login  → straight to /home
         await new Promise((r) => setTimeout(r, 450))
         if (mode === 'signup') {
           setSuccess(lang === 'he'
-            ? 'רישום הודגם בהצלחה! ברגע ש-Supabase יחובר, הנתונים ייסגנכרנו באמת.'
-            : 'Signup demo successful! Once Supabase is connected, accounts will sync for real.')
-          await new Promise((r) => setTimeout(r, 900))
+            ? 'רישום הודגם בהצלחה! ממשיכים לשאלון…'
+            : 'Signup demo successful! Continuing to the wizard…')
+          await new Promise((r) => setTimeout(r, 700))
+          // flushSync forces the demo-entered flag to land in App's
+          // state BEFORE we trigger navigation. Otherwise React 18
+          // batches the setState with the navigate, /onboarding renders
+          // with isAuth still false, redirects to /login, which then
+          // (now that the flag flushed) bounces to /home — and the
+          // user never sees the wizard.
+          flushSync(() => { onDemoEnter?.() })
+          navigate('/onboarding')
+          return
         }
-        onDemoEnter?.()
+        flushSync(() => { onDemoEnter?.() })
         navigate('/home')
         return
       }
       if (mode === 'signup') {
-        const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: fullName } } })
+        const { data, error } = await supabase.auth.signUp({
+          email, password, options: { data: { full_name: fullName } },
+        })
         if (error) throw error
+        // Supabase returns a session immediately when email-confirmation
+        // is disabled in the project settings. In that case we send the
+        // user to the wizard right away — no point making them confirm
+        // an email and re-login first. When confirmation IS required,
+        // there's no session yet, so we keep showing the existing
+        // "check your email" prompt and the wizard runs after the user
+        // confirms + logs in.
+        if (data.session) {
+          navigate('/onboarding')
+          return
+        }
         setSuccess(t.authCheckEmail)
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
