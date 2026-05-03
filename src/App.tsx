@@ -158,6 +158,14 @@ export default function App() {
       write()
     })
 
+    // Safety net: write to localStorage whenever the user navigates away
+    // or closes the tab. This catches any mutation that escaped the
+    // subscribe callback (e.g. a rapid succession of updates where the
+    // subscriber fired between two flushes and the last state wasn't
+    // written yet).
+    const onUnload = () => write()
+    window.addEventListener('beforeunload', onUnload)
+
     // ALWAYS write once after the effect sets up — this serves two
     // purposes:
     //   • on first run (no prior storage) it writes the seed so the
@@ -166,7 +174,10 @@ export default function App() {
     //     under the new key (and the previous lines also drop the
     //     legacy keys), so the next reload doesn't re-read stale data.
     write()
-    return unsubscribe
+    return () => {
+      unsubscribe()
+      window.removeEventListener('beforeunload', onUnload)
+    }
   }, [demoMode])
 
   // Supabase auth

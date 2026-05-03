@@ -30,11 +30,13 @@ function formatDate(iso: string | undefined, lang: 'he' | 'en') {
 }
 
 export default function MemberPanel({ onClose }: Props) {
-  const { members, relationships, selectedMemberId, setSelectedMemberId, profile } = useFamilyStore()
+  const { members, relationships, selectedMemberId, setSelectedMemberId, profile, deleteMember, deleteRelationship } = useFamilyStore()
   const { t, lang } = useLang()
   const [tab, setTab] = useState<'about' | 'family' | 'photos'>('about')
   const [editOpen, setEditOpen] = useState(false)
   const [relOpen, setRelOpen] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const member = useMemo(
     () => members.find(m => m.id === selectedMemberId) ?? null,
@@ -143,6 +145,23 @@ export default function MemberPanel({ onClose }: Props) {
     // "edit your immediate family" case until that link is added.
   })
   const relAllowed = canManageRelationships(profile)
+  // Delete is admin-only — destructive, can't be undone.
+  const deleteAllowed = profile?.role === 'admin'
+
+  const handleDelete = async () => {
+    if (!member || deleting) return
+    setDeleting(true)
+    // First remove all relationships that involve this member so the tree
+    // doesn't end up with dangling references.
+    const memberRels = relationships.filter(
+      r => r.member_a_id === member.id || r.member_b_id === member.id,
+    )
+    await Promise.all(memberRels.map(r => deleteRelationship(r.id)))
+    await deleteMember(member.id)
+    setDeleting(false)
+    setDeleteConfirmOpen(false)
+    onClose()
+  }
 
   const age = member.birth_date
     ? (member.death_date
@@ -406,7 +425,7 @@ export default function MemberPanel({ onClose }: Props) {
         </div>
 
         {/* Action buttons: full-width stacked rows so labels are always readable */}
-        {(editAllowed || relAllowed || member.last_name) && (
+        {(editAllowed || relAllowed || deleteAllowed || member.last_name) && (
           <div className="px-5 pb-5 pt-1 space-y-2">
             {/* Surname-aware tree jump — only renders if the member's
                 surname doesn't match the active tree (handled inside
@@ -443,12 +462,89 @@ export default function MemberPanel({ onClose }: Props) {
               <span>{t.relManageBtn}</span>
             </button>
             )}
+            {/* ── Delete (admin-only, destructive) ── */}
+            {deleteAllowed && (
+            <button
+              type="button"
+              onClick={() => setDeleteConfirmOpen(true)}
+              aria-label={t.panelDeleteMember}
+              title={t.panelDeleteMember}
+              className="w-full py-2.5 rounded-2xl border border-[#FF3B30]/30 text-[#FF3B30] text-sf-subhead font-semibold active:scale-[0.98] transition flex items-center justify-center gap-2 hover:bg-[#FF3B30]/5"
+            >
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+                <path d="M3 4h9M6 4V2.5h3V4M5.5 4v7.5h4V4" stroke="#FF3B30" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span>{t.panelDeleteMember}</span>
+            </button>
+            )}
           </div>
         )}
       </div>
 
       <EditMemberModal open={editOpen} onClose={() => setEditOpen(false)} member={member} />
       <RelationshipManager open={relOpen} onClose={() => setRelOpen(false)} member={member} />
+
+      {/* ── Delete confirmation dialog ── */}
+      <AnimatePresence>
+        {deleteConfirmOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 flex items-center justify-center rounded-[28px] bg-black/40 backdrop-blur-sm"
+            onClick={() => !deleting && setDeleteConfirmOpen(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.92, opacity: 0 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              className="mx-4 rounded-3xl bg-white shadow-glass-lg p-6 space-y-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-[#FF3B30]/10 flex items-center justify-center flex-shrink-0">
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <path d="M3.5 5h11M7 5V3.5h4V5M6.5 5v9h5V5" stroke="#FF3B30" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sf-subhead font-bold text-[#1C1C1E]">{t.panelDeleteConfirmTitle}</p>
+                  <p className="text-[11px] text-[#636366] font-semibold mt-0.5">
+                    {member.first_name} {member.last_name}
+                  </p>
+                </div>
+              </div>
+              <p className="text-sf-footnote text-[#3C3C43] leading-relaxed">
+                {t.panelDeleteConfirmBody}
+              </p>
+              <div className={`flex gap-2 ${isRTL(lang) ? 'flex-row-reverse' : ''}`}>
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirmOpen(false)}
+                  disabled={deleting}
+                  className="flex-1 py-2.5 rounded-2xl bg-[#F2F2F7] text-[#1C1C1E] text-sf-subhead font-semibold disabled:opacity-50"
+                >
+                  {t.panelDeleteConfirmNo}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="flex-1 py-2.5 rounded-2xl bg-[#FF3B30] text-white text-sf-subhead font-bold disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  {deleting ? (
+                    <svg className="animate-spin" width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <circle cx="7" cy="7" r="5.5" stroke="white" strokeWidth="2" strokeDasharray="20 14" />
+                    </svg>
+                  ) : null}
+                  {t.panelDeleteConfirmYes}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

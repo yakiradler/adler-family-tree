@@ -494,6 +494,17 @@ export const translations = {
     onbWaitingTitle: 'ממתינים לאישור',
     onbWaitingDesc: 'המנהל יבדוק את בקשת הגישה שלך. תקבל הודעה עם קבלת ההחלטה.',
     onbInviteInvalid: 'קוד הזמנה לא תקין',
+
+    // Delete member (MemberPanel)
+    panelDeleteMember: 'מחק חבר מהעץ',
+    panelDeleteConfirmTitle: 'מחיקת חבר',
+    panelDeleteConfirmBody: 'פעולה זו תמחק את החבר ואת כל הקשרים שלו לצמיתות. לא ניתן לבטל.',
+    panelDeleteConfirmYes: 'כן, מחק',
+    panelDeleteConfirmNo: 'ביטול',
+
+    // Delete tree (TreeSwitcher)
+    treeDeleteTree: 'מחק עץ',
+    treeDeleteTreeConfirm: 'למחוק את העץ? כל החברים ישויכו לעץ הראשי.',
   },
 
   en: {
@@ -978,6 +989,17 @@ export const translations = {
     onbWaitingTitle: 'Awaiting approval',
     onbWaitingDesc: 'The admin is reviewing your access request. You\u2019ll be notified once they decide.',
     onbInviteInvalid: 'Invalid invite code',
+
+    // Delete member (MemberPanel)
+    panelDeleteMember: 'Delete from tree',
+    panelDeleteConfirmTitle: 'Delete member',
+    panelDeleteConfirmBody: 'This will permanently delete the member and all their relationships. This cannot be undone.',
+    panelDeleteConfirmYes: 'Yes, delete',
+    panelDeleteConfirmNo: 'Cancel',
+
+    // Delete tree (TreeSwitcher)
+    treeDeleteTree: 'Delete tree',
+    treeDeleteTreeConfirm: 'Delete this tree? Members will move back to the main tree.',
   },
 } as const
 

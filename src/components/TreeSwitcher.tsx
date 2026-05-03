@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang } from '../i18n/useT'
+import type { FamilyTree } from '../types/index'
 
 /**
  * Tree switcher — a Slack-style workspace picker for households that
@@ -16,13 +17,15 @@ export default function TreeSwitcher({
 }: {
   variant?: 'compact' | 'full'
 }) {
-  const { trees, activeTreeId, setActiveTreeId, addTree, profile } = useFamilyStore()
+  const { trees, activeTreeId, setActiveTreeId, addTree, deleteTree, profile } = useFamilyStore()
   const { t, lang } = useLang()
   const [open, setOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [draftName, setDraftName] = useState('')
   const [draftDesc, setDraftDesc] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<FamilyTree | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  const isAdmin = profile?.role === 'admin'
 
   useEffect(() => {
     if (!open) return
@@ -55,6 +58,12 @@ export default function TreeSwitcher({
     setDraftName('')
     setDraftDesc('')
     setOpen(false)
+  }
+
+  const confirmDeleteTree = async () => {
+    if (!deleteTarget) return
+    await deleteTree(deleteTarget.id)
+    setDeleteTarget(null)
   }
 
   return (
@@ -115,17 +124,33 @@ export default function TreeSwitcher({
 
             {/* Custom trees */}
             {trees.map((tt) => (
-              <TreeRow
-                key={tt.id}
-                label={tt.name}
-                hint={tt.description}
-                color={tt.color ?? '#5E5CE6'}
-                active={activeTreeId === tt.id}
-                onClick={() => {
-                  setActiveTreeId(tt.id)
-                  setOpen(false)
-                }}
-              />
+              <div key={tt.id} className="flex items-center gap-1">
+                <div className="flex-1 min-w-0">
+                  <TreeRow
+                    label={tt.name}
+                    hint={tt.description}
+                    color={tt.color ?? '#5E5CE6'}
+                    active={activeTreeId === tt.id}
+                    onClick={() => {
+                      setActiveTreeId(tt.id)
+                      setOpen(false)
+                    }}
+                  />
+                </div>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    title={t.treeDeleteTree}
+                    aria-label={t.treeDeleteTree}
+                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(tt) }}
+                    className="flex-shrink-0 w-7 h-7 rounded-xl flex items-center justify-center text-[#FF3B30]/60 hover:text-[#FF3B30] hover:bg-[#FF3B30]/8 transition"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                      <path d="M2.5 3.5h8M5 3.5V2.5h3v1M4.5 3.5v6.5h4V3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                )}
+              </div>
             ))}
 
             {/* Create-tree form */}
@@ -176,6 +201,57 @@ export default function TreeSwitcher({
                 </button>
               )}
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Delete-tree confirmation ── */}
+      <AnimatePresence>
+        {deleteTarget && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+            onClick={() => setDeleteTarget(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.92, opacity: 0 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              className="mx-6 rounded-3xl bg-white shadow-glass-lg p-6 space-y-4 w-full max-w-xs"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-[#FF3B30]/10 flex items-center justify-center flex-shrink-0">
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <path d="M3.5 5h11M7 5V3.5h4V5M6.5 5v9h5V5" stroke="#FF3B30" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sf-subhead font-bold text-[#1C1C1E]">{t.treeDeleteTree}</p>
+                  <p className="text-[11px] text-[#636366] font-semibold mt-0.5">{deleteTarget.name}</p>
+                </div>
+              </div>
+              <p className="text-sf-footnote text-[#3C3C43] leading-relaxed">{t.treeDeleteTreeConfirm}</p>
+              <div className={`flex gap-2 ${lang === 'he' ? 'flex-row-reverse' : ''}`}>
+                <button
+                  type="button"
+                  onClick={() => setDeleteTarget(null)}
+                  className="flex-1 py-2.5 rounded-2xl bg-[#F2F2F7] text-[#1C1C1E] text-sf-subhead font-semibold"
+                >
+                  {lang === 'he' ? 'ביטול' : 'Cancel'}
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDeleteTree}
+                  className="flex-1 py-2.5 rounded-2xl bg-[#FF3B30] text-white text-sf-subhead font-bold"
+                >
+                  {lang === 'he' ? 'מחק' : 'Delete'}
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

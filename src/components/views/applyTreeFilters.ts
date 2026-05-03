@@ -57,6 +57,53 @@ export function applyTreeFilters(
       .map(m => m.id),
   )
 
+  // Cascade: if all of a member's parents AND spouses are hidden (not in
+  // `allowed`), that member has no structural connection to the visible
+  // tree and would show up as an isolated orphan on the side. Remove them
+  // too, unless they have visible children (i.e. they're a root ancestor
+  // of a visible subtree). This iterates to convergence because each
+  // pass can orphan previously-connected members.
+  const allHidden = new Set(members.filter(m => m.hidden).map(m => m.id))
+  let removedAny = true
+  while (removedAny) {
+    removedAny = false
+    for (const id of [...allowed]) {
+      // Already explicitly hidden — covered above.
+      if (allHidden.has(id)) continue
+      // Keep members that have at least one visible parent.
+      const visibleParents = relationships.filter(
+        r => r.type === 'parent-child' && r.member_b_id === id && allowed.has(r.member_a_id),
+      )
+      if (visibleParents.length > 0) continue
+      // Keep members that have at least one visible child.
+      const visibleChildren = relationships.filter(
+        r => r.type === 'parent-child' && r.member_a_id === id && allowed.has(r.member_b_id),
+      )
+      if (visibleChildren.length > 0) continue
+      // Keep members that have at least one visible current spouse.
+      const visibleSpouses = relationships.filter(
+        r => r.type === 'spouse' && (r.status ?? 'current') === 'current' &&
+          (r.member_a_id === id || r.member_b_id === id) &&
+          allowed.has(r.member_a_id === id ? r.member_b_id : r.member_a_id),
+      )
+      if (visibleSpouses.length > 0) continue
+      // No visible connections — this member is an orphan island introduced
+      // by hiding one of their relatives. Remove them so they don't appear
+      // floating alone at the edge of the canvas.
+      // Exception: if NO filters are active (no hidden members at all),
+      // keep every root so we don't accidentally drop unconnected founders.
+      if (allHidden.size === 0) continue
+      // Only cascade-hide if the member would genuinely be isolated
+      // (not a founder with no parents who adds standalone history).
+      const hasAnyParent = relationships.some(
+        r => r.type === 'parent-child' && r.member_b_id === id,
+      )
+      if (!hasAnyParent) continue // founder — keep visible
+      allowed.delete(id)
+      removedAny = true
+    }
+  }
+
   // Focus mode — restrict to ancestors + descendants + spouses of the
   // focused member. Intersected with the other filters.
   if (filters.focusMemberId) {
