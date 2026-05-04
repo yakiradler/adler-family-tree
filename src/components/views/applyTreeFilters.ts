@@ -57,48 +57,75 @@ export function applyTreeFilters(
       .map(m => m.id),
   )
 
-  // Cascade: if all of a member's parents AND spouses are hidden (not in
-  // `allowed`), that member has no structural connection to the visible
-  // tree and would show up as an isolated orphan on the side. Remove them
-  // too, unless they have visible children (i.e. they're a root ancestor
-  // of a visible subtree). This iterates to convergence because each
-  // pass can orphan previously-connected members.
+  // Cascade: drop members who have no meaningful structural anchor in
+  // the visible tree, so they don't float as a lone node beside it.
+  // Two distinct patterns are pruned here:
+  //
+  //   (a) Pure orphan — a member whose only links were to people the
+  //       user hid. Without removing them they'd appear as a free-
+  //       floating circle at the edge of the canvas.
+  //
+  //   (b) Redundant ex-spouse — a member who joined the tree only
+  //       through a now-divorced/deceased marriage, has no blood
+  //       relatives in-tree (no parents), and whose remaining tie is
+  //       shared children that already have a fully-visible primary
+  //       parent on the other side. The previous code kept them as a
+  //       root because they had visible children, which produced the
+  //       "ex hovering off to the side" UX users complained about.
+  //
+  // Iterates to convergence — each pass can orphan members that the
+  // previous one disconnected.
   const allHidden = new Set(members.filter(m => m.hidden).map(m => m.id))
   let removedAny = true
   while (removedAny) {
     removedAny = false
     for (const id of [...allowed]) {
-      // Already explicitly hidden — covered above.
       if (allHidden.has(id)) continue
-      // Keep members that have at least one visible parent.
       const visibleParents = relationships.filter(
         r => r.type === 'parent-child' && r.member_b_id === id && allowed.has(r.member_a_id),
       )
       if (visibleParents.length > 0) continue
-      // Keep members that have at least one visible child.
-      const visibleChildren = relationships.filter(
-        r => r.type === 'parent-child' && r.member_a_id === id && allowed.has(r.member_b_id),
-      )
-      if (visibleChildren.length > 0) continue
-      // Keep members that have at least one visible current spouse.
-      const visibleSpouses = relationships.filter(
+      // A current spouse always anchors the member into the tree.
+      const visibleCurrentSpouses = relationships.filter(
         r => r.type === 'spouse' && (r.status ?? 'current') === 'current' &&
           (r.member_a_id === id || r.member_b_id === id) &&
           allowed.has(r.member_a_id === id ? r.member_b_id : r.member_a_id),
       )
-      if (visibleSpouses.length > 0) continue
-      // No visible connections — this member is an orphan island introduced
-      // by hiding one of their relatives. Remove them so they don't appear
-      // floating alone at the edge of the canvas.
-      // Exception: if NO filters are active (no hidden members at all),
-      // keep every root so we don't accidentally drop unconnected founders.
+      if (visibleCurrentSpouses.length > 0) continue
+
+      const childRels = relationships.filter(
+        r => r.type === 'parent-child' && r.member_a_id === id && allowed.has(r.member_b_id),
+      )
+
+      if (childRels.length > 0) {
+        // Keep the member only if at least one of their children has
+        // NO other visible parent. Otherwise the children are fully
+        // attached to the tree via the other parent and this member
+        // would render as an orphan-with-arrows.
+        const someChildNeedsMe = childRels.some(rel => {
+          const childId = rel.member_b_id
+          const otherVisibleParents = relationships.filter(
+            r => r.type === 'parent-child' &&
+                 r.member_b_id === childId &&
+                 r.member_a_id !== id &&
+                 allowed.has(r.member_a_id),
+          )
+          return otherVisibleParents.length === 0
+        })
+        if (someChildNeedsMe) continue
+        // Redundant ex/widowed parent → drop.
+        allowed.delete(id)
+        removedAny = true
+        continue
+      }
+
+      // No anchors at all (the (a) case). Preserve standalone
+      // founders unless filters are actively narrowing the tree.
       if (allHidden.size === 0) continue
-      // Only cascade-hide if the member would genuinely be isolated
-      // (not a founder with no parents who adds standalone history).
       const hasAnyParent = relationships.some(
         r => r.type === 'parent-child' && r.member_b_id === id,
       )
-      if (!hasAnyParent) continue // founder — keep visible
+      if (!hasAnyParent) continue
       allowed.delete(id)
       removedAny = true
     }
