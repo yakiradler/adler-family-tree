@@ -47,9 +47,13 @@ export function applyTreeFilters(
     return hay.includes(search)
   }
 
-  // Manual hide: a member flagged `hidden` is removed from the tree no
-  // matter what other filters do (the user explicitly hid them).
-  const passesHidden = (m: Member): boolean => !m.hidden
+  // Manual hide: a `hidden` member is filtered out of the tree unless
+  // the user has explicitly asked to see hidden members via
+  // `filters.showHidden` — which surfaces them with a "restore"
+  // affordance on each card (Instagram/WhatsApp blocked-list style).
+  // Hidden never deletes data; the member remains in the store and on
+  // every other screen (member panel, admin lists, etc.).
+  const passesHidden = (m: Member): boolean => filters.showHidden || !m.hidden
 
   let allowed = new Set<string>(
     members
@@ -57,21 +61,24 @@ export function applyTreeFilters(
       .map(m => m.id),
   )
 
-  // Cascade: drop members who have no meaningful structural anchor in
-  // the visible tree, so they don't float as a lone node beside it.
-  // Two distinct patterns are pruned here:
+  // Cascade rules:
   //
   //   (a) Pure orphan — a member whose only links were to people the
   //       user hid. Without removing them they'd appear as a free-
-  //       floating circle at the edge of the canvas.
+  //       floating circle at the edge of the canvas. Only triggers
+  //       when at least one member is manually hidden, so we don't
+  //       prune standalone founders on a no-filter view.
   //
-  //   (b) Redundant ex-spouse — a member who joined the tree only
-  //       through a now-divorced/deceased marriage, has no blood
-  //       relatives in-tree (no parents), and whose remaining tie is
-  //       shared children that already have a fully-visible primary
-  //       parent on the other side. The previous code kept them as a
-  //       root because they had visible children, which produced the
-  //       "ex hovering off to the side" UX users complained about.
+  //   (b) Redundant ex / widowed spouse — a member who joined the tree
+  //       only through a now-divorced or deceased marriage, has no
+  //       blood relatives in-tree (no parents), and whose remaining
+  //       tie is shared children that already have a fully-visible
+  //       primary parent on the other side. Without this rule the ex
+  //       floats as an orphan node beside the subtree (the children
+  //       re-anchor cleanly under the other parent). Skipped when the
+  //       user opts in to "Show divorces" — that flag is the explicit
+  //       request to render those people, even if they'd otherwise be
+  //       redundant.
   //
   // Iterates to convergence — each pass can orphan members that the
   // previous one disconnected.
@@ -85,7 +92,6 @@ export function applyTreeFilters(
         r => r.type === 'parent-child' && r.member_b_id === id && allowed.has(r.member_a_id),
       )
       if (visibleParents.length > 0) continue
-      // A current spouse always anchors the member into the tree.
       const visibleCurrentSpouses = relationships.filter(
         r => r.type === 'spouse' && (r.status ?? 'current') === 'current' &&
           (r.member_a_id === id || r.member_b_id === id) &&
@@ -98,10 +104,9 @@ export function applyTreeFilters(
       )
 
       if (childRels.length > 0) {
-        // Keep the member only if at least one of their children has
-        // NO other visible parent. Otherwise the children are fully
-        // attached to the tree via the other parent and this member
-        // would render as an orphan-with-arrows.
+        // Honor "Show divorces" — keep ex / widowed spouses with shared
+        // children when the user explicitly asked to see them.
+        if (filters.showFormerSpouses) continue
         const someChildNeedsMe = childRels.some(rel => {
           const childId = rel.member_b_id
           const otherVisibleParents = relationships.filter(
@@ -113,14 +118,13 @@ export function applyTreeFilters(
           return otherVisibleParents.length === 0
         })
         if (someChildNeedsMe) continue
-        // Redundant ex/widowed parent → drop.
         allowed.delete(id)
         removedAny = true
         continue
       }
 
-      // No anchors at all (the (a) case). Preserve standalone
-      // founders unless filters are actively narrowing the tree.
+      // No anchors at all (case (a)). Preserve standalone founders
+      // unless the user is actively narrowing the tree with hides.
       if (allHidden.size === 0) continue
       const hasAnyParent = relationships.some(
         r => r.type === 'parent-child' && r.member_b_id === id,

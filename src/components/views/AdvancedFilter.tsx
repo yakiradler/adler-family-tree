@@ -13,6 +13,9 @@ export interface FilterState {
   lineage: 'all' | 'kohen' | 'levi'
   showFormerSpouses: boolean
   hideDeceased: boolean
+  /** Surface members manually flagged `hidden` so the user can review
+   *  and restore them — Instagram blocked-list pattern. Off by default. */
+  showHidden: boolean
   search: string
   /** When set, only this member's blood line (ancestors + descendants) renders. */
   focusMemberId: string | null
@@ -22,6 +25,7 @@ export const DEFAULT_FILTERS: FilterState = {
   lineage: 'all',
   showFormerSpouses: false,
   hideDeceased: false,
+  showHidden: false,
   search: '',
   focusMemberId: null,
 }
@@ -31,6 +35,7 @@ export function isDefaultFilter(f: FilterState): boolean {
     f.lineage === 'all' &&
     !f.showFormerSpouses &&
     !f.hideDeceased &&
+    !f.showHidden &&
     f.search.trim() === '' &&
     f.focusMemberId === null
   )
@@ -200,6 +205,12 @@ export default function AdvancedFilter({
                   icon="🕯️"
                   active={filters.hideDeceased}
                   onToggle={(v) => set({ hideDeceased: v })}
+                />
+                <FilterChip
+                  label={t.filterShowHidden}
+                  icon="🙈"
+                  active={filters.showHidden}
+                  onToggle={(v) => set({ showHidden: v })}
                 />
               </div>
             </div>

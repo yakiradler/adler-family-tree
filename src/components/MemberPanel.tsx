@@ -30,7 +30,7 @@ function formatDate(iso: string | undefined, lang: 'he' | 'en') {
 }
 
 export default function MemberPanel({ onClose }: Props) {
-  const { members, relationships, selectedMemberId, setSelectedMemberId, profile, deleteMember, deleteRelationship } = useFamilyStore()
+  const { members, relationships, selectedMemberId, setSelectedMemberId, profile, deleteMember, deleteRelationship, updateMember } = useFamilyStore()
   const { t, lang } = useLang()
   const [tab, setTab] = useState<'about' | 'family' | 'photos'>('about')
   const [editOpen, setEditOpen] = useState(false)
@@ -260,6 +260,31 @@ export default function MemberPanel({ onClose }: Props) {
                 <span className="text-sm">{member.gender === 'male' ? '♂' : '♀'}</span>
               )}
             </div>
+
+            {/* Hidden-from-tree affordance — shown only on members the
+                user (or an admin) explicitly flagged hidden. Mirrors the
+                Instagram / WhatsApp pattern: the data stays put, but the
+                tree treats them as removed and the panel surfaces a
+                one-tap restore. We gate the restore on the same edit
+                permission as every other field on this card. */}
+            {member.hidden && (
+              <div className="mt-3 flex items-center justify-center gap-2 flex-wrap">
+                <span className="inline-flex items-center gap-1 bg-[#FF9F0A]/15 text-[#9A5A00] rounded-full px-2.5 py-1 text-[11px] font-semibold">
+                  <span aria-hidden>🙈</span>
+                  {t.panelHiddenBadge}
+                </span>
+                {editAllowed && (
+                  <button
+                    type="button"
+                    onClick={() => updateMember(member.id, { hidden: false })}
+                    className="inline-flex items-center gap-1 bg-[#34C759] hover:bg-[#30B454] text-white rounded-full px-3 py-1 text-[11px] font-semibold shadow-sm transition active:scale-95"
+                  >
+                    <span aria-hidden>👁️</span>
+                    {t.panelRestoreToTree}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
