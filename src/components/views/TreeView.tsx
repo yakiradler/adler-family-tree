@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../../store/useFamilyStore'
-import { useLang, type Translations } from '../../i18n/useT'
+import { useLang, isRTL, type Translations } from '../../i18n/useT'
 import MemberNode from '../MemberNode'
 import type { Relationship } from '../../types'
 import {
@@ -12,6 +12,7 @@ import {
 import { buildParentMap, resolveLineage } from '../../lib/lineage'
 import AdvancedFilter, { DEFAULT_FILTERS, type FilterState } from './AdvancedFilter'
 import { applyTreeFilters } from './applyTreeFilters'
+import FocusedCentricView from './FocusedCentricView'
 
 export type { LayoutMode } from './treeLayout'
 
@@ -127,7 +128,8 @@ export default function TreeView() {
         : allMembers.filter((m) => m.tree_id === activeTreeId),
     [allMembers, activeTreeId],
   )
-  const { t } = useLang()
+  const { t, lang } = useLang()
+  const rtl = isRTL(lang)
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
 
@@ -144,6 +146,11 @@ export default function TreeView() {
   // Filters apply BEFORE buildLayout so the resulting tree only contains
   // matching members + their inter-relationships.
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS)
+
+  // Focused-Centric mode — replaces the full-tree canvas with a 3-generation
+  // subgraph centred on a chosen person.
+  const [isFocusedMode, setIsFocusedMode] = useState(false)
+  const focusCentricId = selectedMemberId ?? members[0]?.id ?? null
 
   // Resolve full lineage map first — needed for the lineage filter to
   // honour the male-only Kohen/Levi rule.
@@ -500,6 +507,51 @@ export default function TreeView() {
       <div className="absolute bottom-4 left-4 glass rounded-full px-3 py-1.5 text-[#636366] text-sf-caption2 font-semibold shadow-glass-sm z-10">
         {Math.round(scale * 100)}%
       </div>
+
+      {/* Focused-Centric mode toggle button — mirrors AdvancedFilter on the opposite side */}
+      {focusCentricId && (
+        <motion.button
+          type="button"
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setIsFocusedMode(m => !m)}
+          title={t.focusedEnterBtn}
+          className={`absolute top-[72px] z-20 flex items-center gap-1.5 rounded-full px-3.5 py-2 shadow-glass font-semibold text-[12.5px] border transition ${
+            isFocusedMode
+              ? 'bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white border-transparent'
+              : 'bg-white/95 text-[#1C1C1E] border-white/70 hover:bg-white'
+          }`}
+          style={{ [rtl ? 'left' : 'right']: 12 } as React.CSSProperties}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <circle cx="7" cy="7" r="2.8" stroke="currentColor" strokeWidth="1.6" />
+            <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3" strokeDasharray="3 2" />
+          </svg>
+          <span>{t.focusedEnterBtn}</span>
+        </motion.button>
+      )}
+
+      {/* Focused-Centric overlay — renders above the full tree */}
+      <AnimatePresence>
+        {isFocusedMode && focusCentricId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="absolute inset-0"
+            style={{ zIndex: 25 }}
+          >
+            <FocusedCentricView
+              allMembers={members}
+              allRelationships={relationships}
+              initialFocusId={focusCentricId}
+              lineageById={lineageById}
+              onSelectMember={(id) => setSelectedMemberId(id)}
+              onExit={() => setIsFocusedMode(false)}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
