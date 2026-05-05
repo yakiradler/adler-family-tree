@@ -9,6 +9,7 @@
 import type { Member, Relationship } from '../../types'
 import type { LineageInfo } from '../../lib/lineage'
 import type { FilterState } from './AdvancedFilter'
+import { findFamilyPath } from './findFamilyPath'
 
 export interface FilteredData {
   members: Member[]
@@ -27,6 +28,30 @@ export function applyTreeFilters(
   filters: FilterState,
   lineageById: Map<string, LineageInfo>,
 ): FilteredData {
+  // ── Family-path mode ────────────────────────────────────────────────
+  // When the user picks two people in the "path" picker, we narrow the
+  // tree to JUST the shortest chain of relations that connects them —
+  // every other filter (lineage, search, focus, hide-deceased, hide-
+  // hidden, ex-redundancy) is set aside, because they all assume the
+  // user wants to BROWSE the population, whereas path mode is an
+  // explicit "show me how X relates to Y" request. We keep all
+  // relationships among the path members so connector lines render
+  // continuously across the chain.
+  if (filters.pathFromId && filters.pathToId) {
+    const path = findFamilyPath(
+      relationships,
+      filters.pathFromId,
+      filters.pathToId,
+    )
+    if (!path) return { members: [], relationships: [] }
+    const onPath = new Set(path.memberIds)
+    const filteredMembers = members.filter(m => onPath.has(m.id))
+    const filteredRels = relationships.filter(
+      r => onPath.has(r.member_a_id) && onPath.has(r.member_b_id),
+    )
+    return { members: filteredMembers, relationships: filteredRels }
+  }
+
   const search = filters.search.trim().toLowerCase()
 
   const passesLineage = (m: Member): boolean => {

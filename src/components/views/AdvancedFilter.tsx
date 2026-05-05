@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLang, isRTL } from '../../i18n/useT'
-import type { Member } from '../../types'
+import type { Member, Relationship } from '../../types'
+import { findFamilyPath } from './findFamilyPath'
 
 /**
  * Advanced filter state for the tree view. Filters apply BEFORE the
@@ -19,6 +20,11 @@ export interface FilterState {
   search: string
   /** When set, only this member's blood line (ancestors + descendants) renders. */
   focusMemberId: string | null
+  /** "Family path" mode — when both ids are set, the tree narrows to
+   *  the shortest chain of relations that connects them, so the user
+   *  can see at a glance how two people in the family are related. */
+  pathFromId: string | null
+  pathToId: string | null
 }
 
 export const DEFAULT_FILTERS: FilterState = {
@@ -28,6 +34,8 @@ export const DEFAULT_FILTERS: FilterState = {
   showHidden: false,
   search: '',
   focusMemberId: null,
+  pathFromId: null,
+  pathToId: null,
 }
 
 export function isDefaultFilter(f: FilterState): boolean {
@@ -37,7 +45,9 @@ export function isDefaultFilter(f: FilterState): boolean {
     !f.hideDeceased &&
     !f.showHidden &&
     f.search.trim() === '' &&
-    f.focusMemberId === null
+    f.focusMemberId === null &&
+    f.pathFromId === null &&
+    f.pathToId === null
   )
 }
 
@@ -45,11 +55,13 @@ export default function AdvancedFilter({
   filters,
   onChange,
   members,
+  relationships,
   matchedCount,
 }: {
   filters: FilterState
   onChange: (next: FilterState) => void
   members: Member[]
+  relationships: Relationship[]
   matchedCount: number
 }) {
   const { t, lang } = useLang()
@@ -61,6 +73,25 @@ export default function AdvancedFilter({
     : null
 
   const set = (patch: Partial<FilterState>) => onChange({ ...filters, ...patch })
+
+  // Resolve the path inline so the popover can show its current
+  // length / "no connection" hint without making the parent
+  // recompute. The actual filter pipeline still resolves it again
+  // (memoized) — BFS on a 73-person dataset is sub-millisecond, the
+  // duplication is harmless and keeps the data flow one-way.
+  const pathPreview = useMemo(() => {
+    if (!filters.pathFromId || !filters.pathToId) return null
+    return findFamilyPath(relationships, filters.pathFromId, filters.pathToId)
+  }, [relationships, filters.pathFromId, filters.pathToId])
+  const pathActive = !!filters.pathFromId && !!filters.pathToId
+  const sortedMembers = useMemo(
+    () => [...members].sort((a, b) =>
+      `${a.first_name} ${a.last_name}`.localeCompare(
+        `${b.first_name} ${b.last_name}`,
+      ),
+    ),
+    [members],
+  )
 
   return (
     <div
@@ -162,17 +193,11 @@ export default function AdvancedFilter({
                 className="w-full bg-[#F2F2F7] rounded-xl px-3 py-2 text-[12px] text-[#1C1C1E] outline-none focus:ring-2 focus:ring-[#007AFF]/40"
               >
                 <option value="">— {t.filterAll} —</option>
-                {[...members]
-                  .sort((a, b) =>
-                    `${a.first_name} ${a.last_name}`.localeCompare(
-                      `${b.first_name} ${b.last_name}`,
-                    ),
-                  )
-                  .map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.first_name} {m.last_name}
-                    </option>
-                  ))}
+                {sortedMembers.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.first_name} {m.last_name}
+                  </option>
+                ))}
               </select>
               {focusedMember && (
                 <button
@@ -182,6 +207,65 @@ export default function AdvancedFilter({
                 >
                   {t.filterFocusClear}
                 </button>
+              )}
+            </div>
+
+            {/* Family-path picker — narrows the tree to the shortest
+                relation chain between two people. Uses the same select
+                widgets as Focus so it doesn't add visual weight. */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[10px] font-semibold text-[#8E8E93] uppercase">
+                  {t.filterPathTitle}
+                </p>
+                {pathActive && (
+                  <button
+                    type="button"
+                    onClick={() => set({ pathFromId: null, pathToId: null })}
+                    className="text-[10px] text-[#FF3B30] font-semibold hover:underline"
+                  >
+                    {t.filterPathClear}
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                <select
+                  value={filters.pathFromId ?? ''}
+                  onChange={(e) => set({ pathFromId: e.target.value || null })}
+                  className="bg-[#F2F2F7] rounded-xl px-2 py-2 text-[11.5px] text-[#1C1C1E] outline-none focus:ring-2 focus:ring-[#007AFF]/40 min-w-0"
+                >
+                  <option value="">— {t.filterPathFrom} —</option>
+                  {sortedMembers.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.first_name} {m.last_name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={filters.pathToId ?? ''}
+                  onChange={(e) => set({ pathToId: e.target.value || null })}
+                  className="bg-[#F2F2F7] rounded-xl px-2 py-2 text-[11.5px] text-[#1C1C1E] outline-none focus:ring-2 focus:ring-[#007AFF]/40 min-w-0"
+                >
+                  <option value="">— {t.filterPathTo} —</option>
+                  {sortedMembers.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.first_name} {m.last_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {pathActive && pathPreview === null && (
+                <p className="mt-1 text-[10.5px] text-[#FF3B30] font-semibold">
+                  {t.filterPathNoResult}
+                </p>
+              )}
+              {pathActive && pathPreview && pathPreview.memberIds.length > 1 && (
+                <p className="mt-1 text-[10.5px] text-[#0A8434] font-semibold">
+                  {t.filterPathLength.replace(
+                    '{n}',
+                    String(pathPreview.memberIds.length - 1),
+                  )}
+                </p>
               )}
             </div>
 

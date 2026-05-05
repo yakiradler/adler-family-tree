@@ -470,6 +470,7 @@ export default function TreeView() {
         filters={filters}
         onChange={setFilters}
         members={members}
+        relationships={relationships}
         matchedCount={filtered.members.length}
       />
 
