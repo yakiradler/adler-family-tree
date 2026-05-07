@@ -530,28 +530,20 @@ export default function TreeView() {
         </motion.button>
       )}
 
-      {/* Focused-Centric overlay — renders above the full tree */}
-      <AnimatePresence>
-        {isFocusedMode && focusCentricId && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            className="absolute inset-0"
-            style={{ zIndex: 25 }}
-          >
-            <FocusedCentricView
-              allMembers={members}
-              allRelationships={relationships}
-              initialFocusId={focusCentricId}
-              lineageById={lineageById}
-              onSelectMember={(id) => setSelectedMemberId(id)}
-              onExit={() => setIsFocusedMode(false)}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Focused-Centric overlay — plain conditional render so React removes
+          the element immediately on exit (no stuck invisible overlay). */}
+      {isFocusedMode && focusCentricId && (
+        <div className="absolute inset-0" style={{ zIndex: 25 }}>
+          <FocusedCentricView
+            allMembers={members}
+            allRelationships={relationships}
+            initialFocusId={focusCentricId}
+            lineageById={lineageById}
+            onSelectMember={(id) => setSelectedMemberId(id)}
+            onExit={() => setIsFocusedMode(false)}
+          />
+        </div>
+      )}
     </div>
   )
 }
