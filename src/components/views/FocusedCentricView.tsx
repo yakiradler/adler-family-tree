@@ -254,24 +254,16 @@ export default function FocusedCentricView({
 
   return (
     <div
-      ref={wrapRef}
-      className="w-full relative overflow-hidden select-none"
+      className="w-full relative flex flex-col select-none"
       style={{
         height: 'calc(100vh - 80px)',
-        touchAction: 'none',
-        cursor: dragRef.current ? 'grabbing' : 'grab',
         background:
           'radial-gradient(at 15% 10%, rgba(120,170,255,0.2) 0px, transparent 50%),' +
           'radial-gradient(at 85% 85%, rgba(255,140,200,0.16) 0px, transparent 55%),' +
           'linear-gradient(135deg, #F4F7FF 0%, #FFF5FA 100%)',
       }}
-      onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
-      onMouseLeave={onMouseUp}
-      onWheel={onWheel}
     >
-      {/* Dot grid */}
+      {/* Dot grid — behind everything */}
       <div
         className="absolute inset-0 opacity-20 pointer-events-none"
         style={{
@@ -280,48 +272,72 @@ export default function FocusedCentricView({
         }}
       />
 
-      {/* ── Breadcrumbs ─────────────────────────────────────────────────────── */}
-      <div
-        className="absolute top-3 left-1/2 z-30 flex items-center gap-1 bg-white/90 backdrop-blur-sm rounded-2xl px-3 py-1.5 shadow-sm border border-white/70 max-w-[60vw] overflow-x-auto pointer-events-auto"
-        style={{ transform: 'translateX(-50%)' }}
-      >
-        {navStack.map((id, idx) => {
-          const m = allMembers.find(m => m.id === id)
-          if (!m) return null
-          const isLast = idx === navStack.length - 1
-          return (
-            <span key={`${id}-${idx}`} className="flex items-center gap-1 shrink-0">
-              {idx > 0 && <span className="text-[#C7C7CC] text-[10px] font-semibold mx-0.5">›</span>}
-              <button
-                type="button"
-                onClick={() => navigateBack(idx)}
-                disabled={isLast}
-                className={`text-[11px] font-semibold transition ${
-                  isLast ? 'text-[#007AFF] cursor-default' : 'text-[#636366] hover:text-[#1C1C1E]'
-                }`}
-              >
-                {m.first_name} {m.last_name}
-              </button>
-            </span>
-          )
-        })}
+      {/* ── Header bar — completely isolated from canvas events ─────────────── */}
+      <div className="relative z-10 shrink-0 flex items-center gap-3 px-4 h-11 bg-white/85 backdrop-blur-md border-b border-black/[0.06] shadow-sm">
+        {/* Exit */}
+        <button
+          type="button"
+          onMouseDown={e => e.stopPropagation()}
+          onPointerDown={e => e.stopPropagation()}
+          onClick={onExit}
+          className="flex items-center gap-1.5 text-[#007AFF] text-[12.5px] font-semibold hover:opacity-70 active:scale-95 transition shrink-0"
+        >
+          <svg width="7" height="12" viewBox="0 0 7 12" fill="none">
+            <path d="M6 1L1 6l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          {t.focusedExitBtn}
+        </button>
+
+        <div className="w-px h-4 bg-black/10 shrink-0" />
+
+        {/* Breadcrumbs */}
+        <div className="flex items-center gap-1 overflow-x-auto flex-1 min-w-0">
+          {navStack.map((id, idx) => {
+            const m = allMembers.find(m => m.id === id)
+            if (!m) return null
+            const isLast = idx === navStack.length - 1
+            return (
+              <span key={`${id}-${idx}`} className="flex items-center gap-1 shrink-0">
+                {idx > 0 && <span className="text-black/20 text-[10px] font-bold mx-0.5">›</span>}
+                <button
+                  type="button"
+                  onMouseDown={e => e.stopPropagation()}
+                  onPointerDown={e => e.stopPropagation()}
+                  onClick={() => navigateBack(idx)}
+                  disabled={isLast}
+                  className={`text-[12px] font-semibold transition shrink-0 ${
+                    isLast
+                      ? 'text-[#1C1C1E] cursor-default'
+                      : 'text-[#8E8E93] hover:text-[#1C1C1E]'
+                  }`}
+                >
+                  {m.first_name} {m.last_name}
+                </button>
+              </span>
+            )
+          })}
+        </div>
+
+        {/* Scale */}
+        <div className="shrink-0 text-[11px] font-semibold text-[#8E8E93]">
+          {Math.round(scale * 100)}%
+        </div>
       </div>
 
-      {/* ── Exit button ──────────────────────────────────────────────────────── */}
-      <button
-        type="button"
-        onClick={onExit}
-        className="absolute top-3 right-4 z-30 flex items-center gap-1.5 bg-white/90 backdrop-blur-sm rounded-full px-3 py-1.5 shadow-sm border border-white/70 text-[11px] font-semibold text-[#636366] hover:text-[#1C1C1E] transition active:scale-95 pointer-events-auto"
-      >
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-          <path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
-        {t.focusedExitBtn}
-      </button>
-
-      {/* ── Canvas ───────────────────────────────────────────────────────────── */}
+      {/* ── Canvas area — handles all pan / zoom events ───────────────────── */}
       <div
-        className="absolute top-0 left-0 origin-top-left"
+        ref={wrapRef}
+        className="relative flex-1 overflow-hidden"
+        style={{ touchAction: 'none', cursor: dragRef.current ? 'grabbing' : 'grab' }}
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseUp}
+        onWheel={onWheel}
+      >
+        {/* ── Canvas ─────────────────────────────────────────────────────────── */}
+        <div
+          className="absolute top-0 left-0 origin-top-left"
         style={{
           width: canvasW,
           height: canvasH,
@@ -429,22 +445,7 @@ export default function FocusedCentricView({
         </AnimatePresence>
       </div>
 
-      {/* ── Mini-map ──────────────────────────────────────────────────────────── */}
-      <MiniMap
-        nodes={nodes}
-        canvasW={canvasW}
-        canvasH={canvasH}
-        tx={tx}
-        ty={ty}
-        scale={scale}
-        focusId={focusId}
-        wrapRef={wrapRef}
-      />
-
-      {/* Scale indicator */}
-      <div className="absolute bottom-4 right-4 glass rounded-full px-3 py-1.5 text-[#636366] text-[11px] font-semibold shadow-glass-sm z-10">
-        {Math.round(scale * 100)}%
-      </div>
+      </div>{/* ── /canvas area ── */}
     </div>
   )
 }
@@ -591,63 +592,3 @@ function FocusedCard({
 }
 
 // ─── Mini-map ─────────────────────────────────────────────────────────────────
-
-const MAP_W = 110
-const MAP_H = 68
-
-function MiniMap({
-  nodes, canvasW, canvasH, tx, ty, scale, focusId, wrapRef,
-}: {
-  nodes: LayoutNode[]
-  canvasW: number
-  canvasH: number
-  tx: number
-  ty: number
-  scale: number
-  focusId: string
-  wrapRef: React.RefObject<HTMLDivElement | null>
-}) {
-  const scaleX = MAP_W / canvasW
-  const scaleY = MAP_H / canvasH
-
-  const vpW = (wrapRef.current?.clientWidth ?? 800) / scale
-  const vpH = (wrapRef.current?.clientHeight ?? 600) / scale
-  const vx = -tx / scale
-  const vy = -ty / scale
-
-  return (
-    <div
-      className="absolute bottom-14 left-4 z-10 rounded-xl overflow-hidden border border-white/60 shadow-sm"
-      style={{ width: MAP_W + 12, height: MAP_H + 12, background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(8px)' }}
-    >
-      <svg width={MAP_W} height={MAP_H} style={{ display: 'block', margin: 6 }}>
-        {nodes.map(n => {
-          const isFocus = n.member.id === focusId
-          return (
-            <rect
-              key={n.member.id}
-              x={n.x * scaleX}
-              y={n.y * scaleY}
-              width={Math.max(CARD_W * scaleX, 3)}
-              height={Math.max(CARD_H * scaleY, 2)}
-              rx={1.5}
-              fill={isFocus ? '#007AFF' : n.member.gender === 'female' ? '#FF5EAE' : '#2B6BFF'}
-              opacity={isFocus ? 0.9 : 0.3}
-            />
-          )
-        })}
-        <rect
-          x={Math.max(0, vx * scaleX)}
-          y={Math.max(0, vy * scaleY)}
-          width={Math.min(vpW * scaleX, MAP_W)}
-          height={Math.min(vpH * scaleY, MAP_H)}
-          fill="none"
-          stroke="#007AFF"
-          strokeWidth="1"
-          rx={2}
-          opacity={0.5}
-        />
-      </svg>
-    </div>
-  )
-}

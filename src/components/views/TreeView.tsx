@@ -150,7 +150,24 @@ export default function TreeView() {
   // Focused-Centric mode — replaces the full-tree canvas with a 3-generation
   // subgraph centred on a chosen person.
   const [isFocusedMode, setIsFocusedMode] = useState(false)
-  const focusCentricId = selectedMemberId ?? members[0]?.id ?? null
+  const [activeFocusId, setActiveFocusId] = useState<string | null>(null)
+  const [showFocusPicker, setShowFocusPicker] = useState(false)
+  const [pickerQuery, setPickerQuery] = useState('')
+
+  const pickerResults = useMemo(() => {
+    const q = pickerQuery.trim().toLowerCase()
+    const pool = q
+      ? members.filter(m => `${m.first_name} ${m.last_name}`.toLowerCase().includes(q))
+      : members
+    return pool.slice(0, 10)
+  }, [members, pickerQuery])
+
+  const enterFocusMode = (id: string) => {
+    setActiveFocusId(id)
+    setIsFocusedMode(true)
+    setShowFocusPicker(false)
+    setPickerQuery('')
+  }
 
   // Resolve full lineage map first — needed for the lineage filter to
   // honour the male-only Kohen/Levi rule.
@@ -508,36 +525,93 @@ export default function TreeView() {
         {Math.round(scale * 100)}%
       </div>
 
-      {/* Focused-Centric mode toggle button — mirrors AdvancedFilter on the opposite side */}
-      {focusCentricId && (
-        <motion.button
-          type="button"
-          whileTap={{ scale: 0.95 }}
-          onClick={() => setIsFocusedMode(m => !m)}
-          title={t.focusedEnterBtn}
-          className={`absolute top-[72px] z-20 flex items-center gap-1.5 rounded-full px-3.5 py-2 shadow-glass font-semibold text-[12.5px] border transition ${
-            isFocusedMode
-              ? 'bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white border-transparent'
-              : 'bg-white/95 text-[#1C1C1E] border-white/70 hover:bg-white'
-          }`}
-          style={{ [rtl ? 'left' : 'right']: 12 } as React.CSSProperties}
+      {/* Focused-Centric mode button */}
+      {members.length > 0 && (
+        <div
+          className="absolute z-20"
+          style={{ top: 72, [rtl ? 'left' : 'right']: 12 } as React.CSSProperties}
         >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <circle cx="7" cy="7" r="2.8" stroke="currentColor" strokeWidth="1.6" />
-            <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3" strokeDasharray="3 2" />
-          </svg>
-          <span>{t.focusedEnterBtn}</span>
-        </motion.button>
+          <motion.button
+            type="button"
+            whileTap={{ scale: 0.95 }}
+            onClick={() => {
+              if (isFocusedMode) {
+                setIsFocusedMode(false)
+              } else if (selectedMemberId) {
+                enterFocusMode(selectedMemberId)
+              } else {
+                setShowFocusPicker(s => !s)
+              }
+            }}
+            className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 shadow-glass font-semibold text-[12.5px] border transition ${
+              isFocusedMode
+                ? 'bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white border-transparent'
+                : 'bg-white/95 text-[#1C1C1E] border-white/70 hover:bg-white'
+            }`}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <circle cx="7" cy="7" r="2.8" stroke="currentColor" strokeWidth="1.6" />
+              <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3" strokeDasharray="3 2" />
+            </svg>
+            <span>{t.focusedEnterBtn}</span>
+          </motion.button>
+
+          {/* Person picker — appears when no member is selected */}
+          <AnimatePresence>
+            {showFocusPicker && !isFocusedMode && (
+              <motion.div
+                key="focus-picker"
+                initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                transition={{ duration: 0.14 }}
+                className="absolute mt-2 w-64 bg-white rounded-2xl shadow-lg border border-black/8 overflow-hidden"
+                style={{ [rtl ? 'left' : 'right']: 0 } as React.CSSProperties}
+              >
+                <div className="px-3 pt-3 pb-2">
+                  <input
+                    autoFocus
+                    type="text"
+                    value={pickerQuery}
+                    onChange={e => setPickerQuery(e.target.value)}
+                    placeholder={lang === 'he' ? 'חפש בן/בת משפחה…' : 'Search member…'}
+                    className="w-full text-[13px] px-3 py-2 bg-[#F2F2F7] rounded-xl outline-none focus:ring-2 focus:ring-[#007AFF]/30"
+                    dir="auto"
+                  />
+                </div>
+                <div className="max-h-56 overflow-y-auto divide-y divide-[#F2F2F7]">
+                  {pickerResults.map(m => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => enterFocusMode(m.id)}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 hover:bg-[#F2F2F7] transition text-right"
+                    >
+                      <div
+                        className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-white text-[10px] font-bold"
+                        style={{ background: m.gender === 'female' ? 'linear-gradient(135deg,#FF5EAE,#B46BFF)' : 'linear-gradient(135deg,#2B6BFF,#19C6FF)' }}
+                      >
+                        {m.first_name.charAt(0)}
+                      </div>
+                      <span className="font-semibold text-[13px] text-[#1C1C1E] truncate">
+                        {m.first_name} {m.last_name}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       )}
 
-      {/* Focused-Centric overlay — plain conditional render so React removes
-          the element immediately on exit (no stuck invisible overlay). */}
-      {isFocusedMode && focusCentricId && (
+      {/* Focused-Centric overlay */}
+      {isFocusedMode && activeFocusId && (
         <div className="absolute inset-0" style={{ zIndex: 25 }}>
           <FocusedCentricView
             allMembers={members}
             allRelationships={relationships}
-            initialFocusId={focusCentricId}
+            initialFocusId={activeFocusId}
             lineageById={lineageById}
             onSelectMember={(id) => setSelectedMemberId(id)}
             onExit={() => setIsFocusedMode(false)}
