@@ -297,7 +297,8 @@ export default function App() {
               path="/admin"
               element={!isAuth ? <Navigate to="/" replace /> : <AdminDashboard />}
             />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="/scan" element={!isAuth ? <Navigate to="/" replace /> : <Navigate to="/home" replace />} />            <Route path="*" element={<Navigate to="/" replace />} />
+                        <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </ThemeShell>
       </HashRouter>
