@@ -52,7 +52,7 @@ export default function AddMemberModal({ open, onClose }: Props) {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: 20 }}
             transition={{ type: 'spring', stiffness: 450, damping: 35 }}
-            className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 max-w-sm mx-auto"
+            className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 max-w-sm mx-auto max-h-[90vh] overflow-y-auto max-h-[90vh] overflow-y-auto"
           >
             <div className="glass-strong rounded-3xl p-5 shadow-glass-lg">
               <div className="flex items-center justify-between mb-5">
