@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang } from '../i18n/useT'
 import { isAdmin } from '../lib/permissions'
@@ -7,6 +8,7 @@ import type { ViewMode } from '../types'
 export default function Navigation() {
   const { viewMode, setViewMode, profile, editRequests } = useFamilyStore()
   const { t } = useLang()
+  const navigate = useNavigate()
   const pendingCount = editRequests.length
 
   const tabs: { id: ViewMode; label: string; icon: React.ReactNode }[] = [
@@ -92,7 +94,7 @@ export default function Navigation() {
 
         {isAdmin(profile) && (
           <motion.button
-            onClick={() => setViewMode('tree')}
+            onClick={() => navigate('/admin')}
             className="relative flex flex-col items-center gap-0.5 px-3 py-2 rounded-[1.4rem] text-white/40 hover:text-white/70 transition-colors"
             whileTap={{ scale: 0.93 }}
           >

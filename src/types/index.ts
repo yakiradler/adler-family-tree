@@ -21,6 +21,13 @@ export type Lineage = 'kohen' | 'levi' | 'israel'
  * horizontal slot width (so divorces don't widen subtrees).
  */
 export type SpouseStatus = 'current' | 'ex' | 'deceased'
+/**
+ * Biological / step / adoptive distinction for parent-child relationships.
+ * Defaults to 'bio' when absent. Used to label step-parents and adoptive
+ * parents in the profile panel and relationship manager — the tree layout
+ * treats all three the same (step-parents render as parents).
+ */
+export type ParentType = 'bio' | 'step' | 'adoptive'
 
 export interface Profile {
   id: string
@@ -135,6 +142,8 @@ export interface Relationship {
   type: RelationshipType
   /** Spouse-only. Defaults to 'current' if null/undefined. */
   status?: SpouseStatus | null
+  /** Parent-child only. Defaults to 'bio' when absent. */
+  parent_type?: ParentType | null
 }
 
 export interface EditRequest {

@@ -12,7 +12,7 @@ interface Props {
 export default function AddMemberModal({ open, onClose }: Props) {
   const { addMember, profile } = useFamilyStore()
   const { t } = useLang()
-  const [form, setForm] = useState({ first_name: '', last_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '' as Gender | '', birth_order: '', lineage: '' as Lineage | '' })
+  const [form, setForm] = useState({ first_name: '', last_name: '', maiden_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '' as Gender | '', birth_order: '', lineage: '' as Lineage | '' })
   const [loading, setLoading] = useState(false)
   const photoInputRef = useRef<HTMLInputElement>(null)
 
@@ -24,6 +24,7 @@ export default function AddMemberModal({ open, onClose }: Props) {
     await addMember({
       first_name: form.first_name,
       last_name: form.last_name,
+      maiden_name: form.maiden_name.trim() || undefined,
       birth_date: form.birth_date || undefined,
       death_date: form.death_date || undefined,
       bio: form.bio || undefined,
@@ -34,7 +35,7 @@ export default function AddMemberModal({ open, onClose }: Props) {
       created_by: profile.id,
     })
     setLoading(false)
-    setForm({ first_name: '', last_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '', birth_order: '', lineage: '' })
+    setForm({ first_name: '', last_name: '', maiden_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '', birth_order: '', lineage: '' })
     onClose()
   }
 
@@ -68,6 +69,10 @@ export default function AddMemberModal({ open, onClose }: Props) {
                 <div className="grid grid-cols-2 gap-2">
                   <input required placeholder={t.firstName} value={form.first_name} onChange={(e) => setForm((f) => ({ ...f, first_name: e.target.value }))} className="input-field py-2.5" />
                   <input required placeholder={t.lastName} value={form.last_name} onChange={(e) => setForm((f) => ({ ...f, last_name: e.target.value }))} className="input-field py-2.5" />
+                </div>
+                <div>
+                  <label className="text-sf-caption text-[#8E8E93] mb-1 block">{t.maidenNameLabel}</label>
+                  <input placeholder={t.maidenNameLabel} value={form.maiden_name} onChange={(e) => setForm((f) => ({ ...f, maiden_name: e.target.value }))} className="input-field py-2.5" />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>

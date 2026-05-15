@@ -10,7 +10,7 @@ import {
   buildLayout,
 } from './treeLayout'
 import { buildParentMap, resolveLineage } from '../../lib/lineage'
-import AdvancedFilter, { DEFAULT_FILTERS, type FilterState } from './AdvancedFilter'
+import type { FilterState } from './AdvancedFilter'
 import { applyTreeFilters } from './applyTreeFilters'
 import FocusedCentricView from './FocusedCentricView'
 
@@ -116,7 +116,13 @@ const LAYOUT_STORAGE_KEY = 'ft-tree-layout-mode'
 const isLayoutMode = (v: unknown): v is LayoutMode =>
   v === 'classic' || v === 'grid' || v === 'arc' || v === 'staggered'
 
-export default function TreeView() {
+export default function TreeView({
+  filters,
+  onMatchedCount,
+}: {
+  filters: FilterState
+  onMatchedCount?: (n: number) => void
+}) {
   const { members: allMembers, relationships, selectedMemberId, setSelectedMemberId, activeTreeId } = useFamilyStore()
   // Narrow the population to the currently active tree. `null` means
   // the default/main tree which is everyone without a tree_id; an
@@ -141,11 +147,6 @@ export default function TreeView() {
   useEffect(() => {
     try { window.localStorage.setItem(LAYOUT_STORAGE_KEY, layoutMode) } catch { /* ignore */ }
   }, [layoutMode])
-
-  // Advanced filter (lineage / former spouses / deceased / search / focus).
-  // Filters apply BEFORE buildLayout so the resulting tree only contains
-  // matching members + their inter-relationships.
-  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS)
 
   // Focused-Centric mode — replaces the full-tree canvas with a 3-generation
   // subgraph centred on a chosen person.
@@ -182,6 +183,9 @@ export default function TreeView() {
     () => applyTreeFilters(members, relationships, filters, fullLineageById),
     [members, relationships, filters, fullLineageById],
   )
+
+  const filteredCount = filtered.members.length
+  useEffect(() => { onMatchedCount?.(filteredCount) }, [filteredCount, onMatchedCount])
 
   const nodes = useMemo(
     () => buildLayout(filtered.members, filtered.relationships, layoutMode, {
@@ -488,15 +492,6 @@ export default function TreeView() {
 
       {/* Floating bottom layout picker — single collapsed button expanding to 4 */}
       <LayoutPicker mode={layoutMode} onChange={setLayoutMode} t={t} />
-
-      {/* Advanced filter (lineage / divorces / deceased / search / focus) */}
-      <AdvancedFilter
-        filters={filters}
-        onChange={setFilters}
-        members={members}
-        relationships={relationships}
-        matchedCount={filtered.members.length}
-      />
 
       {/* Zoom controls */}
       <div className="absolute bottom-4 right-4 flex flex-col gap-1.5 z-10">

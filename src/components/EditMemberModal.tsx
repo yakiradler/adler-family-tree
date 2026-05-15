@@ -14,6 +14,7 @@ interface Props {
 interface FormState {
   first_name: string
   last_name: string
+  maiden_name: string
   nickname: string
   bio: string
   birth_date: string
@@ -33,6 +34,7 @@ function fromMember(m: Member): FormState {
   return {
     first_name: m.first_name ?? '',
     last_name: m.last_name ?? '',
+    maiden_name: m.maiden_name ?? '',
     nickname: m.nickname ?? '',
     bio: m.bio ?? '',
     birth_date: m.birth_date ?? '',
@@ -122,6 +124,7 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
     await updateMember(member.id, {
       first_name: form.first_name.trim() || member.first_name,
       last_name: form.last_name.trim(),
+      maiden_name: form.maiden_name.trim() || undefined,
       nickname: form.nickname.trim() || undefined,
       bio: form.bio.trim() || undefined,
       birth_date: form.birth_date || undefined,
@@ -261,6 +264,13 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
                     />
                   </Field>
                 </div>
+                <Field label={t.maidenNameLabel}>
+                  <input
+                    className="w-full bg-[#F2F2F7] border border-transparent rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] placeholder:text-[#8E8E93] focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40 focus:bg-white focus:border-[#007AFF]/30 transition"
+                    value={form.maiden_name}
+                    onChange={e => patch('maiden_name', e.target.value)}
+                  />
+                </Field>
                 <Field label={t.editNickname}>
                   <input
                     className="w-full bg-[#F2F2F7] border border-transparent rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] placeholder:text-[#8E8E93] focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40 focus:bg-white focus:border-[#007AFF]/30 transition"

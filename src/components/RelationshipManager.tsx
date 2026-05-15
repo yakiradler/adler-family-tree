@@ -4,7 +4,7 @@ import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
 import { getRingGradient, getFallbackGradient, PersonAvatarIcon } from './MemberNode'
 import { canManageRelationships } from '../lib/permissions'
-import type { Member, Gender, RelationshipType, SpouseStatus, Relationship } from '../types'
+import type { Member, Gender, RelationshipType, SpouseStatus, ParentType, Relationship } from '../types'
 
 interface Props {
   open: boolean
@@ -31,6 +31,7 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
   // resulting relationship is recorded as current / ex / deceased. Default
   // is 'current' so behavior matches pre-Phase B exactly.
   const [spouseStatusDraft, setSpouseStatusDraft] = useState<SpouseStatus>('current')
+  const [parentTypeDraft, setParentTypeDraft] = useState<ParentType>('bio')
   const [busy, setBusy] = useState(false)
   // Brief visual confirmation that a change was persisted. The store is
   // optimistic + Supabase try/catch, so by the time we render this the
@@ -106,17 +107,18 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
   const closePicker = () => {
     setPicker(null); setPickerKind(null); setSearch('')
     setCreatingNew(false); setNewFirst(''); setNewLast(''); setNewGender('')
-    setSpouseStatusDraft('current')
+    setSpouseStatusDraft('current'); setParentTypeDraft('bio')
   }
 
   const linkExisting = async (otherId: string) => {
     if (!pickerKind || busy) return
     setBusy(true)
     try {
+      const pt = parentTypeDraft !== 'bio' ? parentTypeDraft : undefined
       if (pickerKind === 'parent') {
-        await addRelationship({ type: 'parent-child', member_a_id: otherId, member_b_id: member.id })
+        await addRelationship({ type: 'parent-child', member_a_id: otherId, member_b_id: member.id, parent_type: pt })
       } else if (pickerKind === 'child') {
-        await addRelationship({ type: 'parent-child', member_a_id: member.id, member_b_id: otherId })
+        await addRelationship({ type: 'parent-child', member_a_id: member.id, member_b_id: otherId, parent_type: pt })
       } else if (pickerKind === 'spouse') {
         await addRelationship({
           type: 'spouse',
@@ -143,10 +145,11 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
         created_by: profile?.id ?? 'demo',
       })
       if (created) {
+        const pt = parentTypeDraft !== 'bio' ? parentTypeDraft : undefined
         if (pickerKind === 'parent') {
-          await addRelationship({ type: 'parent-child', member_a_id: created.id, member_b_id: member.id })
+          await addRelationship({ type: 'parent-child', member_a_id: created.id, member_b_id: member.id, parent_type: pt })
         } else if (pickerKind === 'child') {
-          await addRelationship({ type: 'parent-child', member_a_id: member.id, member_b_id: created.id })
+          await addRelationship({ type: 'parent-child', member_a_id: member.id, member_b_id: created.id, parent_type: pt })
         } else if (pickerKind === 'spouse') {
           await addRelationship({
             type: 'spouse',
@@ -284,6 +287,12 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
                 onRemove={removeRel}
                 isAdmin={isAdmin}
                 lang={lang}
+                getRelBadge={(id) => {
+                  const rel = parentRels.find(r => r.member_a_id === id)
+                  if (rel?.parent_type === 'step') return t.relStepBadge
+                  if (rel?.parent_type === 'adoptive') return t.relAdoptiveBadge
+                  return null
+                }}
               />
             )}
             {tab === 'spouses' && (
@@ -310,6 +319,12 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
                 onRemove={removeRel}
                 isAdmin={isAdmin}
                 lang={lang}
+                getRelBadge={(id) => {
+                  const rel = childRels.find(r => r.member_b_id === id)
+                  if (rel?.parent_type === 'step') return t.relStepBadge
+                  if (rel?.parent_type === 'adoptive') return t.relAdoptiveBadge
+                  return null
+                }}
               />
             )}
             {tab === 'siblings' && (
@@ -388,6 +403,30 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
                           {s === 'current' ? t.spouseStatusCurrent
                            : s === 'ex' ? t.spouseStatusEx
                            : t.spouseStatusDeceased}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Parent type — bio / step / adoptive */}
+                {(pickerKind === 'parent' || pickerKind === 'child') && (
+                  <div className="px-4 pt-3">
+                    <p className="text-[11px] text-[#8E8E93] mb-1.5">{t.relParentTypeLabel}</p>
+                    <div className="bg-[#F2F2F7] rounded-2xl p-1 flex gap-1">
+                      {(['bio', 'step', 'adoptive'] as const).map(pt => (
+                        <button
+                          key={pt}
+                          onClick={() => setParentTypeDraft(pt)}
+                          className={`flex-1 py-1.5 rounded-xl text-[12px] font-semibold transition-all ${
+                            parentTypeDraft === pt
+                              ? 'bg-white text-[#1C1C1E] shadow-sm'
+                              : 'text-[#636366]'
+                          }`}
+                        >
+                          {pt === 'bio' ? t.relParentTypeBio
+                           : pt === 'step' ? t.relParentTypeStep
+                           : t.relParentTypeAdoptive}
                         </button>
                       ))}
                     </div>
@@ -519,7 +558,7 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
 }
 
 function RelList({
-  list, findRelId, emptyLabel, onRemove, isAdmin, lang, readOnly,
+  list, findRelId, emptyLabel, onRemove, isAdmin, lang, readOnly, getRelBadge,
 }: {
   list: Member[]
   findRelId: (id: string) => string | undefined
@@ -528,6 +567,7 @@ function RelList({
   isAdmin: boolean
   lang: 'he' | 'en'
   readOnly?: boolean
+  getRelBadge?: (memberId: string) => string | null
 }) {
   const { setSelectedMemberId } = useFamilyStore()
   if (list.length === 0) {
@@ -567,8 +607,13 @@ function RelList({
                 </div>
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sf-subhead font-semibold text-[#1C1C1E] truncate">
+                <p className="text-sf-subhead font-semibold text-[#1C1C1E] truncate flex items-center gap-1.5">
                   {m.first_name} {m.last_name}
+                  {getRelBadge?.(m.id) && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-[#FF9F0A]/15 text-[#FF9F0A] text-[9px] font-bold flex-shrink-0">
+                      {getRelBadge(m.id)}
+                    </span>
+                  )}
                 </p>
                 <p className="text-[11px] text-[#8E8E93]">
                   {m.birth_date

@@ -96,6 +96,18 @@ export default function Auth({ demoMode = false, onDemoEnter }: Props) {
     <div dir={dir} className="min-h-screen bg-mesh-gradient flex items-center justify-center p-6">
       <div className="absolute inset-0 bg-gradient-to-br from-blue-50/80 via-white/40 to-purple-50/60" />
 
+      {/* Back to landing */}
+      <motion.button
+        whileTap={{ scale: 0.93 }}
+        onClick={() => navigate('/')}
+        className="absolute top-5 left-5 glass px-3 py-1.5 rounded-xl text-sf-caption font-semibold text-[#636366] hover:text-[#1C1C1E] transition-colors z-10 flex items-center gap-1"
+      >
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <path d={lang === 'he' ? 'M4 2l4 4-4 4' : 'M8 2L4 6l4 4'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        {lang === 'he' ? 'ראשי' : 'Home'}
+      </motion.button>
+
       {/* Language toggle */}
       <motion.button
         whileTap={{ scale: 0.93 }}

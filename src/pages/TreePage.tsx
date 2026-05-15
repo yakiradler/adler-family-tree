@@ -3,21 +3,35 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
 import TreeView from '../components/views/TreeView'
+import SchematicView from '../components/views/SchematicView'
+import TimelineView from '../components/views/TimelineView'
 import MemberPanel from '../components/MemberPanel'
+import Navigation from '../components/Navigation'
 import AddMemberModal from '../components/AddMemberModal'
 import TreeSearchModal from '../components/TreeSearchModal'
 import TreeSwitcher from '../components/TreeSwitcher'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import AdvancedFilter, { DEFAULT_FILTERS, type FilterState } from '../components/views/AdvancedFilter'
 
 interface Props { demoMode: boolean }
 
 export default function TreePage({ demoMode }: Props) {
-  const { selectedMemberId, setSelectedMemberId, profile, members } = useFamilyStore()
+  const { selectedMemberId, setSelectedMemberId, profile, members: allMembers, relationships, activeTreeId, viewMode } = useFamilyStore()
   const { t, lang } = useLang()
   const dir = isRTL(lang) ? 'rtl' : 'ltr'
   const navigate = useNavigate()
   const [addOpen, setAddOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS)
+  const [matchedCount, setMatchedCount] = useState(0)
+
+  const members = useMemo(
+    () =>
+      activeTreeId == null
+        ? allMembers.filter((m) => !m.tree_id)
+        : allMembers.filter((m) => m.tree_id === activeTreeId),
+    [allMembers, activeTreeId],
+  )
 
   return (
     <div dir={dir} className="min-h-screen bg-[#F2F2F7]">
@@ -37,7 +51,7 @@ export default function TreePage({ demoMode }: Props) {
               <span>🌳</span> {t.viewTree}
             </h1>
             <p className="text-[11px] text-[#8E8E93] mt-0.5 truncate">
-              {profile?.full_name} · {members.length} {t.dashMembers}
+              {profile?.full_name} · {allMembers.length} {t.dashMembers}
             </p>
           </div>
           {/* Tree switcher visible on every viewport so mobile users can
@@ -67,7 +81,28 @@ export default function TreePage({ demoMode }: Props) {
 
       {/* Tree canvas + side panel */}
       <div className="relative">
-        <TreeView />
+        {viewMode === 'tree' && (
+          <>
+            <TreeView filters={filters} onMatchedCount={setMatchedCount} />
+            <AdvancedFilter
+              filters={filters}
+              onChange={setFilters}
+              members={members}
+              relationships={relationships}
+              matchedCount={matchedCount}
+            />
+          </>
+        )}
+        {viewMode === 'schematic' && (
+          <div className="overflow-y-auto" style={{ paddingTop: 72, paddingBottom: 120, minHeight: '100vh' }}>
+            <SchematicView />
+          </div>
+        )}
+        {viewMode === 'timeline' && (
+          <div className="overflow-y-auto" style={{ paddingTop: 72, paddingBottom: 120, minHeight: '100vh' }}>
+            <TimelineView />
+          </div>
+        )}
 
         <AnimatePresence>
           {selectedMemberId && (
@@ -106,6 +141,7 @@ export default function TreePage({ demoMode }: Props) {
 
       <AddMemberModal open={addOpen} onClose={() => setAddOpen(false)} />
       <TreeSearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <Navigation />
     </div>
   )
 }

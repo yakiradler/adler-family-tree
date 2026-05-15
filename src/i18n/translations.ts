@@ -409,6 +409,12 @@ export const translations = {
     relAddParent: 'הוסף הורה',
     relAddSpouse: 'הוסף בן/בת זוג',
     relAddChild: 'הוסף ילד/ה',
+    relParentTypeBio: 'ביולוגי',
+    relParentTypeStep: 'חורג',
+    relParentTypeAdoptive: 'מאומץ',
+    relParentTypeLabel: 'סוג קשר',
+    relStepBadge: 'חורג',
+    relAdoptiveBadge: 'מאומץ',
     relSearchPlaceholder: 'חיפוש בן משפחה…',
     relNoParents: 'אין הורים מוגדרים',
     relNoSpouses: 'אין בני זוג מוגדרים',
@@ -517,6 +523,13 @@ export const translations = {
     // Delete tree (TreeSwitcher)
     treeDeleteTree: 'מחק עץ',
     treeDeleteTreeConfirm: 'למחוק את העץ? כל החברים ישויכו לעץ הראשי.',
+
+    // Copy member to another tree (MemberPanel)
+    panelCopyToTree: 'העתק לעץ אחר',
+    panelCopyToTreeTitle: 'בחר עץ יעד',
+    panelCopyToTreeNote: 'הפרטים האישיים יועתקו. קשרים משפחתיים לא יועתקו.',
+    panelCopyToTreeDone: 'הועתק בהצלחה!',
+    panelCopyToTreeMain: 'עץ ראשי',
   },
 
   en: {
@@ -916,6 +929,12 @@ export const translations = {
     relAddParent: 'Add Parent',
     relAddSpouse: 'Add Spouse',
     relAddChild: 'Add Child',
+    relParentTypeBio: 'Biological',
+    relParentTypeStep: 'Step',
+    relParentTypeAdoptive: 'Adoptive',
+    relParentTypeLabel: 'Relationship type',
+    relStepBadge: 'Step',
+    relAdoptiveBadge: 'Adoptive',
     relSearchPlaceholder: 'Search family members…',
     relNoParents: 'No parents defined',
     relNoSpouses: 'No spouses defined',
@@ -1024,6 +1043,13 @@ export const translations = {
     // Delete tree (TreeSwitcher)
     treeDeleteTree: 'Delete tree',
     treeDeleteTreeConfirm: 'Delete this tree? Members will move back to the main tree.',
+
+    // Copy member to another tree (MemberPanel)
+    panelCopyToTree: 'Copy to another tree',
+    panelCopyToTreeTitle: 'Select target tree',
+    panelCopyToTreeNote: 'Personal details will be copied. Family relationships will not be included.',
+    panelCopyToTreeDone: 'Copied successfully!',
+    panelCopyToTreeMain: 'Main tree',
   },
 } as const
 

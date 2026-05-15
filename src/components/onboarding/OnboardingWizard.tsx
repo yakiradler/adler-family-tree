@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang } from '../../i18n/useT'
 import { supabase } from '../../lib/supabase'
@@ -209,6 +209,16 @@ export default function OnboardingWizard() {
         {/* Progress strip */}
         {step <= TOTAL_STEPS && (
           <div className="px-6 pt-5">
+            {/* Skip-to-home link — lets users who reached the wizard accidentally exit */}
+            <div className="flex justify-end mb-1">
+              <button
+                type="button"
+                onClick={() => navigate('/home')}
+                className="text-[11px] text-[#8E8E93] hover:text-[#636366] transition"
+              >
+                {t.onbSkip} ›
+              </button>
+            </div>
             <div className="flex items-center gap-1.5">
               {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((s) => (
                 <div
@@ -226,10 +236,9 @@ export default function OnboardingWizard() {
         )}
 
         <div className="p-6 pt-4">
-          <AnimatePresence mode="wait">
+          <div key={step} className="space-y-3 animate-fade-in">
             {step === 1 && (
               <StepShell
-                key="s1"
                 title={t.onbStep1Title}
                 desc={t.onbStep1Desc}
               >
@@ -272,7 +281,6 @@ export default function OnboardingWizard() {
 
             {step === 2 && (
               <StepShell
-                key="s2"
                 title={t.onbStepPersonalTitle}
                 desc={t.onbStepPersonalDesc}
               >
@@ -407,7 +415,6 @@ export default function OnboardingWizard() {
 
             {step === 3 && (
               <StepShell
-                key="s3"
                 title={t.onbStep2Title}
                 desc={t.onbStep2Desc}
               >
@@ -460,7 +467,6 @@ export default function OnboardingWizard() {
 
             {step === 4 && (
               <StepShell
-                key="s4"
                 title={t.onbStep3Title}
                 desc={t.onbStep3Desc}
               >
@@ -494,11 +500,7 @@ export default function OnboardingWizard() {
             )}
 
             {step === 5 && (
-              <motion.div
-                key="done"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="text-center py-8"
+              <div className="text-center py-8"
               >
                 <div className="w-16 h-16 mx-auto rounded-full bg-emerald-100 flex items-center justify-center mb-4 text-3xl">
                   ✓
@@ -511,9 +513,9 @@ export default function OnboardingWizard() {
                 >
                   {t.onbContinueToHome}
                 </button>
-              </motion.div>
+              </div>
             )}
-          </AnimatePresence>
+          </div>
         </div>
 
         {/* Footer */}
@@ -608,17 +610,11 @@ function StepShell({
   children: React.ReactNode
 }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      transition={{ duration: 0.18 }}
-      className="space-y-3"
-    >
+    <div className="space-y-3">
       <h2 className="text-sf-title2 font-bold text-[#1C1C1E]">{title}</h2>
       <p className="text-sf-footnote text-[#636366]">{desc}</p>
       <div className="space-y-3 pt-2">{children}</div>
-    </motion.div>
+    </div>
   )
 }
 

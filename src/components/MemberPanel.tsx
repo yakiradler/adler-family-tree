@@ -30,13 +30,16 @@ function formatDate(iso: string | undefined, lang: 'he' | 'en') {
 }
 
 export default function MemberPanel({ onClose }: Props) {
-  const { members, relationships, selectedMemberId, setSelectedMemberId, profile, deleteMember, deleteRelationship, updateMember } = useFamilyStore()
+  const { members, relationships, selectedMemberId, setSelectedMemberId, profile, deleteMember, deleteRelationship, updateMember, addMember, trees } = useFamilyStore()
   const { t, lang } = useLang()
   const [tab, setTab] = useState<'about' | 'family' | 'photos'>('about')
   const [editOpen, setEditOpen] = useState(false)
   const [relOpen, setRelOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [copyToTreeOpen, setCopyToTreeOpen] = useState(false)
+  const [copying, setCopying] = useState(false)
+  const [copyDone, setCopyDone] = useState(false)
 
   const member = useMemo(
     () => members.find(m => m.id === selectedMemberId) ?? null,
@@ -147,6 +150,17 @@ export default function MemberPanel({ onClose }: Props) {
   const relAllowed = canManageRelationships(profile)
   // Delete is admin-only — destructive, can't be undone.
   const deleteAllowed = profile?.role === 'admin'
+
+  const handleCopyToTree = async (targetTreeId: string | null) => {
+    if (!member || copying) return
+    setCopying(true)
+    const { id: _id, ...fields } = member
+    await addMember({ ...fields, tree_id: targetTreeId ?? undefined, created_by: profile?.id ?? 'demo' })
+    setCopying(false)
+    setCopyToTreeOpen(false)
+    setCopyDone(true)
+    setTimeout(() => setCopyDone(false), 2500)
+  }
 
   const handleDelete = async () => {
     if (!member || deleting) return
@@ -487,6 +501,22 @@ export default function MemberPanel({ onClose }: Props) {
               <span>{t.relManageBtn}</span>
             </button>
             )}
+            {/* ── Copy to another tree ── */}
+            {editAllowed && (
+            <button
+              type="button"
+              onClick={() => { setCopyToTreeOpen(true); setCopyDone(false) }}
+              aria-label={t.panelCopyToTree}
+              title={t.panelCopyToTree}
+              className="w-full py-2.5 rounded-2xl border border-[#5AC8FA]/40 text-[#0A84FF] text-sf-subhead font-semibold active:scale-[0.98] transition flex items-center justify-center gap-2 hover:bg-[#0A84FF]/5"
+            >
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+                <rect x="2" y="4.5" width="8" height="8.5" rx="1.8" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M5 4.5V3A1.5 1.5 0 0 1 6.5 1.5h5.5A1.5 1.5 0 0 1 13.5 3v8.5A1.5 1.5 0 0 1 12 11.5h-1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              <span>{copyDone ? t.panelCopyToTreeDone : t.panelCopyToTree}</span>
+            </button>
+            )}
             {/* ── Delete (admin-only, destructive) ── */}
             {deleteAllowed && (
             <button
@@ -508,6 +538,94 @@ export default function MemberPanel({ onClose }: Props) {
 
       <EditMemberModal open={editOpen} onClose={() => setEditOpen(false)} member={member} />
       <RelationshipManager open={relOpen} onClose={() => setRelOpen(false)} member={member} />
+
+      {/* ── Copy to tree dialog ── */}
+      <AnimatePresence>
+        {copyToTreeOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 flex items-center justify-center rounded-[28px] bg-black/40 backdrop-blur-sm"
+            onClick={() => !copying && setCopyToTreeOpen(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.92, opacity: 0 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              className="mx-4 w-full rounded-3xl bg-white shadow-glass-lg p-5 space-y-3"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-full bg-[#0A84FF]/10 flex items-center justify-center flex-shrink-0">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <rect x="2" y="5" width="9" height="9" rx="2" stroke="#0A84FF" strokeWidth="1.5" />
+                    <path d="M5 5V3.5A1.5 1.5 0 0 1 6.5 2H13A1.5 1.5 0 0 1 14.5 3.5V11A1.5 1.5 0 0 1 13 12.5h-1.5" stroke="#0A84FF" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sf-subhead font-bold text-[#1C1C1E]">{t.panelCopyToTreeTitle}</p>
+                  <p className="text-[11px] text-[#636366] font-semibold mt-0.5">{member.first_name} {member.last_name}</p>
+                </div>
+              </div>
+              <p className="text-sf-footnote text-[#636366] leading-relaxed">{t.panelCopyToTreeNote}</p>
+              <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                {/* Main tree option — only when member is in a named tree */}
+                {member.tree_id && (
+                  <button
+                    type="button"
+                    disabled={copying}
+                    onClick={() => handleCopyToTree(null)}
+                    className="w-full flex items-center gap-3 p-3 rounded-2xl bg-[#F2F2F7] hover:bg-[#E5E5EA] transition text-start disabled:opacity-50"
+                  >
+                    <div className="w-6 h-6 rounded-full bg-[#8E8E93] flex-shrink-0" />
+                    <p className="text-sf-subhead font-semibold text-[#1C1C1E]">{t.panelCopyToTreeMain}</p>
+                  </button>
+                )}
+                {trees
+                  .filter((tr) => tr.id !== member.tree_id)
+                  .map((tr) => (
+                    <button
+                      key={tr.id}
+                      type="button"
+                      disabled={copying}
+                      onClick={() => handleCopyToTree(tr.id)}
+                      className="w-full flex items-center gap-3 p-3 rounded-2xl bg-[#F2F2F7] hover:bg-[#E5E5EA] transition text-start disabled:opacity-50"
+                    >
+                      <div
+                        className="w-6 h-6 rounded-full flex-shrink-0"
+                        style={{ background: tr.color ?? '#8E8E93' }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sf-subhead font-semibold text-[#1C1C1E] truncate">{tr.name}</p>
+                        {tr.description && (
+                          <p className="text-[10px] text-[#8E8E93] truncate">{tr.description}</p>
+                        )}
+                      </div>
+                      {copying && <svg className="animate-spin w-4 h-4 text-[#8E8E93]" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" strokeDasharray="30 14" /></svg>}
+                    </button>
+                  ))
+                }
+                {/* No targets available */}
+                {!member.tree_id && trees.length === 0 && (
+                  <p className="text-center text-sf-footnote text-[#8E8E93] py-4">
+                    {t.treeSwitcherCreate}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                disabled={copying}
+                onClick={() => setCopyToTreeOpen(false)}
+                className="w-full py-2.5 rounded-2xl bg-[#F2F2F7] text-[#1C1C1E] text-sf-subhead font-semibold disabled:opacity-50"
+              >
+                {t.panelDeleteConfirmNo}
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Delete confirmation dialog ── */}
       <AnimatePresence>
