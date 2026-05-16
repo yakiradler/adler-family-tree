@@ -13,6 +13,7 @@ import { buildParentMap, resolveLineage } from '../../lib/lineage'
 import type { FilterState } from './AdvancedFilter'
 import { applyTreeFilters } from './applyTreeFilters'
 import FocusedCentricView from './FocusedCentricView'
+import TreeMiniMap from './TreeMiniMap'
 
 export type { LayoutMode } from './treeLayout'
 
@@ -516,9 +517,27 @@ export default function TreeView({
         </button>
       </div>
 
-      <div className="absolute bottom-4 left-4 glass rounded-full px-3 py-1.5 text-[#636366] text-sf-caption2 font-semibold shadow-glass-sm z-10">
-        {Math.round(scale * 100)}%
-      </div>
+      {/* Bird's-eye minimap — sits in the bottom-left and surfaces the
+          zoom % in its header, replacing the previous standalone badge.
+          Hides itself on very small trees (under 4 nodes) where it
+          adds visual noise without buying any navigation benefit. */}
+      {nodes.length >= 4 && (
+        <TreeMiniMap
+          nodes={nodes}
+          canvasW={canvasW}
+          canvasH={canvasH}
+          tx={tx}
+          ty={ty}
+          scale={scale}
+          viewportW={wrapRef.current?.clientWidth ?? 1024}
+          viewportH={wrapRef.current?.clientHeight ?? 720}
+          scalePercent={scale * 100}
+          onNavigate={(newTx, newTy) => {
+            setTx(newTx)
+            setTy(newTy)
+          }}
+        />
+      )}
 
       {/* Focused-Centric mode button */}
       {members.length > 0 && (
