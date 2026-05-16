@@ -1,21 +1,28 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { supabase } from './lib/supabase'
 import { useFamilyStore } from './store/useFamilyStore'
 import { useLang, isRTL } from './i18n/useT'
-import Auth from './pages/Auth'
+// Landing stays in the main bundle — it's the entry page and the
+// marketing pitch. Everything else is route-split so the initial
+// payload shrinks: a user visiting "/" doesn't pay for the tree
+// renderer, admin dashboard, AI-scan modal, etc.
 import Landing from './pages/Landing'
-import Dashboard from './pages/Dashboard'
-import TreePage from './pages/TreePage'
-import BirthdayPage from './pages/BirthdayPage'
-import AdminDashboard from './components/admin/AdminDashboard'
 import ThemeShell from './components/ThemeShell'
 import PersistenceIndicator from './components/PersistenceIndicator'
-import OnboardingWizard from './components/onboarding/OnboardingWizard'
 import { ADLER_MEMBERS, ADLER_RELATIONSHIPS } from './data/adlerFamily'
 import type { Profile } from './types'
 import type { Session } from '@supabase/supabase-js'
+
+// Lazy-loaded routes. Each becomes its own chunk so users only
+// download what they actually navigate to.
+const Auth = lazy(() => import('./pages/Auth'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const TreePage = lazy(() => import('./pages/TreePage'))
+const BirthdayPage = lazy(() => import('./pages/BirthdayPage'))
+const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'))
+const OnboardingWizard = lazy(() => import('./components/onboarding/OnboardingWizard'))
 
 const SUPABASE_CONFIGURED =
   !!import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_URL !== ''
@@ -284,6 +291,12 @@ export default function App() {
       <PersistenceIndicator />
       <HashRouter>
         <ThemeShell>
+          {/* Suspense boundary for the lazy-loaded routes. The fallback
+              mirrors the auth-loading spinner so the visual feel stays
+              consistent while a route chunk streams in over the
+              network. Landing is eagerly imported so this fallback
+              only kicks in when the user actually navigates somewhere. */}
+          <Suspense fallback={<RouteFallback />}>
           <Routes>
             {/*
               Routing model:
@@ -367,8 +380,27 @@ export default function App() {
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </Suspense>
         </ThemeShell>
       </HashRouter>
+    </div>
+  )
+}
+
+/**
+ * Suspense fallback for the lazy-loaded routes. Uses the same blue
+ * spinner-on-mesh background as the initial auth-loading state so the
+ * route hand-off feels seamless. Pulled out into a component so the
+ * Suspense JSX stays uncluttered.
+ */
+function RouteFallback() {
+  return (
+    <div className="min-h-screen bg-mesh-gradient flex items-center justify-center">
+      <motion.div
+        animate={{ rotate: 360 }}
+        transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+        className="w-8 h-8 border-2 border-[#007AFF]/20 border-t-[#007AFF] rounded-full"
+      />
     </div>
   )
 }
