@@ -70,8 +70,11 @@ const blank: AnswerState = {
 const TOTAL_STEPS = 4
 
 export default function OnboardingWizard() {
-  const { profile, completeOnboarding, submitAccessRequest } = useFamilyStore()
-  const { t } = useLang()
+  const {
+    profile, completeOnboarding, submitAccessRequest,
+    addTree, addMember, setActiveTreeId,
+  } = useFamilyStore()
+  const { t, lang } = useLang()
   const navigate = useNavigate()
   const [step, setStep] = useState<Step>(1)
   const [a, setA] = useState<AnswerState>(blank)
@@ -163,28 +166,65 @@ export default function OnboardingWizard() {
         avatar_url: a.avatar_url || undefined,
         requested_role: effectiveRole,
       })
-      // 2. File the access request for admin review. Personal details are
-      //    parked in `answers.personal` so the reviewing admin can copy
-      //    them onto the matching Member record when approving.
-      await submitAccessRequest({
-        requested_role: effectiveRole,
-        invite_code: a.joinChoice === 'invite' ? a.inviteCode.trim() : null,
-        answers: {
-          joinChoice: a.joinChoice,
-          relationship: a.relationship,
-          purpose: a.purpose,
-          personal: {
+      // 2. Branch on the user's join choice from step 1. Either create a
+      //    brand-new tree they own (with themselves as the first
+      //    member), or hand off to the access-request flow so an admin
+      //    of an existing tree can approve them.
+      if (a.joinChoice === 'new') {
+        const treeName = a.lastName.trim()
+          ? (lang === 'he' ? `משפחת ${a.lastName.trim()}` : `${a.lastName.trim()} Family`)
+          : (lang === 'he' ? 'העץ שלי' : 'My Tree')
+        const newTree = await addTree({
+          name: treeName,
+          color: '#34C759',
+          created_by: profile.id,
+        })
+        if (newTree) {
+          // Seed the new tree with the user as the very first member.
+          // We pre-populate from the wizard answers so they don't have
+          // to re-enter their details. created_by ties the record to
+          // this user for RBAC.
+          await addMember({
             first_name: a.firstName.trim(),
             last_name: a.lastName.trim(),
-            email: a.email.trim(),
-            birth_date: a.birthDate,
-            maiden_name: a.maidenName.trim() || null,
-            gender: a.gender || null,
-            phone: a.phone.trim() || null,
-            lineage: a.lineage || null,
+            maiden_name: a.maidenName.trim() || undefined,
+            birth_date: a.birthDate || undefined,
+            gender: a.gender || undefined,
+            lineage: a.lineage || undefined,
+            bio: a.bio.trim() || undefined,
+            photo_url: a.avatar_url || undefined,
+            tree_id: newTree.id,
+            created_by: profile.id,
+          })
+          // Switch the view to the new tree so /home and /tree show the
+          // user's own (initially one-person) tree, not the demo seed.
+          setActiveTreeId(newTree.id)
+        }
+      } else {
+        // Joining an existing tree → file the access request so the
+        // tree's admin can review. Personal details are parked in
+        // `answers.personal` so the admin can copy them onto the
+        // matching Member record on approval.
+        await submitAccessRequest({
+          requested_role: effectiveRole,
+          invite_code: a.inviteCode.trim() || null,
+          answers: {
+            joinChoice: a.joinChoice,
+            relationship: a.relationship,
+            purpose: a.purpose,
+            personal: {
+              first_name: a.firstName.trim(),
+              last_name: a.lastName.trim(),
+              email: a.email.trim(),
+              birth_date: a.birthDate,
+              maiden_name: a.maidenName.trim() || null,
+              gender: a.gender || null,
+              phone: a.phone.trim() || null,
+              lineage: a.lineage || null,
+            },
           },
-        },
-      })
+        })
+      }
       setStep(5)
     } finally {
       setBusy(false)
@@ -209,16 +249,12 @@ export default function OnboardingWizard() {
         {/* Progress strip */}
         {step <= TOTAL_STEPS && (
           <div className="px-6 pt-5">
-            {/* Skip-to-home link — lets users who reached the wizard accidentally exit */}
-            <div className="flex justify-end mb-1">
-              <button
-                type="button"
-                onClick={() => navigate('/home')}
-                className="text-[11px] text-[#8E8E93] hover:text-[#636366] transition"
-              >
-                {t.onbSkip} ›
-              </button>
-            </div>
+            {/* The skip-to-home shortcut was removed: every new user must
+                complete onboarding so we know whether to land them on
+                their own brand-new tree (step 1 = "new") or on an
+                existing tree they have an invite to. Without that choice
+                we'd default everyone onto the demo's Adler-family tree,
+                which is what triggered the bug report. */}
             <div className="flex items-center gap-1.5">
               {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((s) => (
                 <div

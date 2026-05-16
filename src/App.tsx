@@ -14,6 +14,7 @@ import ThemeShell from './components/ThemeShell'
 import PersistenceIndicator from './components/PersistenceIndicator'
 import OnboardingWizard from './components/onboarding/OnboardingWizard'
 import { ADLER_MEMBERS, ADLER_RELATIONSHIPS } from './data/adlerFamily'
+import type { Profile } from './types'
 import type { Session } from '@supabase/supabase-js'
 
 const SUPABASE_CONFIGURED =
@@ -33,17 +34,52 @@ export default function App() {
   const { lang } = useLang()
   const dir = isRTL(lang) ? 'rtl' : 'ltr'
 
-  // Profile-only side effect — runs on language change so the
-  // displayed family name follows the active locale. Members,
-  // relationships and trees are owned by the persistence effect below.
+  // Demo profile lifecycle — hydrates from localStorage so a fresh
+  // signup's onboarding state survives refresh. Falls back to the
+  // pre-filled "demo admin" profile so first-time visitors see the
+  // Adler-family demo without any setup. Language switches only
+  // update the displayed `full_name` for that default admin; once a
+  // real signup happens the user's own name is preserved.
   useEffect(() => {
     if (!demoMode) return
-    useFamilyStore.getState().setProfile({
+    const DEFAULT_NAME = lang === 'he' ? 'משפחת אדלר' : 'Adler Family'
+    let stored: Profile | null = null
+    try {
+      const raw = window.localStorage.getItem('ft-demo-profile')
+      if (raw) stored = JSON.parse(raw) as Profile
+    } catch { /* malformed payload — fall through to default */ }
+    const next: Profile = stored ?? {
       id: 'demo',
-      full_name: lang === 'he' ? 'משפחת אדלר' : 'Adler Family',
+      full_name: DEFAULT_NAME,
       role: 'admin',
-    })
+      // Pre-onboarded so existing demo visitors aren't forced through
+      // the wizard. New signups set this back to null in Auth.tsx.
+      onboarded_at: new Date(0).toISOString(),
+    }
+    // Refresh the default name on language change, but only for the
+    // pristine demo admin — never overwrite a real signup's name.
+    if (next.id === 'demo') next.full_name = DEFAULT_NAME
+    useFamilyStore.getState().setProfile(next)
   }, [demoMode, lang])
+
+  // Persist any demo profile updates so refresh + lang changes don't
+  // lose the user's onboarding progress or signup identity. We only
+  // mirror to storage in demo mode; Supabase owns the canonical profile
+  // when configured.
+  useEffect(() => {
+    if (!demoMode) return
+    const unsubscribe = useFamilyStore.subscribe((state, prev) => {
+      if (state.profile === prev.profile) return
+      try {
+        if (state.profile) {
+          window.localStorage.setItem('ft-demo-profile', JSON.stringify(state.profile))
+        } else {
+          window.localStorage.removeItem('ft-demo-profile')
+        }
+      } catch { /* quota — ignore, profile is small enough this is rare */ }
+    })
+    return unsubscribe
+  }, [demoMode])
 
   // Dev-only: expose the store on window for browser-harness debugging
   // (browser DevTools and the Preview MCP test harness can poke at the
@@ -232,6 +268,14 @@ export default function App() {
   }
 
   const isAuth = (demoMode && demoEntered) || !!session
+  // Force unboarded signed-in users through the wizard before they
+  // can reach any in-app route. The check intentionally uses the live
+  // store profile so completing the wizard immediately re-opens the
+  // gates without needing a page refresh. The demo admin profile
+  // ships with a non-null onboarded_at, so the gate only catches
+  // fresh signups (see Auth.tsx demo-signup branch).
+  const profile = useFamilyStore((s) => s.profile)
+  const needsOnboarding = isAuth && !!profile && !profile.onboarded_at
 
   return (
     <div dir={dir} className="min-h-screen">
@@ -283,22 +327,45 @@ export default function App() {
             />
             <Route
               path="/home"
-              element={!isAuth ? <Navigate to="/" replace /> : <Dashboard demoMode={demoMode} />}
+              element={
+                !isAuth ? <Navigate to="/" replace />
+                : needsOnboarding ? <Navigate to="/onboarding" replace />
+                : <Dashboard demoMode={demoMode} />
+              }
             />
             <Route
               path="/tree"
-              element={!isAuth ? <Navigate to="/" replace /> : <TreePage demoMode={demoMode} />}
+              element={
+                !isAuth ? <Navigate to="/" replace />
+                : needsOnboarding ? <Navigate to="/onboarding" replace />
+                : <TreePage demoMode={demoMode} />
+              }
             />
             <Route
               path="/birthdays"
-              element={!isAuth ? <Navigate to="/" replace /> : <BirthdayPage demoMode={demoMode} />}
+              element={
+                !isAuth ? <Navigate to="/" replace />
+                : needsOnboarding ? <Navigate to="/onboarding" replace />
+                : <BirthdayPage demoMode={demoMode} />
+              }
             />
             <Route
               path="/admin"
-              element={!isAuth ? <Navigate to="/" replace /> : <AdminDashboard />}
+              element={
+                !isAuth ? <Navigate to="/" replace />
+                : needsOnboarding ? <Navigate to="/onboarding" replace />
+                : <AdminDashboard />
+              }
             />
-            <Route path="/scan" element={!isAuth ? <Navigate to="/" replace /> : <Navigate to="/home" replace />} />            <Route path="*" element={<Navigate to="/" replace />} />
-                        <Route path="*" element={<Navigate to="/" replace />} />
+            <Route
+              path="/scan"
+              element={
+                !isAuth ? <Navigate to="/" replace />
+                : needsOnboarding ? <Navigate to="/onboarding" replace />
+                : <Navigate to="/home" replace />
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </ThemeShell>
       </HashRouter>

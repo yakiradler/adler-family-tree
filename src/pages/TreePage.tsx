@@ -12,6 +12,7 @@ import TreeSearchModal from '../components/TreeSearchModal'
 import TreeSwitcher from '../components/TreeSwitcher'
 import { useMemo, useState } from 'react'
 import AdvancedFilter, { DEFAULT_FILTERS, type FilterState } from '../components/views/AdvancedFilter'
+import { useBrowserZoom } from '../hooks/useBrowserZoom'
 
 interface Props { demoMode: boolean }
 
@@ -24,6 +25,11 @@ export default function TreePage({ demoMode }: Props) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS)
   const [matchedCount, setMatchedCount] = useState(0)
+  // Browser-zoom counter-scale. At 200% page zoom the fixed-positioned
+  // MemberPanel would otherwise inflate to 720+ physical pixels and
+  // dominate the viewport. We apply an inverse transform so the panel
+  // stays at a roughly constant physical size regardless of zoom.
+  const browserZoom = useBrowserZoom()
 
   const members = useMemo(
     () =>
@@ -123,15 +129,24 @@ export default function TreePage({ demoMode }: Props) {
               exit={{ opacity: 0, x: isRTL(lang) ? -40 : 40 }}
               transition={{ type: 'spring', stiffness: 350, damping: 32 }}
               // Mobile: dock to the bottom (sheet style).
-              // Desktop: anchor to top-20, FIXED width 360px, FIXED max
-              // height so the panel never stretches the full viewport.
-              // The previous combo of `bottom-4 + md:top-20` produced a
-              // panel 720px tall on most screens, which the user
-              // reasonably called "huge".
-              className={`fixed z-50 w-[calc(100vw-32px)] max-w-[360px] bottom-4 md:bottom-auto md:top-20 ${
+              // Desktop: anchor to top-20, capped width 320px, capped
+              // max height so the panel never stretches the full
+              // viewport. Width was reduced from 360→320 so even at
+              // moderate browser zoom the tree stays usable.
+              //
+              // `transform: scale(1/zoom)` counters browser zoom so the
+              // panel keeps a roughly constant *physical* size — without
+              // this, Ctrl++ used to inflate the panel to half the
+              // viewport. transform-origin sits at the anchored corner
+              // so the panel scales toward its edge, not its centre.
+              className={`fixed z-50 w-[calc(100vw-32px)] max-w-[320px] bottom-4 md:bottom-auto md:top-20 ${
                 isRTL(lang) ? 'left-4' : 'right-4'
               }`}
-              style={{ maxHeight: 'min(640px, calc(100vh - 120px))' }}
+              style={{
+                maxHeight: 'min(640px, calc(100vh - 120px))',
+                transform: browserZoom > 1 ? `scale(${1 / browserZoom})` : undefined,
+                transformOrigin: isRTL(lang) ? 'top left' : 'top right',
+              }}
             >
               <MemberPanel onClose={() => setSelectedMemberId(null)} />
             </motion.div>

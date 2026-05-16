@@ -83,10 +83,13 @@ const EMPTY: LineageInfo = {
 }
 
 function maleFathers(parents: Member[]): Member[] {
-  // Father = parent with gender 'male'. If gender is unknown we treat
-  // the parent as a possible father (best-effort fallback — no female
-  // gender, no exclusion).
-  return parents.filter(p => p.gender !== 'female')
+  // Halacha: Kohen / Levi status passes through the MALE line ONLY.
+  // We require an explicit `gender === 'male'`; parents whose gender is
+  // unknown are NOT treated as fathers, because tagging an Israel as
+  // Kohen by mistake is the worse error. A male parent missing the
+  // gender field is a data-entry bug — fix the member record, don't
+  // paper over it here.
+  return parents.filter(p => p.gender === 'male')
 }
 
 /**
@@ -141,10 +144,17 @@ export function resolveLineage(
     }
   }
 
-  // Adler auto-Kohen rule (males only).
+  // Adler auto-Kohen rule (males only). The surname rule is a heuristic
+  // for the Adler family's specific lineage — but it must still respect
+  // the male-line halacha. If the only Adler parent is the mother, we
+  // do NOT auto-tag the son as Kohen (he'd be a "ben bat-kohen", not a
+  // Kohen). Require an Adler FATHER (or at least a male parent whose
+  // surname matches).
   if (isAdlerSurname(member.last_name)) {
-    const hasAdlerParent = parents.some(p => isAdlerSurname(p.last_name))
-    if (hasAdlerParent) {
+    const hasAdlerFather = parents.some(
+      p => p.gender === 'male' && isAdlerSurname(p.last_name),
+    )
+    if (hasAdlerFather) {
       return { lineage: 'kohen', byAdlerRule: true, showBadge: true, daughterOf: null }
     }
   }

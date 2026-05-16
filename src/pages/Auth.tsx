@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
+import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang } from '../i18n/useT'
 
 type AuthMode = 'login' | 'signup'
@@ -23,6 +24,7 @@ export default function Auth({ demoMode = false, onDemoEnter }: Props) {
   const [mode, setMode] = useState<AuthMode>(initialMode)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [fullName, setFullName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -50,6 +52,20 @@ export default function Auth({ demoMode = false, onDemoEnter }: Props) {
             ? 'רישום הודגם בהצלחה! ממשיכים לשאלון…'
             : 'Signup demo successful! Continuing to the wizard…')
           await new Promise((r) => setTimeout(r, 700))
+          // Replace the default "demo admin" profile with a fresh
+          // un-onboarded one so the route guard in App.tsx forces this
+          // user through the wizard. Without this the visitor would
+          // inherit the Adler-admin profile and walk straight into the
+          // demo tree — which is exactly the bug we're fixing.
+          // The `demo-` id prefix keeps it distinct from the canonical
+          // demo admin so App.tsx's lang-switch effect won't rename
+          // them back to "Adler Family".
+          useFamilyStore.getState().setProfile({
+            id: `demo-${Math.random().toString(36).slice(2, 10)}`,
+            full_name: fullName.trim() || (lang === 'he' ? 'משתמש חדש' : 'New user'),
+            role: 'user',
+            onboarded_at: null,
+          })
           // flushSync forces the demo-entered flag to land in App's
           // state BEFORE we trigger navigation. Otherwise React 18
           // batches the setState with the navigate, /onboarding renders
@@ -166,8 +182,45 @@ export default function Auth({ demoMode = false, onDemoEnter }: Props) {
             </AnimatePresence>
             <input type="email" placeholder={t.authEmail} value={email}
               onChange={(e) => setEmail(e.target.value)} required className="input-field" />
-            <input type="password" placeholder={t.authPassword} value={password}
-              onChange={(e) => setPassword(e.target.value)} required className="input-field" />
+            {/* Password field with show/hide toggle. The eye button is
+                absolutely positioned to the end (logical: right in LTR,
+                left in RTL) so it follows the page direction.
+                `pe-12` reserves space inside the input so dots/text don't
+                slide under the button. The toggle is type="button" so
+                clicking it doesn't submit the form. */}
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder={t.authPassword}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="input-field pe-12"
+                autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                aria-label={showPassword ? t.authHidePassword : t.authShowPassword}
+                title={showPassword ? t.authHidePassword : t.authShowPassword}
+                className="absolute inset-y-0 end-1 flex items-center justify-center w-10 text-[#8E8E93] hover:text-[#1C1C1E] transition-colors"
+                tabIndex={-1}
+              >
+                {showPassword ? (
+                  // Eye-off (hide)
+                  <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="M3 3l14 14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                    <path d="M7.5 7.5a3 3 0 0 0 4.2 4.2M9 5.1c.33-.04.66-.06 1-.06 4 0 6.8 2.6 8 4.96-.46.9-1.18 1.96-2.16 2.92M5.3 6.4C3.7 7.5 2.6 8.94 2 10c1.2 2.4 4 5 8 5 1.2 0 2.3-.22 3.27-.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                ) : (
+                  // Eye (show)
+                  <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="M2 10s2.8-5 8-5 8 5 8 5-2.8 5-8 5-8-5-8-5z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                    <circle cx="10" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.6" />
+                  </svg>
+                )}
+              </button>
+            </div>
 
             <AnimatePresence>
               {error && (
