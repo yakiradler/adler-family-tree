@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="he" dir="rtl">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -11,7 +11,26 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
-    <title>family-tree</title>
+
+    <!-- PWA: installable on Android (manifest) + iOS (apple-touch-icon
+         + apple-mobile-web-app-* meta). `theme_color` lights up the
+         system status bar / browser chrome when the app is added to
+         the home screen and launched standalone. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#007AFF" />
+    <meta name="application-name" content="Adler Family Tree" />
+    <meta name="description" content="Apple-style family tree CRM — Hebrew/English, multi-tree, RBAC, halachic lineage." />
+
+    <!-- iOS Safari "Add to Home Screen" hints. Status-bar style is
+         black-translucent so the iOS status bar overlays our mesh
+         background gracefully when the user launches from the home
+         screen. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Adler Tree" />
+    <link rel="apple-touch-icon" href="/icon-app.svg" />
+
+    <title>Adler Family Tree</title>
   </head>
   <body>
     <div id="root"></div>

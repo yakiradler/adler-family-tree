@@ -1,0 +1,28 @@
+{
+  "name": "Adler Family Tree",
+  "short_name": "Adler Tree",
+  "description": "Apple-style family tree CRM — Hebrew/English, multi-tree, RBAC, halachic lineage.",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#007AFF",
+  "background_color": "#F4F7FF",
+  "categories": ["lifestyle", "productivity", "social"],
+  "icons": [
+    {
+      "src": "./icon-app.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

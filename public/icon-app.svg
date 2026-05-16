@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!--
+    PWA app icon. Designed to match the in-app brand glyph (the three
+    connected circles you see on the Auth + Landing pages) so the home-
+    screen icon and the logo inside the app read as the same artefact.
+    Square 512×512 base — manifest declares `purpose: "any maskable"`
+    so Android can re-clip this into the platform's icon mask without
+    cropping anything important (the family-tree glyph sits well inside
+    the safe area).
+  -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#007AFF"/>
+      <stop offset="1" stop-color="#32ADE6"/>
+    </linearGradient>
+    <filter id="soft" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+  </defs>
+  <!-- Rounded-square background, generous corner radius keeps the icon
+       legible after Android maskable clipping. -->
+  <rect x="0" y="0" width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- Soft decorative blob on the top-right for visual interest. -->
+  <circle cx="430" cy="80" r="120" fill="white" fill-opacity="0.10" filter="url(#soft)"/>
+  <!-- Three-node family glyph: parent at top, two children below,
+       connectors in white at low opacity. Coordinates centred in the
+       512 canvas with ~96 px padding from each edge. -->
+  <g transform="translate(96, 112)">
+    <!-- Connector lines, drawn BEFORE circles so they end inside the
+         filled discs and don't visually overshoot. -->
+    <line x1="160" y1="84" x2="64" y2="220" stroke="white" stroke-width="14" stroke-opacity="0.55" stroke-linecap="round"/>
+    <line x1="160" y1="84" x2="256" y2="220" stroke="white" stroke-width="14" stroke-opacity="0.55" stroke-linecap="round"/>
+    <!-- Parent (centre-top) — slightly larger than the children. -->
+    <circle cx="160" cy="64" r="48" fill="white" fill-opacity="0.95"/>
+    <!-- Children -->
+    <circle cx="48" cy="240" r="40" fill="white" fill-opacity="0.85"/>
+    <circle cx="272" cy="240" r="40" fill="white" fill-opacity="0.85"/>
+  </g>
+</svg>
