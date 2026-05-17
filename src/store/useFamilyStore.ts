@@ -89,6 +89,23 @@ interface FamilyState {
   updateTree: (id: string, patch: Partial<FamilyTree>) => Promise<void>
   deleteTree: (id: string) => Promise<void>
 
+  // ── Tree layout mode (lifted from TreeView) ────────────────────────
+  // Used to live as local state in TreeView, but the bottom-nav
+  // island now exposes a "פריסה" picker that needs to read + write the
+  // same value, so it had to come up here. Hydrated from localStorage
+  // on first read so a user's preferred layout survives page loads.
+  layoutMode: 'classic' | 'grid' | 'arc' | 'staggered'
+  setLayoutMode: (m: 'classic' | 'grid' | 'arc' | 'staggered') => void
+
+  // ── Tree-view floating-controls visibility ─────────────────────────
+  // The Focused-Centric / Filters / Density chips at the top of the
+  // tree page used to clutter the mobile viewport with three separate
+  // pills. They now live behind a single hamburger button; this flag
+  // is the shared open/close state both TreeView and TreePage read so
+  // all three reveal in lockstep.
+  treeControlsExpanded: boolean
+  setTreeControlsExpanded: (v: boolean) => void
+
   // ── Member notes (comments + memories) ─────────────────────────────
   /** All notes across all members. Per-member filtering is done in the
    *  consumer (MemberNotesTab) so we keep one canonical list and don't
@@ -447,4 +464,21 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       reportSupabaseFailure('deleteNote', err)
     }
   },
+
+  // ── Layout mode (hydrated from localStorage) ───────────────────────
+  layoutMode:
+    typeof window !== 'undefined'
+      ? (() => {
+          const v = window.localStorage.getItem('ft-tree-layout-mode')
+          return v === 'grid' || v === 'arc' || v === 'staggered' ? v : 'classic'
+        })()
+      : 'classic',
+  setLayoutMode: (m) => {
+    try { window.localStorage.setItem('ft-tree-layout-mode', m) } catch { /* ignore */ }
+    set({ layoutMode: m })
+  },
+
+  // ── Tree-view floating-controls visibility ─────────────────────────
+  treeControlsExpanded: false,
+  setTreeControlsExpanded: (treeControlsExpanded) => set({ treeControlsExpanded }),
 }))

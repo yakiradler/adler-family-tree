@@ -303,6 +303,13 @@ export const translations = {
     treeDensityCompactTip: 'מציג רק 3 דורות בלבד — הורים, האדם המרכזי, וילדים. אפשר להרחיב למעלה/למטה דור בכל פעם.',
     treeDensityWideTip: 'מציג את כל הדורות בעץ. לחץ למעבר לתצוגה ממוקדת.',
 
+    // Tree-view floating-controls hamburger
+    treeControlsOpen: 'אפשרויות תצוגה',
+    treeControlsClose: 'סגור',
+
+    // Layout picker (now inside the bottom nav)
+    layoutPickerNavLabel: 'פריסה',
+
     // AI features — coming soon
     aiTreeFromTextLabel: 'בנה עץ מטקסט',
     aiTreeFromTextDesc: 'כתוב במילים פשוטות מי קשור למי — "אבא יוסי נולד 1955, ילדים: רון, מיכל..." — והבינה המלאכותית תבנה את העץ עבורך. אם משהו לא יהיה ברור — היא תשאל אותך.',
@@ -874,6 +881,13 @@ export const translations = {
     treeHideDescendants: 'Hide bottom generation',
     treeDensityCompactTip: 'Shows only 3 generations — parents, the focal person, and children. You can expand one generation up or down at a time.',
     treeDensityWideTip: 'Shows all generations in the tree. Tap to switch to focused view.',
+
+    // Tree-view floating-controls hamburger
+    treeControlsOpen: 'View options',
+    treeControlsClose: 'Close',
+
+    // Layout picker (now inside the bottom nav)
+    layoutPickerNavLabel: 'Layout',
 
     // AI features — coming soon
     aiTreeFromTextLabel: 'Build tree from text',

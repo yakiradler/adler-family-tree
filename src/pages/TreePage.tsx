@@ -17,7 +17,11 @@ import { useBrowserZoom } from '../hooks/useBrowserZoom'
 interface Props { demoMode: boolean }
 
 export default function TreePage({ demoMode }: Props) {
-  const { selectedMemberId, setSelectedMemberId, profile, members: allMembers, relationships, activeTreeId, viewMode } = useFamilyStore()
+  const {
+    selectedMemberId, setSelectedMemberId, profile,
+    members: allMembers, relationships, activeTreeId, viewMode,
+    treeControlsExpanded, setTreeControlsExpanded,
+  } = useFamilyStore()
   const { t, lang } = useLang()
   const dir = isRTL(lang) ? 'rtl' : 'ltr'
   const navigate = useNavigate()
@@ -90,13 +94,57 @@ export default function TreePage({ demoMode }: Props) {
         {viewMode === 'tree' && (
           <>
             <TreeView filters={filters} onMatchedCount={setMatchedCount} />
-            <AdvancedFilter
-              filters={filters}
-              onChange={setFilters}
-              members={members}
-              relationships={relationships}
-              matchedCount={matchedCount}
-            />
+
+            {/* Floating-controls hamburger.
+                The three tree-page chips (Focused-Centric, Filters,
+                Density) used to sit at the top of the canvas as
+                separate pills — a mess on mobile. They're all hidden
+                by default now and this single button reveals them.
+                The button itself moves with the visibility state so
+                its label is unambiguous. */}
+            <motion.button
+              type="button"
+              onClick={() => setTreeControlsExpanded(!treeControlsExpanded)}
+              whileTap={{ scale: 0.94 }}
+              aria-label={treeControlsExpanded ? t.treeControlsClose : t.treeControlsOpen}
+              title={treeControlsExpanded ? t.treeControlsClose : t.treeControlsOpen}
+              className={`absolute z-30 no-print top-[72px] ${
+                isRTL(lang) ? 'left-3' : 'right-3'
+              } w-10 h-10 rounded-full shadow-glass flex items-center justify-center transition ${
+                treeControlsExpanded
+                  ? 'bg-[#1C1C1E] text-white'
+                  : 'bg-white/95 text-[#1C1C1E] border border-white/70 hover:bg-white'
+              }`}
+            >
+              <motion.svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                animate={{ rotate: treeControlsExpanded ? 90 : 0 }}
+                transition={{ duration: 0.18 }}
+              >
+                {treeControlsExpanded ? (
+                  <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                ) : (
+                  <>
+                    <path d="M2.5 4h11M2.5 8h11M2.5 12h11" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                  </>
+                )}
+              </motion.svg>
+            </motion.button>
+
+            {/* AdvancedFilter — hidden by default; revealed via the
+                same hamburger as the other tree-page chips. */}
+            {treeControlsExpanded && (
+              <AdvancedFilter
+                filters={filters}
+                onChange={setFilters}
+                members={members}
+                relationships={relationships}
+                matchedCount={matchedCount}
+              />
+            )}
           </>
         )}
         {viewMode === 'schematic' && (

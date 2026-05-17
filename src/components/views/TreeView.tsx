@@ -115,10 +115,6 @@ function buildConnectors(nodes: LayoutNode[], relationships: Relationship[]) {
 
 // ─── Main TreeView ─────────────────────────────────────────────────────────────
 
-const LAYOUT_STORAGE_KEY = 'ft-tree-layout-mode'
-const isLayoutMode = (v: unknown): v is LayoutMode =>
-  v === 'classic' || v === 'grid' || v === 'arc' || v === 'staggered'
-
 export default function TreeView({
   filters,
   onMatchedCount,
@@ -126,7 +122,13 @@ export default function TreeView({
   filters: FilterState
   onMatchedCount?: (n: number) => void
 }) {
-  const { members: allMembers, relationships, selectedMemberId, setSelectedMemberId, activeTreeId } = useFamilyStore()
+  const {
+    members: allMembers, relationships,
+    selectedMemberId, setSelectedMemberId,
+    activeTreeId,
+    layoutMode,
+    treeControlsExpanded,
+  } = useFamilyStore()
   // Narrow the population to the currently active tree. `null` means
   // the default/main tree which is everyone without a tree_id; an
   // explicit id picks that named tree.
@@ -142,14 +144,9 @@ export default function TreeView({
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
 
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => {
-    if (typeof window === 'undefined') return 'classic'
-    const saved = window.localStorage.getItem(LAYOUT_STORAGE_KEY)
-    return isLayoutMode(saved) ? saved : 'classic'
-  })
-  useEffect(() => {
-    try { window.localStorage.setItem(LAYOUT_STORAGE_KEY, layoutMode) } catch { /* ignore */ }
-  }, [layoutMode])
+  // layoutMode now lives in the Zustand store so the bottom-nav
+  // "פריסה" picker (rendered by Navigation) can read + change the
+  // same value — see useFamilyStore for the persistence hook.
 
   // Focused-Centric mode — replaces the full-tree canvas with a 3-generation
   // subgraph centred on a chosen person.
@@ -586,10 +583,10 @@ export default function TreeView({
         ))}
       </div>
 
-      {/* Floating bottom layout picker — single collapsed button expanding to 4 */}
-      <div className="no-print">
-        <LayoutPicker mode={layoutMode} onChange={setLayoutMode} t={t} />
-      </div>
+      {/* Layout picker used to render here as its own floating pill;
+          it now lives INSIDE the black navigation island at the
+          bottom of the page (see Navigation.tsx) so the mobile
+          viewport isn't carrying two separate bottom controls. */}
 
       {/* Export menu — sits ABOVE the zoom controls on the same
           right-anchor stack. The button is unobtrusive (icon-only)
@@ -655,14 +652,14 @@ export default function TreeView({
       )}
 
       {/* Compact / Wide density toggle.
-          Sits next to the Focused-Centric button. In Compact mode
-          only ~3 generations are rendered at once (parents + ego +
-          children); the user expands the slice via the ▲ / ▼
-          controls that appear at the top + bottom of the canvas. */}
-      {members.length > 0 && (
+          Hidden by default — surfaced only when the user opens the
+          floating-controls hamburger at the top of the page (the
+          three top chips used to crowd the mobile viewport so we
+          collapsed them behind one button). */}
+      {members.length > 0 && treeControlsExpanded && (
         <div
           className="absolute z-20 no-print"
-          style={{ top: 72, [rtl ? 'left' : 'right']: 168 } as React.CSSProperties}
+          style={{ top: 124, [rtl ? 'left' : 'right']: 12 } as React.CSSProperties}
         >
           <Tooltip
             content={
@@ -746,11 +743,12 @@ export default function TreeView({
         )}
       </AnimatePresence>
 
-      {/* Focused-Centric mode button */}
-      {members.length > 0 && (
+      {/* Focused-Centric mode button — also revealed by the top
+          hamburger. */}
+      {members.length > 0 && treeControlsExpanded && (
         <div
           className="absolute z-20 no-print"
-          style={{ top: 72, [rtl ? 'left' : 'right']: 12 } as React.CSSProperties}
+          style={{ top: 176, [rtl ? 'left' : 'right']: 12 } as React.CSSProperties}
         >
           <motion.button
             type="button"
@@ -843,190 +841,11 @@ export default function TreeView({
   )
 }
 
-// ─── Layout picker ────────────────────────────────────────────────────────
-// Collapsed state: a single pill at the BOTTOM-center labelled "שינוי תצוגה"
-// with the current mode's icon. Tap → expands upward into 4 options with a
-// springy stagger. Tap outside (or a choice) → collapses again.
-
-function LayoutIcon({ mode, className }: { mode: LayoutMode; className?: string }) {
-  const stroke = 'currentColor'
-  if (mode === 'classic')
-    return (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" className={className}>
-        <circle cx="3" cy="8" r="1.6" fill={stroke} />
-        <circle cx="8" cy="8" r="1.6" fill={stroke} />
-        <circle cx="13" cy="8" r="1.6" fill={stroke} />
-      </svg>
-    )
-  if (mode === 'grid')
-    return (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" className={className}>
-        <circle cx="4" cy="5" r="1.4" fill={stroke} />
-        <circle cx="8" cy="5" r="1.4" fill={stroke} />
-        <circle cx="12" cy="5" r="1.4" fill={stroke} />
-        <circle cx="4" cy="11" r="1.4" fill={stroke} />
-        <circle cx="8" cy="11" r="1.4" fill={stroke} />
-        <circle cx="12" cy="11" r="1.4" fill={stroke} />
-      </svg>
-    )
-  if (mode === 'arc')
-    return (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" className={className}>
-        <path d="M2 6 Q 8 14 14 6" stroke={stroke} strokeWidth="1.4" fill="none" strokeLinecap="round" />
-        <circle cx="2.4" cy="6" r="1.4" fill={stroke} />
-        <circle cx="8" cy="10.8" r="1.4" fill={stroke} />
-        <circle cx="13.6" cy="6" r="1.4" fill={stroke} />
-      </svg>
-    )
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" className={className}>
-      <circle cx="3" cy="5" r="1.4" fill={stroke} />
-      <circle cx="8" cy="11" r="1.4" fill={stroke} />
-      <circle cx="13" cy="5" r="1.4" fill={stroke} />
-      <circle cx="5.5" cy="11" r="1.4" fill={stroke} />
-      <circle cx="10.5" cy="11" r="1.4" fill={stroke} />
-    </svg>
-  )
-}
-
-function LayoutPicker({
-  mode,
-  onChange,
-  t,
-}: {
-  mode: LayoutMode
-  onChange: (m: LayoutMode) => void
-  t: Translations
-}) {
-  const [open, setOpen] = useState(false)
-
-  const items: { key: LayoutMode; label: string }[] = [
-    { key: 'classic', label: t.layoutClassic },
-    { key: 'grid', label: t.layoutGrid },
-    { key: 'arc', label: t.layoutArc },
-    { key: 'staggered', label: t.layoutStaggered },
-  ]
-  const currentLabel = items.find(i => i.key === mode)?.label ?? ''
-
-  // Close the popover on outside click / Escape.
-  useEffect(() => {
-    if (!open) return
-    const onDoc = (e: MouseEvent) => {
-      const tgt = e.target as HTMLElement
-      if (!tgt.closest('[data-layout-picker]')) setOpen(false)
-    }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
-    document.addEventListener('mousedown', onDoc)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDoc)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
-
-  return (
-    <div
-      data-layout-picker
-      // Anchored ABOVE the bottom navigation island so the two
-      // controls don't overlap on small viewports. Navigation lives
-      // at bottom-6 (24 px) and its island is ~56 px tall plus a hide
-      // pill above it (~28 px + 8 px gap) → ~120 px is the first
-      // safe slot. We add a touch more breathing room for legibility.
-      className="absolute bottom-[136px] left-1/2 -translate-x-1/2 z-20 pointer-events-none"
-    >
-      <div className="relative pointer-events-auto flex flex-col items-center gap-2">
-        {/* Expanded option list — appears ABOVE the main button */}
-        <AnimatePresence>
-          {open && (
-            <motion.div
-              key="options"
-              initial={{ opacity: 0, y: 12, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 12, scale: 0.9 }}
-              transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-              className="glass-strong shadow-glass rounded-3xl p-2 border border-white/60 flex flex-col gap-1 min-w-[200px]"
-              role="radiogroup"
-              aria-label={t.layoutPicker}
-            >
-              {items.map((it, idx) => {
-                const active = mode === it.key
-                return (
-                  <motion.button
-                    key={it.key}
-                    role="radio"
-                    aria-checked={active}
-                    onClick={() => { onChange(it.key); setOpen(false) }}
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: idx * 0.04 }}
-                    whileTap={{ scale: 0.97 }}
-                    className={`relative flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-sf-subhead font-semibold transition-colors ${
-                      active ? 'text-white' : 'text-[#1C1C1E] hover:bg-white/60'
-                    }`}
-                  >
-                    {active && (
-                      <motion.span
-                        layoutId="layout-option-active"
-                        className="absolute inset-0 rounded-2xl"
-                        style={{
-                          background:
-                            'linear-gradient(135deg, #2B6BFF 0%, #6C47FF 55%, #19C6FF 100%)',
-                          boxShadow: '0 6px 16px rgba(108,71,255,0.35)',
-                        }}
-                        transition={{ type: 'spring', stiffness: 500, damping: 36 }}
-                      />
-                    )}
-                    <span className="relative z-10 flex items-center gap-2.5 w-full">
-                      <LayoutIcon mode={it.key} />
-                      <span className="flex-1 text-right">{it.label}</span>
-                      {active && (
-                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                          <path d="M2 7l3.5 3.5L12 3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      )}
-                    </span>
-                  </motion.button>
-                )
-              })}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* The main toggle button — always visible */}
-        <motion.button
-          onClick={() => setOpen(v => !v)}
-          whileTap={{ scale: 0.96 }}
-          className="glass-strong shadow-glass rounded-full px-4 h-11 border border-white/60 flex items-center gap-2.5 text-[#1C1C1E] font-semibold"
-          aria-expanded={open}
-          aria-haspopup="true"
-        >
-          <span
-            className="w-7 h-7 rounded-full flex items-center justify-center text-white"
-            style={{
-              background:
-                'linear-gradient(135deg, #2B6BFF 0%, #6C47FF 55%, #19C6FF 100%)',
-              boxShadow: '0 4px 10px rgba(108,71,255,0.35)',
-            }}
-          >
-            <LayoutIcon mode={mode} />
-          </span>
-          <span className="text-sf-subhead leading-none">
-            <span className="block text-[10px] font-medium text-[#8E8E93]">{t.layoutPicker}</span>
-            <span className="block">{currentLabel}</span>
-          </span>
-          <motion.svg
-            animate={{ rotate: open ? 180 : 0 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-            width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"
-            className="opacity-60"
-          >
-            <path d="M3 9l4-4 4 4" stroke="#636366" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          </motion.svg>
-        </motion.button>
-      </div>
-    </div>
-  )
-}
+// LayoutPicker + LayoutIcon used to live here as standalone components
+// (the floating "פריסה" pill at the bottom-centre of the canvas). They
+// were consolidated into the bottom navigation island in
+// Navigation.tsx so mobile users don't carry two competing controls in
+// the same vertical band.
 
 function EmptyState({ t }: { t: Translations }) {
   return (
