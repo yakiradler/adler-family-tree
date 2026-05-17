@@ -8,6 +8,7 @@ import { isAdmin, isOnboarded } from '../lib/permissions'
 import { getRingGradient, getFallbackGradient, PersonAvatarIcon } from '../components/MemberNode'
 import AIScanModal from '../components/ai/AIScanModal'
 import ComingSoonModal from '../components/ComingSoonModal'
+import BuildFromTextModal from '../components/BuildFromTextModal'
 import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
 import type { Member, Relationship } from '../types'
 
@@ -610,13 +611,17 @@ export default function Dashboard({ demoMode }: Props) {
                 "בקרוב" badge in the corner. Tapping opens a friendly
                 modal that explains what the feature will do; the
                 actual backend hookup is a follow-up commit. */}
+            {/* Build-from-text — local parser now wired up (Option A
+                of the hybrid plan). The "בקרוב" ribbon is gone since
+                the feature works without a backend; the API-backed
+                upgrade (Option B) will replace the parser internally
+                without touching this tile. */}
             <AppTile
               icon="📝"
               label={t.aiTreeFromTextLabel}
               gradient="from-[#FF9F0A] to-[#FF375F]"
               onClick={() => setAiTreeFromTextOpen(true)}
-              comingSoon
-              tooltip={t.aiComingSoonTip}
+              tooltip={t.btfSubtitle}
             />
             <AppTile
               icon="🖼"
@@ -668,16 +673,18 @@ export default function Dashboard({ demoMode }: Props) {
         }}
       />
 
-      {/* "Coming soon" placeholders — same component, different copy
-          per feature. Backend hookup lands in a follow-up commit. */}
-      <ComingSoonModal
+      {/* Build-from-text — local parser modal (no API, ships in main
+          bundle). The matching tile launches this directly; the older
+          "Coming Soon" placeholder lives on only for the photo-enhance
+          tile below, which is still pending an API. */}
+      <BuildFromTextModal
         open={aiTreeFromTextOpen}
         onClose={() => setAiTreeFromTextOpen(false)}
-        icon="📝"
-        title={t.aiTreeFromTextLabel}
-        description={t.aiTreeFromTextDesc}
-        bullets={[t.aiTreeFromTextBullet1, t.aiTreeFromTextBullet2, t.aiTreeFromTextBullet3]}
-        gradient="from-[#FF9F0A] to-[#FF375F]"
+        onAdded={(count) => {
+          if (count > 0) {
+            setTimeout(() => alert(`${count} ${lang === 'he' ? 'אנשים נוספו לעץ ✓' : 'people added to the tree ✓'}`), 50)
+          }
+        }}
       />
       <ComingSoonModal
         open={aiPhotoEnhanceOpen}

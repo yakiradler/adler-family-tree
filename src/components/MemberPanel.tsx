@@ -9,6 +9,7 @@ import RelationshipManager from './RelationshipManager'
 import LineageBadge from './LineageBadge'
 import MemberNotesSection from './MemberNotesSection'
 import ComingSoonModal from './ComingSoonModal'
+import BuildFromTextModal from './BuildFromTextModal'
 import { canEditMember, canManageRelationships } from '../lib/permissions'
 import { buildParentMap, resolveLineage } from '../lib/lineage'
 import type { Member, SpouseStatus } from '../types'
@@ -547,17 +548,18 @@ export default function MemberPanel({ onClose }: Props) {
               <span>{t.relManageBtn}</span>
             </button>
             )}
-            {/* ── AI: build relatives from text (coming soon) ── */}
+            {/* ── Build relatives from a free-form description.
+                Local parser — no API needed (Option A of the hybrid
+                plan). Selecting this opens BuildFromTextModal with
+                the current member as the anchor so anything we parse
+                is auto-linked back to them. */}
             <button
               type="button"
               onClick={() => setAiTreeFromTextOpen(true)}
               aria-label={t.aiTreeFromTextLabel}
-              title={t.aiComingSoonTip}
-              className="w-full py-2.5 rounded-2xl border border-[#FF9F0A]/40 text-[#B8730A] text-sf-subhead font-semibold active:scale-[0.98] transition flex items-center justify-center gap-2 hover:bg-[#FF9F0A]/5 relative"
+              title={t.btfSubtitle}
+              className="w-full py-2.5 rounded-2xl border border-[#FF9F0A]/40 text-[#B8730A] text-sf-subhead font-semibold active:scale-[0.98] transition flex items-center justify-center gap-2 hover:bg-[#FF9F0A]/5"
             >
-              <span className="absolute top-1 end-2 text-[8.5px] font-bold text-[#FF9F0A] bg-[#FF9F0A]/12 rounded-full px-1.5 py-0.5">
-                🚀
-              </span>
               <span>📝</span>
               <span>{t.aiTreeFromTextLabel}</span>
             </button>
@@ -615,15 +617,14 @@ export default function MemberPanel({ onClose }: Props) {
       <EditMemberModal open={editOpen} onClose={() => setEditOpen(false)} member={member} />
       <RelationshipManager open={relOpen} onClose={() => setRelOpen(false)} member={member} />
 
-      {/* Coming-soon explainers for the two AI placeholders above. */}
-      <ComingSoonModal
+      {/* Build-from-text → real local parser. The modal frames itself
+          around the currently-selected member as the anchor so any
+          parsed roots get auto-linked as descendants. Photo-enhance
+          remains a coming-soon placeholder until the backend lands. */}
+      <BuildFromTextModal
         open={aiTreeFromTextOpen}
         onClose={() => setAiTreeFromTextOpen(false)}
-        icon="📝"
-        title={t.aiTreeFromTextLabel}
-        description={t.aiTreeFromTextDesc}
-        bullets={[t.aiTreeFromTextBullet1, t.aiTreeFromTextBullet2, t.aiTreeFromTextBullet3]}
-        gradient="from-[#FF9F0A] to-[#FF375F]"
+        anchorMember={member}
       />
       <ComingSoonModal
         open={aiPhotoEnhanceOpen}
