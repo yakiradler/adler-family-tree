@@ -66,6 +66,11 @@ export default function AdminDashboard() {
   const [tab, setTab] = useState<Tab>('overview')
   const [users, setUsers] = useState<AdminUser[]>([])
   const [usersLoading, setUsersLoading] = useState(false)
+  // Lightweight backend health surface — if any of the admin queries
+  // fail (most commonly because `schema.sql` hasn't been run on the
+  // Supabase project), show a banner pointing the admin to the setup
+  // doc rather than letting them think the app is broken.
+  const [backendError, setBackendError] = useState<string | null>(null)
   const [editTarget, setEditTarget] = useState<Member | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [inviteEmail, setInviteEmail] = useState('')
@@ -212,10 +217,12 @@ export default function AdminDashboard() {
       const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
       if (error) {
         // Surface the underlying failure (RLS blocks, missing table)
-        // instead of silently showing an empty list — admins need to
-        // know when the backend isn't cooperating.
+        // so admins can act on it instead of staring at an empty list.
         // eslint-disable-next-line no-console
         console.warn('[admin] profiles fetch failed:', error.message)
+        setBackendError(error.message)
+      } else {
+        setBackendError(null)
       }
       setUsers((data ?? []) as AdminUser[])
       setUsersLoading(false)
@@ -266,6 +273,39 @@ export default function AdminDashboard() {
       </div>
 
       <div className="max-w-4xl mx-auto px-4 space-y-4">
+        {/* Backend setup nudge. Surfaces when ANY of the admin
+            queries failed — almost always means `schema.sql` hasn't
+            been applied to the Supabase project yet (missing tables
+            or RLS policies). Better to point the admin at the fix
+            than let them stare at empty lists. */}
+        {backendError && SUPABASE_CONFIGURED && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl border border-[#FF9F0A]/40 bg-[#FF9F0A]/10 p-3 flex items-start gap-2"
+          >
+            <span className="text-lg leading-none">⚠️</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sf-subhead font-bold text-[#1C1C1E]">
+                {lang === 'he' ? 'הגדרות הבקאנד חסרות' : 'Backend setup incomplete'}
+              </p>
+              <p className="text-[11px] text-[#3A3A3C] leading-snug mt-0.5">
+                {lang === 'he'
+                  ? `Supabase מחזיר שגיאה: ${backendError}. כנראה ש-schema.sql לא רץ. ראה הוראות הרצה ב-SUPABASE_SETUP_HE.md בריפו.`
+                  : `Supabase returned: ${backendError}. Likely schema.sql hasn't been applied. See SUPABASE_SETUP_HE.md in the repo.`}
+              </p>
+              <a
+                href="https://github.com/yakiradler/adler-family-tree/blob/main/SUPABASE_SETUP_HE.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block mt-1.5 text-[11px] font-bold text-[#FF9F0A] underline"
+              >
+                {lang === 'he' ? '← פתח את מדריך החיבור' : 'Open the setup guide →'}
+              </a>
+            </div>
+          </motion.div>
+        )}
+
         {/* Tab bar */}
         <div className="glass-strong rounded-2xl p-1 flex gap-1 shadow-glass-sm overflow-x-auto">
           {([
