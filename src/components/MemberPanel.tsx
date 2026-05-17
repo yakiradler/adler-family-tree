@@ -7,7 +7,7 @@ import EditMemberModal from './EditMemberModal'
 import JumpToFamilyTreeButton from './JumpToFamilyTreeButton'
 import RelationshipManager from './RelationshipManager'
 import LineageBadge from './LineageBadge'
-import MemberNotesTab from './MemberNotesTab'
+import MemberNotesSection from './MemberNotesSection'
 import { canEditMember, canManageRelationships } from '../lib/permissions'
 import { buildParentMap, resolveLineage } from '../lib/lineage'
 import type { Member, SpouseStatus } from '../types'
@@ -33,7 +33,7 @@ function formatDate(iso: string | undefined, lang: 'he' | 'en') {
 export default function MemberPanel({ onClose }: Props) {
   const { members, relationships, selectedMemberId, setSelectedMemberId, profile, deleteMember, deleteRelationship, updateMember, addMember, trees } = useFamilyStore()
   const { t, lang } = useLang()
-  const [tab, setTab] = useState<'about' | 'family' | 'notes' | 'photos'>('about')
+  const [tab, setTab] = useState<'about' | 'family' | 'photos'>('about')
   const [editOpen, setEditOpen] = useState(false)
   const [relOpen, setRelOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -336,23 +336,23 @@ export default function MemberPanel({ onClose }: Props) {
           </div>
         )}
 
-        {/* Tabs — added "notes" so families can leave memories +
-            short comments on each profile. Order keeps About/Family
-            first (most-read), Notes middle (most-active), Photos last
-            so the visual heavy hitter doesn't dominate when there are
-            only a few. */}
+        {/* Tabs — three classic sections (About / Family / Photos).
+            "Notes" used to live here too, but per a user request we
+            promoted memories to an always-visible section at the
+            bottom of the panel (see <MemberNotesSection /> below
+            the tab content) — they wanted to see what family members
+            have written without first clicking a tab. */}
         <div className="px-4 mt-3">
           <div className="flex gap-1 bg-[#F2F2F7] rounded-2xl p-1">
             {([
               ['about', t.about],
               ['family', t.family],
-              ['notes', t.notesTab],
               ['photos', t.photos],
             ] as const).map(([key, label]) => (
               <button
                 key={key}
                 onClick={() => setTab(key)}
-                className={`flex-1 py-1.5 px-1 rounded-xl text-[11px] font-semibold transition-all ${
+                className={`flex-1 py-1.5 px-2 rounded-xl text-[12px] font-semibold transition-all ${
                   tab === key ? 'bg-white text-[#1C1C1E] shadow-sm' : 'text-[#8E8E93]'
                 }`}
               >
@@ -450,18 +450,6 @@ export default function MemberPanel({ onClose }: Props) {
               </motion.div>
             )}
 
-            {tab === 'notes' && (
-              <motion.div
-                key="notes"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.18 }}
-              >
-                <MemberNotesTab memberId={member.id} />
-              </motion.div>
-            )}
-
             {tab === 'photos' && (
               <motion.div
                 key="photos"
@@ -490,6 +478,17 @@ export default function MemberPanel({ onClose }: Props) {
             )}
           </AnimatePresence>
         </div>
+
+        {/* ─── Memories + comments ───
+            Always-visible feed of notes left by family members,
+            with an "Add memory / comment" link that pops open the
+            composer right above it. The section used to be a
+            separate tab; we promoted it here per a user request
+            ("memories should appear in the profile, not only when
+            clicking memories"). A faint top divider keeps it
+            visually distinct from the tab content above. */}
+        <div className="mx-4 mt-1 border-t border-black/5" />
+        <MemberNotesSection memberId={member.id} />
 
         {/* Action buttons: full-width stacked rows so labels are always readable */}
         {(editAllowed || relAllowed || deleteAllowed || member.last_name) && (

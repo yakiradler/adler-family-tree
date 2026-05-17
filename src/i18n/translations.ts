@@ -286,6 +286,8 @@ export const translations = {
     notesLoginToWrite: 'התחבר כדי לכתוב זיכרון',
     notesImageAdd: 'הוסף תמונה',
     notesImageRemove: 'הסר תמונה',
+    notesAddLink: 'הוסף זיכרון / תגובה',
+    notesComposerCancel: 'ביטול',
 
     // Tree export menu
     exportBtn: 'ייצוא',
@@ -829,6 +831,8 @@ export const translations = {
     notesLoginToWrite: 'Sign in to write a memory',
     notesImageAdd: 'Add a photo',
     notesImageRemove: 'Remove photo',
+    notesAddLink: 'Add memory / comment',
+    notesComposerCancel: 'Cancel',
 
     // Tree export menu
     exportBtn: 'Export',
