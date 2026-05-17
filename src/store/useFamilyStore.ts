@@ -187,11 +187,20 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   },
 
   fetchEditRequests: async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('edit_requests')
       .select(`*, profiles:requester_id(full_name), members:target_member_id(first_name, last_name)`)
       .eq('status', 'pending')
       .order('created_at', { ascending: false })
+
+    if (error) {
+      // Surface this — previously the admin would see "no requests"
+      // forever even when the backend was returning errors (RLS
+      // blocked, table missing). We now log + keep whatever optimistic
+      // state was there before so the UI doesn't silently empty out.
+      reportSupabaseFailure('fetchEditRequests', error)
+      return
+    }
 
     const mapped = (data ?? []).map((r: Record<string, unknown>) => ({
       id: r.id as string,
@@ -306,10 +315,14 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   accessRequests: [],
 
   fetchAccessRequests: async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('access_requests')
       .select(`*, profiles:requester_id(full_name)`)
       .order('created_at', { ascending: false })
+    if (error) {
+      reportSupabaseFailure('fetchAccessRequests', error)
+      return  // keep optimistic state intact
+    }
     const mapped: AccessRequest[] = (data ?? []).map((r: Record<string, unknown>) => ({
       id: r.id as string,
       requester_id: r.requester_id as string,
@@ -328,16 +341,44 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   submitAccessRequest: async ({ requested_role, answers, invite_code }) => {
     const me = get().profile
     if (!me) return
-    const row = {
+    // Optimistic write first so the admin instantly sees the request
+    // even in demo mode (where Supabase returns nothing) and even when
+    // the backend INSERT fails because of RLS / missing table. The
+    // request id is synthetic; if Supabase comes back with a real
+    // row we reconcile below.
+    const localId = `ar-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    const optimistic: AccessRequest = {
+      id: localId,
       requester_id: me.id,
+      requester_name: me.full_name ?? 'Unknown',
       requested_role,
       answers,
       invite_code: invite_code ?? null,
-      status: 'pending' as const,
+      status: 'pending',
+      created_at: new Date().toISOString(),
     }
-    const { data } = await supabase.from('access_requests').insert(row).select().single()
-    if (data) {
-      set((s) => ({ accessRequests: [data as AccessRequest, ...s.accessRequests] }))
+    set((s) => ({ accessRequests: [optimistic, ...s.accessRequests] }))
+    try {
+      const { data, error } = await supabase.from('access_requests').insert({
+        requester_id: me.id,
+        requested_role,
+        answers,
+        invite_code: invite_code ?? null,
+        status: 'pending',
+      }).select().single()
+      if (error) {
+        reportSupabaseFailure('submitAccessRequest', error)
+        return
+      }
+      if (data) {
+        set((s) => ({
+          accessRequests: s.accessRequests.map((r) =>
+            r.id === localId ? (data as AccessRequest) : r,
+          ),
+        }))
+      }
+    } catch (err) {
+      reportSupabaseFailure('submitAccessRequest', err)
     }
   },
 

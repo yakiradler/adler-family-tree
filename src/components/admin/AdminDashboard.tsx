@@ -95,19 +95,55 @@ export default function AdminDashboard() {
   }
   const removeUser = async (u: AdminUser) => {
     if (!window.confirm(t.adminConfirmRemoveUser)) return
+    // Optimistic local removal so the row disappears immediately.
+    const prev = users
     setUsers(us => us.filter(x => x.id !== u.id))
-    if (SUPABASE_CONFIGURED) {
-      await supabase.from('profiles').delete().eq('id', u.id)
+    if (!SUPABASE_CONFIGURED) {
+      // Demo mode: persist the local removal in localStorage so a
+      // page refresh doesn't bring the deleted user back. The
+      // useEffect below reads from this allow-list before showing
+      // the demo profile.
+      try {
+        const raw = window.localStorage.getItem('ft-admin-removed-users') ?? '[]'
+        const list = JSON.parse(raw) as string[]
+        if (!list.includes(u.id)) list.push(u.id)
+        window.localStorage.setItem('ft-admin-removed-users', JSON.stringify(list))
+      } catch { /* quota — accept the loss, demo is single-session anyway */ }
+      return
+    }
+    // Live mode: hit supabase. Surface the error if RLS blocks (the
+    // previous version swallowed the failure and the user reappeared
+    // on next refresh with no warning).
+    const { error } = await supabase.from('profiles').delete().eq('id', u.id)
+    if (error) {
+      setUsers(prev)
+      alert(
+        lang === 'he'
+          ? `לא ניתן למחוק את המשתמש: ${error.message}\nייתכן שאתה צריך הרשאת אדמין מלאה ב-Supabase.`
+          : `Couldn't delete user: ${error.message}\nYou may need full Supabase admin rights.`,
+      )
     }
   }
   const inviteUser = async () => {
     if (!inviteEmail.trim() || !inviteName.trim()) return
     setInviting(true)
     try {
+      let inviteOutcome: 'magic-link' | 'manual' = 'manual'
       if (SUPABASE_CONFIGURED) {
-        // Ask Supabase to send a magic/invite link; non-admin inviters may fail —
-        // we catch & fallback to local record so the UI doesn't break.
-        try { await supabase.auth.resetPasswordForEmail(inviteEmail.trim()) } catch {}
+        // Proper signup-invite flow: send a magic LINK that will
+        // CREATE the user on first click. This was previously calling
+        // `resetPasswordForEmail`, which sent the wrong email and
+        // only worked for users who already existed. With
+        // `signInWithOtp(shouldCreateUser: true)` the link doubles as
+        // both signup AND first-time login.
+        const { error } = await supabase.auth.signInWithOtp({
+          email: inviteEmail.trim(),
+          options: {
+            shouldCreateUser: true,
+            data: { full_name: inviteName.trim(), invited_role: inviteRole },
+          },
+        })
+        if (!error) inviteOutcome = 'magic-link'
       }
       const newUser: AdminUser = {
         id: `invited-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -119,7 +155,19 @@ export default function AdminDashboard() {
       setUsers(us => [newUser, ...us])
       setInviteEmail(''); setInviteName('')
       setInviteRole('user')
-      alert(`${t.adminInviteSent} ✓`)
+      // Friendlier than the previous "Invite sent" — explain what the
+      // user will actually receive in their inbox.
+      const msg = inviteOutcome === 'magic-link'
+        ? (lang === 'he'
+            ? `קישור הצטרפות נשלח ל-${inviteEmail.trim()}.\nהמשתמש ילחץ עליו ויתחבר ישירות לחשבון חדש.`
+            : `Signup link sent to ${inviteEmail.trim()}.\nThey'll click it to create their account.`)
+        : (lang === 'he'
+            ? `המשתמש נוסף למערכת. שלח לו את הקישור באופן ידני: ${window.location.origin}/`
+            : `User added. Share this link with them: ${window.location.origin}/`)
+      alert(msg)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown error'
+      alert(lang === 'he' ? `שגיאה בשליחת ההזמנה: ${msg}` : `Invite failed: ${msg}`)
     } finally {
       setInviting(false)
     }
@@ -138,19 +186,37 @@ export default function AdminDashboard() {
   // Fetch users from profiles table (or demo fallback)
   useEffect(() => {
     if (!SUPABASE_CONFIGURED) {
-      // Demo: just the current profile
+      // Demo: just the current profile, filtered against any
+      // previously-deleted user ids stored in localStorage so the
+      // delete action actually persists across reloads.
       if (profile) {
-        setUsers([{
-          ...profile,
-          email: 'demo@familytree.local',
-          created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
-        }])
+        let removed: string[] = []
+        try {
+          const raw = window.localStorage.getItem('ft-admin-removed-users')
+          if (raw) removed = JSON.parse(raw) as string[]
+        } catch { /* fall through with empty list */ }
+        if (removed.includes(profile.id)) {
+          setUsers([])
+        } else {
+          setUsers([{
+            ...profile,
+            email: 'demo@familytree.local',
+            created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
+          }])
+        }
       }
       return
     }
     ;(async () => {
       setUsersLoading(true)
-      const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
+      const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
+      if (error) {
+        // Surface the underlying failure (RLS blocks, missing table)
+        // instead of silently showing an empty list — admins need to
+        // know when the backend isn't cooperating.
+        // eslint-disable-next-line no-console
+        console.warn('[admin] profiles fetch failed:', error.message)
+      }
       setUsers((data ?? []) as AdminUser[])
       setUsersLoading(false)
     })()
@@ -313,14 +379,17 @@ export default function AdminDashboard() {
                         onClick={() => setInviteRole(r.key)}
                         aria-label={t[r.labelKey]}
                         title={t[r.labelKey]}
-                        className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition ${
+                        className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition flex flex-col items-center gap-0.5 ${
                           inviteRole === r.key
                             ? 'bg-white text-[#1C1C1E] shadow-sm'
                             : 'text-[#636366]'
                         }`}
                       >
-                        <span className="mr-1">{r.icon}</span>
-                        <span className="hidden sm:inline">{t[r.labelKey]}</span>
+                        {/* Label ALWAYS visible (mobile + desktop) —
+                            the previous hidden-on-small-screens setup
+                            left users guessing what each emoji meant. */}
+                        <span className="text-[14px] leading-none">{r.icon}</span>
+                        <span className="text-[9.5px] font-bold whitespace-nowrap">{t[r.labelKey]}</span>
                       </button>
                     ))}
                   </div>
@@ -629,7 +698,8 @@ function UserRow({
         </div>
       </div>
 
-      {/* Role picker — 4-tier */}
+      {/* Role picker — 4-tier. Labels ALWAYS visible (mobile too)
+          per a user complaint that the bare emojis were ambiguous. */}
       <div className="mt-3 bg-[#F2F2F7] rounded-xl p-1 flex gap-1">
         {ROLE_OPTIONS.map(r => (
           <button
@@ -639,14 +709,14 @@ function UserRow({
             title={t[r.labelKey]}
             aria-label={t[r.labelKey]}
             aria-pressed={user.role === r.key}
-            className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition ${
+            className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition flex flex-col items-center gap-0.5 ${
               user.role === r.key
                 ? 'bg-white text-[#1C1C1E] shadow-sm'
                 : 'text-[#636366] hover:bg-white/40'
             }`}
           >
-            <span className="mr-1">{r.icon}</span>
-            <span className="hidden sm:inline">{t[r.labelKey]}</span>
+            <span className="text-[14px] leading-none">{r.icon}</span>
+            <span className="text-[9.5px] font-bold whitespace-nowrap">{t[r.labelKey]}</span>
           </button>
         ))}
       </div>
@@ -1141,14 +1211,14 @@ function AccessRequestCard({ request, index, t, onApprove, onReject }: AccessReq
               onClick={() => setGrantRole(r.key)}
               aria-pressed={grantRole === r.key}
               aria-label={t[r.labelKey]}
-              className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition ${
+              className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition flex flex-col items-center gap-0.5 ${
                 grantRole === r.key
                   ? 'bg-white text-[#1C1C1E] shadow-sm'
                   : 'text-[#636366]'
               }`}
             >
-              <span className="mr-1">{r.icon}</span>
-              <span className="hidden sm:inline">{t[r.labelKey]}</span>
+              <span className="text-[14px] leading-none">{r.icon}</span>
+              <span className="text-[9.5px] font-bold whitespace-nowrap">{t[r.labelKey]}</span>
             </button>
           ))}
         </div>
