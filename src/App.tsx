@@ -11,6 +11,7 @@ import { useLang, isRTL } from './i18n/useT'
 import Landing from './pages/Landing'
 import ThemeShell from './components/ThemeShell'
 import PersistenceIndicator from './components/PersistenceIndicator'
+import InstallPrompt from './components/InstallPrompt'
 import { ADLER_MEMBERS, ADLER_RELATIONSHIPS } from './data/adlerFamily'
 import { isPendingOnboarding } from './lib/pendingOnboarding'
 import type { Profile } from './types'
@@ -314,6 +315,10 @@ export default function App() {
       {/* Persistence toast — fixed-positioned, listens for save events
           dispatched by the store-subscriber. */}
       <PersistenceIndicator />
+      {/* Add-to-home-screen banner. Self-gates on standalone mode +
+          user dismissal, so it only shows up when there's something
+          to actually install. */}
+      <InstallPrompt />
       <HashRouter>
         <ThemeShell>
           {/* Suspense boundary for the lazy-loaded routes. The fallback
