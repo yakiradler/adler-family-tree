@@ -262,6 +262,14 @@ export default function App() {
     load()
   }, [session])
 
+  // ALL hooks must run BEFORE any conditional early return — otherwise
+  // React's hook order changes between renders (authLoading flips) and
+  // the app crashes with "Rendered more hooks than during the previous
+  // render", which presents to the user as a blank white screen. This
+  // selector subscription sits up here for that reason; downstream
+  // route guards consume it via the local `profile` const.
+  const profile = useFamilyStore((s) => s.profile)
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-mesh-gradient flex items-center justify-center">
@@ -281,7 +289,6 @@ export default function App() {
   // gates without needing a page refresh. The demo admin profile
   // ships with a non-null onboarded_at, so the gate only catches
   // fresh signups (see Auth.tsx demo-signup branch).
-  const profile = useFamilyStore((s) => s.profile)
   const needsOnboarding = isAuth && !!profile && !profile.onboarded_at
 
   return (
