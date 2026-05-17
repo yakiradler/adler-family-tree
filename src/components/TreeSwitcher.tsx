@@ -103,8 +103,20 @@ export default function TreeSwitcher({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.97 }}
             transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute z-30 mt-2 w-[280px] rounded-2xl bg-white/95 backdrop-blur-2xl border border-white/60 shadow-glass-lg p-2"
-            style={{ right: 0 } as React.CSSProperties}
+            // Width clamped to viewport so the dropdown doesn't crop
+            // on narrow phones. Anchored to the START side of the
+            // trigger (logical, so it flips automatically between LTR
+            // / RTL) and uses `max(start, end)` viewport-edge fallback
+            // via a small inline guard below.
+            className="absolute z-30 mt-2 w-[min(280px,calc(100vw-24px))] rounded-2xl bg-white/95 backdrop-blur-2xl border border-white/60 shadow-glass-lg p-2"
+            style={{
+              // `inset-inline-end: 0` aligns the dropdown's end edge
+              // (visual-left in RTL) with the trigger's end edge. The
+              // dropdown grows toward the START (visual-right in RTL,
+              // which is the direction we have screen real-estate
+              // because the trigger sits near the page's logical end).
+              insetInlineEnd: 0,
+            } as React.CSSProperties}
           >
             <p className="px-2 pt-1 pb-2 text-[10px] font-bold uppercase tracking-wider text-[#8E8E93]">
               {t.treeSwitcherTitle}

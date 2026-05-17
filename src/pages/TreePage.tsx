@@ -228,24 +228,29 @@ export default function TreePage({ demoMode }: Props) {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: isRTL(lang) ? -40 : 40 }}
               transition={{ type: 'spring', stiffness: 350, damping: 32 }}
-              // Mobile: dock to the bottom (sheet style).
-              // Desktop: anchor to top-20, capped at 260px wide, capped
-              // max-height so the panel never dominates the viewport.
-              // The previous 320 → 260 cut + the smaller header/avatar
-              // inside MemberPanel together address the user's
-              // recurring "the card is still too big" complaints.
+              // Mobile: full-width sheet anchored above the nav island
+              // so the LAST action button is always reachable (the
+              // previous bottom-4 + 560 px tall stack hid behind the
+              // navigation, making the delete row unreachable on a
+              // 700 px phone).
               //
-              // `transform: scale(1/zoom)` counters browser zoom so the
-              // panel keeps a roughly constant *physical* size even when
-              // the user is at 125%/150%/200% Ctrl++ — without this, a
-              // heavily-zoomed user would see the panel inflate to half
-              // the viewport. transform-origin pins the anchored corner
-              // so the panel scales toward its edge, not its centre.
-              className={`fixed z-50 w-[calc(100vw-32px)] max-w-[260px] bottom-4 md:bottom-auto md:top-20 no-print ${
-                isRTL(lang) ? 'left-4' : 'right-4'
+              // Desktop: same width as mobile (≈ 380 px) and pinned
+              // to the side. The user explicitly asked for the
+              // desktop panel to match mobile dimensions so the tree
+              // alongside it remains legible.
+              //
+              // `transform: scale(1/zoom)` still counters browser
+              // zoom so a Ctrl++ user doesn't get a panel that eats
+              // the viewport.
+              className={`fixed z-50 w-[calc(100vw-24px)] max-w-[380px] bottom-[128px] md:bottom-auto md:top-20 no-print ${
+                isRTL(lang) ? 'left-3 md:left-4' : 'right-3 md:right-4'
               }`}
               style={{
-                maxHeight: 'min(560px, calc(100vh - 120px))',
+                // Cap height with margin for both the top bar (60 px)
+                // and the bottom nav island (≈ 120 px combined hide-pill
+                // + island + breathing room) so every action button
+                // stays scrollable + tappable on a phone.
+                maxHeight: 'min(640px, calc(100vh - 220px))',
                 transform: browserZoom > 1 ? `scale(${1 / browserZoom})` : undefined,
                 transformOrigin: isRTL(lang) ? 'top left' : 'top right',
               }}

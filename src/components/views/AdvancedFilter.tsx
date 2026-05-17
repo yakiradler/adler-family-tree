@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLang, isRTL } from '../../i18n/useT'
+import { useFamilyStore } from '../../store/useFamilyStore'
 import type { Member, Relationship } from '../../types'
 import { findFamilyPath } from './findFamilyPath'
 
@@ -66,7 +67,16 @@ export default function AdvancedFilter({
 }) {
   const { t, lang } = useLang()
   const rtl = isRTL(lang)
-  const [open, setOpen] = useState(false)
+  // Read + write the open state through the store so any other
+  // tree-view popover (currently the focused-centric picker) is
+  // automatically closed when this one opens.
+  const openTreePopover = useFamilyStore((s) => s.openTreePopover)
+  const setOpenTreePopover = useFamilyStore((s) => s.setOpenTreePopover)
+  const open = openTreePopover === 'filter'
+  const setOpen = (next: boolean | ((v: boolean) => boolean)) => {
+    const value = typeof next === 'function' ? next(open) : next
+    setOpenTreePopover(value ? 'filter' : null)
+  }
   const active = !isDefaultFilter(filters)
   const focusedMember = filters.focusMemberId
     ? members.find(m => m.id === filters.focusMemberId)

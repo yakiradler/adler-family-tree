@@ -129,6 +129,7 @@ export default function TreeView({
     layoutMode,
     treeControlsExpanded,
     treeFullscreen, setTreeFullscreen,
+    openTreePopover, setOpenTreePopover,
   } = useFamilyStore()
   // Narrow the population to the currently active tree. `null` means
   // the default/main tree which is everyone without a tree_id; an
@@ -153,7 +154,14 @@ export default function TreeView({
   // subgraph centred on a chosen person.
   const [isFocusedMode, setIsFocusedMode] = useState(false)
   const [activeFocusId, setActiveFocusId] = useState<string | null>(null)
-  const [showFocusPicker, setShowFocusPicker] = useState(false)
+  // showFocusPicker derived from the centralised popover state so
+  // opening this picker auto-closes the advanced-filter popover and
+  // vice versa — the two used to overlap and obscure each other.
+  const showFocusPicker = openTreePopover === 'focusPicker'
+  const setShowFocusPicker = (next: boolean | ((v: boolean) => boolean)) => {
+    const value = typeof next === 'function' ? next(showFocusPicker) : next
+    setOpenTreePopover(value ? 'focusPicker' : null)
+  }
   const [pickerQuery, setPickerQuery] = useState('')
 
   const pickerResults = useMemo(() => {
@@ -437,16 +445,10 @@ export default function TreeView({
     }
   }
 
-  const fitToView = () => {
-    if (!wrapRef.current) return
-    const w = wrapRef.current.clientWidth
-    const h = wrapRef.current.clientHeight
-    const fit = Math.min(w / canvasW, h / canvasH, 1)
-    const s = Math.max(0.25, fit * 0.95)
-    setScale(s)
-    setTx((w - canvasW * s) / 2)
-    setTy(20)
-  }
+  // Fit-to-view used to have its own button; the user retired it
+  // ("unnecessary") and we replaced its slot with the fullscreen
+  // toggle. The function itself is gone too — auto-fit on layout
+  // change still happens via the lastShapeRef effect above.
 
   const zoomBy = (factor: number) => {
     const newScale = Math.max(0.05, Math.min(8, scale * factor))
@@ -605,11 +607,31 @@ export default function TreeView({
       />
       )}
 
-      {/* Fullscreen toggle. ALWAYS visible (even in fullscreen mode)
-          so the user can always get back to the chrome.  When the
-          mode flips, every other piece of UI tagged below with
-          `!treeFullscreen` disappears, giving an uncluttered canvas. */}
-      <div className="absolute bottom-4 right-4 z-30 no-print" style={{ transform: 'translateY(-200px)' }}>
+      {/* Zoom + fullscreen stack — bottom-right. The standalone
+          "fit-to-view" button was retired (the user called it
+          "unnecessary") and its slot is now occupied by the
+          fullscreen toggle. The remaining zoom +/− controls hide
+          themselves in fullscreen; the fullscreen button itself
+          stays so the user can always get back to the chrome. */}
+      <div className="absolute bottom-4 right-4 flex flex-col gap-1.5 z-30 no-print">
+        {!treeFullscreen && (
+          <>
+            <Tooltip content={t.tipZoomIn} placement="left">
+              <button
+                onClick={() => zoomBy(1.2)}
+                className="w-10 h-10 rounded-full glass-strong shadow-glass flex items-center justify-center text-[#007AFF] font-bold text-lg active:scale-95 transition"
+                aria-label={t.tipZoomIn}
+              >+</button>
+            </Tooltip>
+            <Tooltip content={t.tipZoomOut} placement="left">
+              <button
+                onClick={() => zoomBy(1 / 1.2)}
+                className="w-10 h-10 rounded-full glass-strong shadow-glass flex items-center justify-center text-[#007AFF] font-bold text-lg active:scale-95 transition"
+                aria-label={t.tipZoomOut}
+              >−</button>
+            </Tooltip>
+          </>
+        )}
         <Tooltip content={treeFullscreen ? t.tipFullscreenExit : t.tipFullscreenEnter} placement="left">
           <motion.button
             type="button"
@@ -636,37 +658,6 @@ export default function TreeView({
           </motion.button>
         </Tooltip>
       </div>
-
-      {/* Zoom controls — hidden in fullscreen mode. */}
-      {!treeFullscreen && (
-      <div className="absolute bottom-4 right-4 flex flex-col gap-1.5 z-10 no-print">
-        <Tooltip content={t.tipZoomIn} placement="left">
-          <button
-            onClick={() => zoomBy(1.2)}
-            className="w-10 h-10 rounded-full glass-strong shadow-glass flex items-center justify-center text-[#007AFF] font-bold text-lg active:scale-95 transition"
-            aria-label={t.tipZoomIn}
-          >+</button>
-        </Tooltip>
-        <Tooltip content={t.tipZoomOut} placement="left">
-          <button
-            onClick={() => zoomBy(1 / 1.2)}
-            className="w-10 h-10 rounded-full glass-strong shadow-glass flex items-center justify-center text-[#007AFF] font-bold text-lg active:scale-95 transition"
-            aria-label={t.tipZoomOut}
-          >−</button>
-        </Tooltip>
-        <Tooltip content={t.tipFitToView} placement="left">
-          <button
-            onClick={fitToView}
-            className="w-10 h-10 rounded-full glass-strong shadow-glass flex items-center justify-center active:scale-95 transition"
-            aria-label={t.tipFitToView}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M2 5V2h3M14 5V2h-3M2 11v3h3M14 11v3h-3" stroke="#007AFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        </Tooltip>
-      </div>
-      )}
 
       {/* Bird's-eye minimap — sits in the bottom-left and surfaces the
           zoom % in its header, replacing the previous standalone badge.

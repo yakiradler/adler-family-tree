@@ -110,7 +110,13 @@ interface FamilyState {
   treeFullscreen: boolean
   setTreeFullscreen: (v: boolean) => void
 
-  // ── Member notes (comments + memories) ─────────────────────────────
+  // ── Single-source-of-truth for which tree-view popover is open ─────
+  // The advanced-filter popover and the focused-centric picker used to
+  // overlap each other on screen because each managed its own local
+  // open state. Centralising the "what's open" decision here lets one
+  // popover automatically close the other when it opens.
+  openTreePopover: 'filter' | 'focusPicker' | null
+  setOpenTreePopover: (v: 'filter' | 'focusPicker' | null) => void
   /** All notes across all members. Per-member filtering is done in the
    *  consumer (MemberNotesTab) so we keep one canonical list and don't
    *  duplicate state. Persisted via the same localStorage layer as
@@ -494,4 +500,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   // can always get back to the chrome.
   treeFullscreen: false,
   setTreeFullscreen: (treeFullscreen) => set({ treeFullscreen }),
+
+  openTreePopover: null,
+  setOpenTreePopover: (openTreePopover) => set({ openTreePopover }),
 }))

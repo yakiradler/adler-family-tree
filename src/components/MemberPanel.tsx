@@ -197,8 +197,12 @@ export default function MemberPanel({ onClose }: Props) {
 
   return (
     <div
+      // height: 100% lets the panel match its WRAPPER's height (see
+      // TreePage), which is what controls the actual cap on phone vs
+      // desktop. The previous calc(100vh - 120px) ignored the bottom
+      // navigation and clipped the last action button on mobile.
       className="glass-strong rounded-[24px] shadow-glass-lg flex flex-col bg-white relative"
-      style={{ maxHeight: 'calc(100vh - 120px)' }}
+      style={{ maxHeight: '100%', height: '100%' }}
       onClick={(e) => e.stopPropagation()}
     >
       {/* ─── HEADER cover ─── */}
