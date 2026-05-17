@@ -7,6 +7,7 @@ import EditMemberModal from './EditMemberModal'
 import JumpToFamilyTreeButton from './JumpToFamilyTreeButton'
 import RelationshipManager from './RelationshipManager'
 import LineageBadge from './LineageBadge'
+import MemberNotesTab from './MemberNotesTab'
 import { canEditMember, canManageRelationships } from '../lib/permissions'
 import { buildParentMap, resolveLineage } from '../lib/lineage'
 import type { Member, SpouseStatus } from '../types'
@@ -32,7 +33,7 @@ function formatDate(iso: string | undefined, lang: 'he' | 'en') {
 export default function MemberPanel({ onClose }: Props) {
   const { members, relationships, selectedMemberId, setSelectedMemberId, profile, deleteMember, deleteRelationship, updateMember, addMember, trees } = useFamilyStore()
   const { t, lang } = useLang()
-  const [tab, setTab] = useState<'about' | 'family' | 'photos'>('about')
+  const [tab, setTab] = useState<'about' | 'family' | 'notes' | 'photos'>('about')
   const [editOpen, setEditOpen] = useState(false)
   const [relOpen, setRelOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -335,18 +336,23 @@ export default function MemberPanel({ onClose }: Props) {
           </div>
         )}
 
-        {/* Tabs */}
+        {/* Tabs — added "notes" so families can leave memories +
+            short comments on each profile. Order keeps About/Family
+            first (most-read), Notes middle (most-active), Photos last
+            so the visual heavy hitter doesn't dominate when there are
+            only a few. */}
         <div className="px-4 mt-3">
           <div className="flex gap-1 bg-[#F2F2F7] rounded-2xl p-1">
             {([
               ['about', t.about],
               ['family', t.family],
+              ['notes', t.notesTab],
               ['photos', t.photos],
             ] as const).map(([key, label]) => (
               <button
                 key={key}
                 onClick={() => setTab(key)}
-                className={`flex-1 py-1.5 px-2 rounded-xl text-[12px] font-semibold transition-all ${
+                className={`flex-1 py-1.5 px-1 rounded-xl text-[11px] font-semibold transition-all ${
                   tab === key ? 'bg-white text-[#1C1C1E] shadow-sm' : 'text-[#8E8E93]'
                 }`}
               >
@@ -441,6 +447,18 @@ export default function MemberPanel({ onClose }: Props) {
                   <FamilySection title={t.relSibling} members={siblings} onMemberClick={setSelectedMemberId} />
                 )}
                 {relationCount === 0 && <EmptyTab icon="👥" text={t.panelNoFamily} />}
+              </motion.div>
+            )}
+
+            {tab === 'notes' && (
+              <motion.div
+                key="notes"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.18 }}
+              >
+                <MemberNotesTab memberId={member.id} />
               </motion.div>
             )}
 

@@ -143,6 +143,12 @@ export default function App() {
         members: parsed.members as typeof ADLER_MEMBERS,
         relationships: parsed.relationships as typeof ADLER_RELATIONSHIPS,
         trees: (Array.isArray(parsed.trees) ? parsed.trees : []) as never[],
+        // `notes` is optional in the snapshot — older payloads predate
+        // the feature, so we fall back to an empty list instead of
+        // letting `undefined` blow up downstream consumers.
+        notes: (Array.isArray((parsed as { notes?: unknown }).notes)
+          ? (parsed as { notes: unknown[] }).notes
+          : []) as never[],
       })
       restored = true
     }
@@ -177,6 +183,7 @@ export default function App() {
             members: s.members,
             relationships: s.relationships,
             trees: s.trees,
+            notes: s.notes,
           }),
         )
         for (const k of LEGACY_KEYS) window.localStorage.removeItem(k)
@@ -201,6 +208,7 @@ export default function App() {
                 members: s.members.map((m) => ({ ...m, photos: undefined, photo_url: undefined })),
                 relationships: s.relationships,
                 trees: s.trees,
+                notes: s.notes,
               }),
             )
           } catch { /* still won't fit — give up */ }
@@ -212,7 +220,8 @@ export default function App() {
       if (
         state.members === prev.members &&
         state.relationships === prev.relationships &&
-        state.trees === prev.trees
+        state.trees === prev.trees &&
+        state.notes === prev.notes
       ) return
       write()
     })

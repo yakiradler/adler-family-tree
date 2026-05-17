@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
 import type {
   Member, Relationship, EditRequest, ViewMode, Profile,
-  AccessRequest, UserRole, FamilyTree,
+  AccessRequest, UserRole, FamilyTree, MemberNote,
 } from '../types'
 
 // Surface Supabase write failures to the UI. Until now every mutation
@@ -88,6 +88,16 @@ interface FamilyState {
   addTree: (tree: Omit<FamilyTree, 'id'>) => Promise<FamilyTree | null>
   updateTree: (id: string, patch: Partial<FamilyTree>) => Promise<void>
   deleteTree: (id: string) => Promise<void>
+
+  // ── Member notes (comments + memories) ─────────────────────────────
+  /** All notes across all members. Per-member filtering is done in the
+   *  consumer (MemberNotesTab) so we keep one canonical list and don't
+   *  duplicate state. Persisted via the same localStorage layer as
+   *  members/relationships/trees (see App.tsx ft-state-v3). */
+  notes: MemberNote[]
+  addNote: (note: Omit<MemberNote, 'id' | 'created_at'>) => Promise<MemberNote | null>
+  updateNote: (id: string, patch: Partial<MemberNote>) => Promise<void>
+  deleteNote: (id: string) => Promise<void>
 }
 
 export const useFamilyStore = create<FamilyState>((set, get) => ({
@@ -384,5 +394,56 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       activeTreeId: s.activeTreeId === id ? null : s.activeTreeId,
     }))
     try { await supabase.from('family_trees').delete().eq('id', id) } catch { /* ignore */ }
+  },
+
+  // ── Notes ──────────────────────────────────────────────────────────
+  // Same optimistic-CRUD pattern as members: write to the local store
+  // first so the UI lights up immediately, then try Supabase. Demo
+  // mode (no `member_notes` table) just keeps the optimistic row,
+  // which the App.tsx localStorage subscriber persists.
+  notes: [],
+  addNote: async (note) => {
+    const localId = `n-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    const optimistic: MemberNote = {
+      ...note,
+      id: localId,
+      created_at: new Date().toISOString(),
+    }
+    set((s) => ({ notes: [...s.notes, optimistic] }))
+    try {
+      const { data, error } = await supabase
+        .from('member_notes')
+        .insert({
+          member_id: optimistic.member_id,
+          author_id: optimistic.author_id,
+          author_name: optimistic.author_name,
+          body: optimistic.body,
+          kind: optimistic.kind,
+        })
+        .select()
+        .single()
+      if (error) reportSupabaseFailure('addNote', error)
+      if (data) {
+        set((s) => ({
+          notes: s.notes.map((n) => (n.id === localId ? (data as MemberNote) : n)),
+        }))
+        return data as MemberNote
+      }
+    } catch (err) { reportSupabaseFailure('addNote', err) }
+    return optimistic
+  },
+  updateNote: async (id, patch) => {
+    set((s) => ({
+      notes: s.notes.map((n) => (n.id === id ? { ...n, ...patch } : n)),
+    }))
+    try { await supabase.from('member_notes').update(patch).eq('id', id) } catch (err) {
+      reportSupabaseFailure('updateNote', err)
+    }
+  },
+  deleteNote: async (id) => {
+    set((s) => ({ notes: s.notes.filter((n) => n.id !== id) }))
+    try { await supabase.from('member_notes').delete().eq('id', id) } catch (err) {
+      reportSupabaseFailure('deleteNote', err)
+    }
   },
 }))

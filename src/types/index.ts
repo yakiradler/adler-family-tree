@@ -156,3 +156,30 @@ export interface EditRequest {
   status: EditRequestStatus
   created_at: string
 }
+
+/**
+ * Note left on a member's profile by a family-tree user — short
+ * `comment` (a few sentences) or longer `memory` (anecdote / story).
+ * Both render in the same Notes tab; `kind` only changes the visual
+ * tag and the default placeholder text in the composer.
+ *
+ * `author_name` is denormalised at write time so an old note still
+ * surfaces its author even after the author's profile.full_name was
+ * renamed (or, in demo mode, after a different demo user replaced
+ * the profile). Falls back to "אנונימי" if missing.
+ */
+export type MemberNoteKind = 'comment' | 'memory'
+
+export interface MemberNote {
+  id: string
+  member_id: string
+  /** Profile id of whoever wrote the note. */
+  author_id: string
+  /** Snapshot of the author's name when the note was posted. */
+  author_name: string
+  /** Plain-text body — no HTML. Newlines are preserved. */
+  body: string
+  kind: MemberNoteKind
+  /** ISO timestamp. Used both for sorting and the displayed date. */
+  created_at: string
+}

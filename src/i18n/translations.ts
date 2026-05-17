@@ -272,6 +272,19 @@ export const translations = {
     panelParents: 'הורים',
     panelEdit: 'ערוך פרופיל',
 
+    // Notes tab (comments + memories)
+    notesTab: 'זיכרונות',
+    notesNoneYet: 'עדיין אין זיכרונות. שתפו זיכרון יפה ראשון.',
+    notesAddPlaceholder: 'כתבו זיכרון, אנקדוטה, או ברכה…',
+    notesAddBtn: 'פרסם',
+    notesKindComment: 'תגובה',
+    notesKindMemory: 'זיכרון',
+    notesKindSwitchLabel: 'סוג',
+    notesDelete: 'מחק',
+    notesDeleteConfirm: 'למחוק זיכרון זה?',
+    notesAuthorAnonymous: 'אנונימי',
+    notesLoginToWrite: 'התחבר כדי לכתוב זיכרון',
+
     // Admin Control Panel
     adminTitle: 'לוח בקרת מנהל',
     adminSubtitle: 'ניהול המערכת, המשתמשים והמשפחה',
@@ -793,6 +806,19 @@ export const translations = {
     panelNoPhotos: 'No photos yet',
     panelParents: 'Parents',
     panelEdit: 'Edit Profile',
+
+    // Notes tab (comments + memories)
+    notesTab: 'Memories',
+    notesNoneYet: 'No memories yet. Share a first lovely one.',
+    notesAddPlaceholder: 'Write a memory, anecdote, or note…',
+    notesAddBtn: 'Post',
+    notesKindComment: 'Comment',
+    notesKindMemory: 'Memory',
+    notesKindSwitchLabel: 'Kind',
+    notesDelete: 'Delete',
+    notesDeleteConfirm: 'Delete this memory?',
+    notesAuthorAnonymous: 'Anonymous',
+    notesLoginToWrite: 'Sign in to write a memory',
 
     // Admin Control Panel
     adminTitle: 'Admin Control Panel',
