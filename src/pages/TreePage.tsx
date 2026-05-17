@@ -13,15 +13,27 @@ import TreeSwitcher from '../components/TreeSwitcher'
 import { useMemo, useState } from 'react'
 import AdvancedFilter, { DEFAULT_FILTERS, type FilterState } from '../components/views/AdvancedFilter'
 import { useBrowserZoom } from '../hooks/useBrowserZoom'
+import { useHorizontalSwipe } from '../hooks/useHorizontalSwipe'
 
 interface Props { demoMode: boolean }
 
 export default function TreePage({ demoMode }: Props) {
   const {
     selectedMemberId, setSelectedMemberId, profile,
-    members: allMembers, relationships, activeTreeId, viewMode,
+    members: allMembers, relationships, activeTreeId, viewMode, setViewMode,
     treeControlsExpanded, setTreeControlsExpanded,
   } = useFamilyStore()
+
+  // Horizontal-swipe toggle between schematic and timeline. The tree
+  // view is intentionally OFF the swipe map — it carries its own
+  // pan/zoom gestures and we don't want a stray flick to yank the
+  // user out of a tree they're navigating.
+  const swipeBetweenSchematicAndTimeline = useHorizontalSwipe(
+    () => {
+      setViewMode(viewMode === 'schematic' ? 'timeline' : 'schematic')
+    },
+    { enabled: viewMode === 'schematic' || viewMode === 'timeline' },
+  )
   const { t, lang } = useLang()
   const dir = isRTL(lang) ? 'rtl' : 'ltr'
   const navigate = useNavigate()
@@ -147,16 +159,41 @@ export default function TreePage({ demoMode }: Props) {
             )}
           </>
         )}
-        {viewMode === 'schematic' && (
-          <div className="overflow-y-auto" style={{ paddingTop: 72, paddingBottom: 120, minHeight: '100vh' }}>
-            <SchematicView />
-          </div>
-        )}
-        {viewMode === 'timeline' && (
-          <div className="overflow-y-auto" style={{ paddingTop: 72, paddingBottom: 120, minHeight: '100vh' }}>
-            <TimelineView />
-          </div>
-        )}
+        {/* Schematic + Timeline share a swipe-to-toggle gesture (see
+            useHorizontalSwipe). Each view animates in with a slide
+            so the gesture has a satisfying visual payoff; the
+            AnimatePresence key matches viewMode so React swaps
+            cleanly rather than dual-mounting. */}
+        <AnimatePresence mode="wait" initial={false}>
+          {viewMode === 'schematic' && (
+            <motion.div
+              key="schematic"
+              {...swipeBetweenSchematicAndTimeline}
+              initial={{ opacity: 0, x: isRTL(lang) ? -40 : 40 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: isRTL(lang) ? 40 : -40 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              className="overflow-y-auto"
+              style={{ paddingTop: 72, paddingBottom: 120, minHeight: '100vh', touchAction: 'pan-y' }}
+            >
+              <SchematicView />
+            </motion.div>
+          )}
+          {viewMode === 'timeline' && (
+            <motion.div
+              key="timeline"
+              {...swipeBetweenSchematicAndTimeline}
+              initial={{ opacity: 0, x: isRTL(lang) ? 40 : -40 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: isRTL(lang) ? -40 : 40 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              className="overflow-y-auto"
+              style={{ paddingTop: 72, paddingBottom: 120, minHeight: '100vh', touchAction: 'pan-y' }}
+            >
+              <TimelineView />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <AnimatePresence>
           {selectedMemberId && (
