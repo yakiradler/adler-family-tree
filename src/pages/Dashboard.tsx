@@ -97,7 +97,7 @@ function computeBranchFounders(members: Member[], relationships: Relationship[])
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function Dashboard({ demoMode }: Props) {
-  const { members, relationships, profile, setSelectedMemberId } = useFamilyStore()
+  const { members, relationships, profile, setSelectedMemberId, trees, setActiveTreeId } = useFamilyStore()
   const { t, lang, toggleLang } = useLang()
   const dir = isRTL(lang) ? 'rtl' : 'ltr'
   const navigate = useNavigate()
@@ -111,6 +111,69 @@ export default function Dashboard({ demoMode }: Props) {
   const upcoming = useMemo(() => getUpcomingBirthdays(members), [members])
   const generations = useMemo(() => computeGenerations(members, relationships), [members, relationships])
   const founders = useMemo(() => computeBranchFounders(members, relationships), [members, relationships])
+
+  // ── Tree summaries (replaces the per-person founders rail) ──────────
+  // The "branches" section used to show individual people; the user
+  // asked for tree-level cards instead. Each summary is one card:
+  //
+  //   • a named tree from the store → its own row;
+  //   • the implicit "main" tree (members with no tree_id) → one row,
+  //     labelled by the most common surname inside that population
+  //     ("עץ משפחת אדלר" etc.).
+  //
+  // Each row carries a colour so the cards stay visually distinct in
+  // the rail without needing photographs of people on them.
+  const treeSummaries = useMemo(() => {
+    const dominantSurname = (pool: typeof members): string | null => {
+      const counts = new Map<string, number>()
+      for (const m of pool) {
+        const ln = (m.last_name ?? '').trim()
+        if (!ln) continue
+        counts.set(ln, (counts.get(ln) ?? 0) + 1)
+      }
+      let best: { name: string; n: number } | null = null
+      for (const [name, n] of counts) {
+        if (!best || n > best.n) best = { name, n }
+      }
+      return best?.name ?? null
+    }
+
+    const palette = ['#007AFF', '#5E5CE6', '#34C759', '#FF9F0A', '#FF2D92', '#5AC8FA']
+    const summaries: {
+      id: string | null
+      name: string
+      count: number
+      color: string
+      isMain: boolean
+    }[] = []
+
+    const mainPool = members.filter((m) => !m.tree_id)
+    if (mainPool.length > 0) {
+      const ln = dominantSurname(mainPool)
+      summaries.push({
+        id: null,
+        name: ln
+          ? (lang === 'he' ? `עץ משפחת ${ln}` : `${ln} Family Tree`)
+          : (lang === 'he' ? 'עץ המשפחה הראשי' : 'Main Family Tree'),
+        count: mainPool.length,
+        color: '#007AFF',
+        isMain: true,
+      })
+    }
+
+    trees.forEach((tr, i) => {
+      const pool = members.filter((m) => m.tree_id === tr.id)
+      summaries.push({
+        id: tr.id,
+        name: tr.name || (lang === 'he' ? 'עץ ללא שם' : 'Unnamed tree'),
+        count: pool.length,
+        color: tr.color ?? palette[(i + 1) % palette.length]!,
+        isMain: false,
+      })
+    })
+
+    return summaries
+  }, [members, trees, lang])
 
   const today = new Date()
   const dateStr = today.toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-US', {
@@ -231,15 +294,66 @@ export default function Dashboard({ demoMode }: Props) {
           </motion.button>
         )}
 
-        {/* ─── BRANCHES RAIL (Instagram stories style) ─── */}
-        {founders.length > 0 && (
+        {/* ─── ABOUT (now ABOVE the branches per user request) ───
+            Reframed as a small "hero card" with an animated decorative
+            glow + a floating book icon so it carries the Landing-page
+            vibe. Sits at the top of the secondary stack so a returning
+            visitor reads the family description before scanning the
+            tree rail below. */}
+        <motion.section
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
+          className="relative overflow-hidden rounded-3xl p-4 shadow-glass border border-white/60"
+          style={{
+            background:
+              'linear-gradient(135deg, rgba(0,122,255,0.10), rgba(94,92,230,0.10) 55%, rgba(255,45,146,0.08))',
+            backdropFilter: 'blur(18px) saturate(160%)',
+            WebkitBackdropFilter: 'blur(18px) saturate(160%)',
+          }}
+        >
+          {/* Soft radial glows — same palette as Landing's TreeBackdrop
+              so the two screens feel like the same family of pages.
+              pointer-events-none keeps them out of the click path. */}
+          <div className="pointer-events-none absolute -top-16 -start-16 w-44 h-44 rounded-full bg-[#5E5CE6]/25 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-14 -end-12 w-44 h-44 rounded-full bg-[#FF2D92]/18 blur-3xl" />
+          <div className="pointer-events-none absolute top-8 end-8 w-24 h-24 rounded-full bg-[#32ADE6]/20 blur-2xl" />
+
+          <div className="relative flex items-start gap-3">
+            <motion.div
+              initial={{ scale: 0.6, rotate: -10, opacity: 0 }}
+              animate={{ scale: 1, rotate: 0, opacity: 1 }}
+              transition={{ delay: 0.18, type: 'spring', stiffness: 260, damping: 18 }}
+              className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#5AC8FA] to-[#007AFF] flex items-center justify-center flex-shrink-0 shadow-md shadow-blue-300/40"
+            >
+              <span className="text-lg">📖</span>
+            </motion.div>
+            <div>
+              <h3 className="text-sf-subhead font-bold text-[#1C1C1E] mb-1">{t.dashAbout}</h3>
+              <p className="text-sf-footnote text-[#3A3A3C] leading-relaxed">{t.dashAboutText}</p>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* ─── FAMILY TREES RAIL ───
+            Used to show individual founders by photo; per a user
+            request it now renders one card per TREE (named trees +
+            the implicit main tree). Each card carries the tree's
+            name ("עץ משפחת אדלר") + a member count, NO faces. The
+            row scrolls horizontally so multi-tree households fit
+            without redesigning the page. */}
+        {treeSummaries.length > 0 && (
           <motion.section
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.1 }}
-            className="glass-strong rounded-3xl p-4 shadow-glass"
+            transition={{ duration: 0.45, delay: 0.12 }}
+            className="relative overflow-hidden glass-strong rounded-3xl p-4 shadow-glass"
           >
-            <div className="flex items-center justify-between mb-3">
+            {/* Subtle backdrop glow to echo the About card above. */}
+            <div className="pointer-events-none absolute -bottom-20 -start-10 w-52 h-52 rounded-full bg-[#007AFF]/12 blur-3xl" />
+            <div className="pointer-events-none absolute -top-12 -end-10 w-40 h-40 rounded-full bg-[#34C759]/14 blur-3xl" />
+
+            <div className="relative flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <span className="text-base">🌿</span>
                 <h3 className="text-sf-subhead font-bold text-[#1C1C1E]">{t.dashBranchesTitle}</h3>
@@ -249,36 +363,58 @@ export default function Dashboard({ demoMode }: Props) {
               </button>
             </div>
             <div
-              className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1"
+              className="relative flex gap-3 overflow-x-auto pb-1 -mx-1 px-1"
               style={{ scrollbarWidth: 'none' }}
             >
-              {founders.map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => openMember(m.id)}
-                  className="flex-shrink-0 flex flex-col items-center gap-1.5 no-select"
-                  style={{ width: 64 }}
+              {treeSummaries.map((tree, i) => (
+                <motion.button
+                  key={tree.id ?? 'main'}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35, delay: 0.18 + i * 0.05, ease: [0.16, 1, 0.3, 1] }}
+                  whileHover={{ y: -3 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => {
+                    setActiveTreeId(tree.id)
+                    navigate('/tree')
+                  }}
+                  className="flex-shrink-0 flex flex-col items-center gap-1.5 no-select rounded-2xl px-2 py-1.5 hover:bg-white/40 transition"
+                  style={{ width: 96 }}
                 >
+                  {/* Tree-glyph "avatar" — a coloured rounded square
+                      with a stylised tree silhouette inside. Replaces
+                      the person photo so there are no faces in this
+                      rail, per the user's instruction. */}
                   <div
-                    className="rounded-full shadow-md"
-                    style={{ padding: 2.5, background: getRingGradient(m) }}
+                    className="rounded-2xl shadow-md flex items-center justify-center w-[60px] h-[60px] relative"
+                    style={{
+                      background: `linear-gradient(135deg, ${tree.color}, ${tree.color}AA)`,
+                    }}
                   >
-                    <div className="rounded-full bg-white p-[2px]">
-                      <div className="w-[52px] h-[52px] rounded-full overflow-hidden">
-                        {m.photo_url ? (
-                          <img src={m.photo_url} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className={`w-full h-full bg-gradient-to-br ${getFallbackGradient(m)} flex items-center justify-center`}>
-                            <PersonAvatarIcon gender={m.gender} size={52} />
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    <svg width="34" height="34" viewBox="0 0 32 32" fill="none" aria-hidden>
+                      <circle cx="16" cy="9" r="3.4" fill="white" opacity="0.95" />
+                      <circle cx="8" cy="20" r="3" fill="white" opacity="0.78" />
+                      <circle cx="24" cy="20" r="3" fill="white" opacity="0.78" />
+                      <line x1="16" y1="12.4" x2="8" y2="17" stroke="white" strokeWidth="1.4" strokeOpacity="0.7" strokeLinecap="round" />
+                      <line x1="16" y1="12.4" x2="24" y2="17" stroke="white" strokeWidth="1.4" strokeOpacity="0.7" strokeLinecap="round" />
+                    </svg>
+                    {/* Member count pill — tucked in the corner so
+                        the user can tell at a glance which tree is
+                        biggest without opening it. */}
+                    <span
+                      className="absolute -bottom-1 -end-1 bg-white rounded-full px-1.5 py-0.5 text-[9px] font-bold shadow-sm"
+                      style={{ color: tree.color }}
+                    >
+                      {tree.count}
+                    </span>
                   </div>
-                  <p className="text-[10.5px] font-semibold text-[#1C1C1E] text-center leading-tight truncate w-full">
-                    {m.first_name}
+                  <p
+                    className="text-[10.5px] font-semibold text-[#1C1C1E] text-center leading-tight w-full"
+                    style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                  >
+                    {tree.name}
                   </p>
-                </button>
+                </motion.button>
               ))}
             </div>
           </motion.section>
@@ -400,23 +536,12 @@ export default function Dashboard({ demoMode }: Props) {
           </div>
         </motion.section>
 
-        {/* ─── ABOUT ─── */}
-        <motion.section
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.25 }}
-          className="glass rounded-3xl p-4 shadow-glass-sm"
-        >
-          <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#5AC8FA]/20 to-[#007AFF]/20 flex items-center justify-center flex-shrink-0">
-              <span className="text-base">📖</span>
-            </div>
-            <div>
-              <h3 className="text-sf-subhead font-bold text-[#1C1C1E] mb-1">{t.dashAbout}</h3>
-              <p className="text-sf-footnote text-[#636366] leading-relaxed">{t.dashAboutText}</p>
-            </div>
-          </div>
-        </motion.section>
+        {/* The About card used to live here. It was promoted to the
+            top of this stack (just under the incomplete-profile
+            banner) so a returning visitor reads the family
+            description before scanning the tree rail below — that
+            request landed with a screenshot showing the section was
+            getting buried below the fold. */}
       </div>
 
       {/* AI Scan modal — mounted at the page root so backdrop covers everything. */}
