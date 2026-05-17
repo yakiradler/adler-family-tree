@@ -34,12 +34,19 @@ export const useLang = create<LangState>()(
       name: 'family-tree-lang',
       // Only persist the language preference itself. `t` is derived.
       partialize: (state) => ({ lang: state.lang }) as Partial<LangState>,
-      // After hydration we have `lang` but no `t` — wire it back up
-      // from the freshly-imported translations object so newly-added
-      // keys are immediately available.
-      onRehydrateStorage: () => (state) => {
-        if (state) {
-          state.t = translations[state.lang]
+      // `merge` runs every page load, so this is the spot to defend
+      // against legacy snapshots that captured the entire (older)
+      // translations object — we ignore whatever `t` they stored and
+      // always recompute from the live import. This is what unstuck
+      // empty UI labels after newly-added keys shipped.
+      merge: (persistedState, currentState) => {
+        const lang =
+          (persistedState as Partial<LangState> | undefined)?.lang ??
+          currentState.lang
+        return {
+          ...currentState,
+          lang,
+          t: translations[lang],
         }
       },
     },
