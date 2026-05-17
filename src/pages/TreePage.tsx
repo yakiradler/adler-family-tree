@@ -129,21 +129,23 @@ export default function TreePage({ demoMode }: Props) {
               exit={{ opacity: 0, x: isRTL(lang) ? -40 : 40 }}
               transition={{ type: 'spring', stiffness: 350, damping: 32 }}
               // Mobile: dock to the bottom (sheet style).
-              // Desktop: anchor to top-20, capped width 320px, capped
-              // max height so the panel never stretches the full
-              // viewport. Width was reduced from 360→320 so even at
-              // moderate browser zoom the tree stays usable.
+              // Desktop: anchor to top-20, capped at 260px wide, capped
+              // max-height so the panel never dominates the viewport.
+              // The previous 320 → 260 cut + the smaller header/avatar
+              // inside MemberPanel together address the user's
+              // recurring "the card is still too big" complaints.
               //
               // `transform: scale(1/zoom)` counters browser zoom so the
-              // panel keeps a roughly constant *physical* size — without
-              // this, Ctrl++ used to inflate the panel to half the
-              // viewport. transform-origin sits at the anchored corner
+              // panel keeps a roughly constant *physical* size even when
+              // the user is at 125%/150%/200% Ctrl++ — without this, a
+              // heavily-zoomed user would see the panel inflate to half
+              // the viewport. transform-origin pins the anchored corner
               // so the panel scales toward its edge, not its centre.
-              className={`fixed z-50 w-[calc(100vw-32px)] max-w-[320px] bottom-4 md:bottom-auto md:top-20 ${
+              className={`fixed z-50 w-[calc(100vw-32px)] max-w-[260px] bottom-4 md:bottom-auto md:top-20 ${
                 isRTL(lang) ? 'left-4' : 'right-4'
               }`}
               style={{
-                maxHeight: 'min(640px, calc(100vh - 120px))',
+                maxHeight: 'min(560px, calc(100vh - 120px))',
                 transform: browserZoom > 1 ? `scale(${1 / browserZoom})` : undefined,
                 transformOrigin: isRTL(lang) ? 'top left' : 'top right',
               }}

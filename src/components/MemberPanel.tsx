@@ -191,12 +191,16 @@ export default function MemberPanel({ onClose }: Props) {
 
   return (
     <div
-      className="glass-strong rounded-[28px] shadow-glass-lg flex flex-col bg-white relative"
+      className="glass-strong rounded-[24px] shadow-glass-lg flex flex-col bg-white relative"
       style={{ maxHeight: 'calc(100vh - 120px)' }}
       onClick={(e) => e.stopPropagation()}
     >
       {/* ─── HEADER cover ─── */}
-      <div className={`relative bg-gradient-to-br ${getHeaderGradient(member)} h-28 flex-shrink-0 rounded-t-[28px] overflow-hidden`}>
+      {/* Header height + radius reduced (h-28→h-20, 28→24px) along with
+          the avatar below to make the whole panel feel substantially
+          tighter — a recurring user complaint that earlier max-width
+          trims didn't fully resolve. */}
+      <div className={`relative bg-gradient-to-br ${getHeaderGradient(member)} h-20 flex-shrink-0 rounded-t-[24px] overflow-hidden`}>
         {/* soft decorative blobs */}
         <div className="absolute -top-8 -right-8 w-28 h-28 bg-white/15 rounded-full blur-2xl" />
         <div className="absolute -bottom-10 -left-6 w-24 h-24 bg-white/10 rounded-full blur-2xl" />
@@ -204,24 +208,28 @@ export default function MemberPanel({ onClose }: Props) {
         <motion.button
           whileTap={{ scale: 0.9 }}
           onClick={onClose}
-          className={`absolute top-3 ${isRTL(lang) ? 'left-3' : 'right-3'} w-9 h-9 rounded-full bg-black/30 backdrop-blur flex items-center justify-center hover:bg-black/45 transition z-20`}
+          className={`absolute top-2 ${isRTL(lang) ? 'left-2' : 'right-2'} w-7 h-7 rounded-full bg-black/30 backdrop-blur flex items-center justify-center hover:bg-black/45 transition z-20`}
           aria-label={t.relClose ?? 'Close'}
           title={t.relClose ?? 'Close'}
         >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
             <path d="M3 3l8 8M11 3l-8 8" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
           </svg>
         </motion.button>
       </div>
 
-      {/* ─── AVATAR: floats between header and body, NEVER clipped ─── */}
-      <div className="relative flex-shrink-0 flex justify-center" style={{ marginTop: -56, zIndex: 10 }}>
+      {/* ─── AVATAR: floats between header and body, NEVER clipped ───
+          Avatar shrunk from 112×112 → 72×72 to keep the panel compact;
+          marginTop also trimmed (-56 → -36) to match the new header
+          height (h-20). Icon size + ring padding scaled in proportion
+          so the visual ring looks balanced at the smaller radius. */}
+      <div className="relative flex-shrink-0 flex justify-center" style={{ marginTop: -36, zIndex: 10 }}>
         <div
           className="rounded-full shadow-xl"
-          style={{ padding: 3.5, background: getRingGradient(member) }}
+          style={{ padding: 2.5, background: getRingGradient(member) }}
         >
-          <div className="rounded-full bg-white p-[3px]">
-            <div className="w-28 h-28 rounded-full overflow-hidden relative">
+          <div className="rounded-full bg-white p-[2px]">
+            <div className="w-[72px] h-[72px] rounded-full overflow-hidden relative">
               {member.photo_url ? (
                 <img
                   src={member.photo_url}
@@ -230,7 +238,7 @@ export default function MemberPanel({ onClose }: Props) {
                 />
               ) : (
                 <div className={`w-full h-full bg-gradient-to-br ${getFallbackGradient(member)} flex items-center justify-center`}>
-                  <PersonAvatarIcon gender={member.gender} size={112} />
+                  <PersonAvatarIcon gender={member.gender} size={72} />
                 </div>
               )}
             </div>
@@ -239,10 +247,10 @@ export default function MemberPanel({ onClose }: Props) {
       </div>
 
       {/* ─── SCROLL BODY ─── */}
-      <div className="flex-1 overflow-y-auto rounded-b-[28px]">
-        <div className="px-5 pt-3 flex flex-col items-center text-center">
+      <div className="flex-1 overflow-y-auto rounded-b-[24px]">
+        <div className="px-4 pt-2 flex flex-col items-center text-center">
           <div className="w-full">
-            <h2 className="text-sf-title2 font-bold text-[#1C1C1E] leading-tight">
+            <h2 className="text-sf-headline font-bold text-[#1C1C1E] leading-tight">
               {member.first_name} {member.last_name}
             </h2>
             {/* "לבית X" — surfaces the maiden name right under the
@@ -302,8 +310,10 @@ export default function MemberPanel({ onClose }: Props) {
           </div>
         </div>
 
-        {/* Quick stat pills — primary row */}
-        <div className="px-5 mt-4 grid grid-cols-3 gap-2">
+        {/* Quick stat pills — primary row. Tightened gutters + outer
+            padding to keep the row inside the 260-px-wide panel
+            without each pill turning into a single column. */}
+        <div className="px-4 mt-3 grid grid-cols-3 gap-1.5">
           <StatPill value={relationCount} label={t.family} />
           <StatPill value={children.length} label={t.genChildren} />
           <StatPill value={photos.length} label={t.photos} />
@@ -313,7 +323,7 @@ export default function MemberPanel({ onClose }: Props) {
             ילדים → נכדים → נינים → בני־נינים → דור 5+. We skip depth=0
             (children — already in the primary row) and start at depth=1. */}
         {descendantsByGen.length > 1 && (
-          <div className="px-5 mt-2 grid grid-cols-4 gap-2">
+          <div className="px-4 mt-1.5 grid grid-cols-4 gap-1.5">
             {descendantsByGen.slice(1).map((count, i) => {
               const label =
                 i === 0 ? t.descendantsGen1
@@ -326,7 +336,7 @@ export default function MemberPanel({ onClose }: Props) {
         )}
 
         {/* Tabs */}
-        <div className="px-5 mt-4">
+        <div className="px-4 mt-3">
           <div className="flex gap-1 bg-[#F2F2F7] rounded-2xl p-1">
             {([
               ['about', t.about],
@@ -347,7 +357,7 @@ export default function MemberPanel({ onClose }: Props) {
         </div>
 
         {/* Tab content */}
-        <div className="px-5 py-4 pb-2">
+        <div className="px-4 py-3 pb-2">
           <AnimatePresence mode="wait">
             {tab === 'about' && (
               <motion.div
@@ -465,7 +475,7 @@ export default function MemberPanel({ onClose }: Props) {
 
         {/* Action buttons: full-width stacked rows so labels are always readable */}
         {(editAllowed || relAllowed || deleteAllowed || member.last_name) && (
-          <div className="px-5 pb-5 pt-1 space-y-2">
+          <div className="px-4 pb-4 pt-1 space-y-1.5">
             {/* Surname-aware tree jump — only renders if the member's
                 surname doesn't match the active tree (handled inside
                 the component). Lets families navigate between linked
