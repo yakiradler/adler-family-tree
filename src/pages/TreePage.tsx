@@ -77,27 +77,49 @@ export default function TreePage({ demoMode }: Props) {
     try { window.localStorage.setItem(TREE_TUTORIAL_KEY, '1') } catch { /* ignore */ }
     setTreeTutorialOpen(false)
   }
-  const treeTutorialSteps: TourStep[] = useMemo(() => (
-    lang === 'he'
-      ? [
-          { selector: 'tree-title', title: '🌳 שם המשפחה', body: 'כאן רואים את שם המשפחה של העץ הפעיל (למשל "משפחת אדלר") ואת מספר החברים בו.', side: 'bottom' },
-          { selector: 'tree-add', title: '➕ הוסף חבר משפחה', body: 'לחיצה תפתח טופס מהיר להוספת חבר משפחה חדש לעץ הפעיל.', side: 'bottom' },
-          { selector: 'tree-search', title: '🔍 חיפוש בעץ', body: 'מחפש בן או בת משפחה לפי שם בתוך כל העץ — גם אם הם מחוץ למסך כרגע.', side: 'bottom' },
-          { selector: 'tree-switcher', title: '🌿 מעבר בין עצים', body: 'אם יש לכם כמה עצי משפחה (אבא, אמא, בני זוג), אפשר לעבור ביניהם מכאן.', side: 'bottom' },
-          { selector: 'tree-hamburger', title: '☰ אפשרויות תצוגה', body: 'תפריט עם 3 כפתורי-על: סינון מתקדם (לפי כהן/לוי, גרושים, נפטרים), מיקוד דינמי (אדם וקרוביו), ותצוגה ממוקדת/מלאה.', side: 'bottom' },
-          { selector: 'tree-zoom', title: '🔎 זום ומסך מלא', body: 'הגדל / הקטן את העץ, או היכנס למסך מלא כדי לראות רק את העץ ללא רעשים.', side: 'left' },
-          { selector: 'tree-nav', title: '⬇️ ניווט בין תצוגות', body: 'מעבר בין עץ, תרשים, ציר זמן. כאן גם בוחרים את פריסת העץ (קלאסי / גריד / קשת / מדורג).', side: 'top' },
-        ]
-      : [
-          { selector: 'tree-title', title: '🌳 Family name', body: 'Shows the active tree\'s family name (e.g. "Adler Family") and the member count.', side: 'bottom' },
-          { selector: 'tree-add', title: '➕ Add a family member', body: 'Opens a quick form for adding a new member to the active tree.', side: 'bottom' },
-          { selector: 'tree-search', title: '🔍 Search the tree', body: 'Find a member by name across the whole tree — even off-screen.', side: 'bottom' },
-          { selector: 'tree-switcher', title: '🌿 Switch trees', body: 'If you belong to several family trees, swap between them here.', side: 'bottom' },
-          { selector: 'tree-hamburger', title: '☰ View options', body: 'Three super-controls: advanced filter, focused-centric mode, compact / wide density.', side: 'bottom' },
-          { selector: 'tree-zoom', title: '🔎 Zoom + fullscreen', body: 'Zoom in / out, or enter fullscreen for a chrome-free tree.', side: 'left' },
-          { selector: 'tree-nav', title: '⬇️ Switch views', body: 'Tree, schematic, timeline — and pick the tree\'s layout (classic / grid / arc / staggered).', side: 'top' },
-        ]
-  ), [lang])
+  // Tutorial step generator. Some of the new steps require the
+  // hamburger to be EXPANDED (so the filter / focus / density chips
+  // are visible). We achieve that via the `onEnter` callback which
+  // flips `treeControlsExpanded` on the relevant steps. Closing chips
+  // again when the user moves past is intentional — keeps the next
+  // canvas-level step uncluttered.
+  const treeTutorialSteps: TourStep[] = useMemo(() => {
+    const openChips = () => setTreeControlsExpanded(true)
+    const closeChips = () => setTreeControlsExpanded(false)
+    if (lang === 'he') {
+      return [
+        { selector: 'tree-title', title: '🌳 שם המשפחה', body: 'כאן רואים את שם המשפחה של העץ הפעיל (למשל "משפחת אדלר") ואת מספר החברים בו.', side: 'bottom', onEnter: closeChips },
+        { selector: 'tree-add', title: '➕ הוסף חבר משפחה', body: 'לחיצה תפתח טופס מהיר להוספת חבר משפחה חדש לעץ הפעיל.', side: 'bottom', onEnter: closeChips },
+        { selector: 'tree-search', title: '🔍 חיפוש בעץ', body: 'מחפש בן או בת משפחה לפי שם בתוך כל העץ — גם אם הם מחוץ למסך כרגע.', side: 'bottom', onEnter: closeChips },
+        { selector: 'tree-switcher', title: '🌿 מעבר בין עצים', body: 'אם יש לכם כמה עצי משפחה (אבא, אמא, בני זוג), אפשר לעבור ביניהם מכאן.', side: 'bottom', onEnter: closeChips },
+        { selector: 'tree-hamburger', title: '☰ אפשרויות תצוגה', body: 'הכפתור הזה פותח שלושה כלים חזקים: סינון מתקדם, מיקוד דינמי, ותצוגה ממוקדת. נראה אותם עכשיו.', side: 'bottom', onEnter: closeChips },
+        // Steps that highlight the chips REQUIRE the hamburger open.
+        { selector: 'tree-chip-filter', title: '🔍 סינון מתקדם', body: 'מסנן את העץ לפי שושלת (כהן/לוי), חיפוש שם, מיקוד באדם, הצגת גרושים/נפטרים ועוד. הסינון תקף גם בתרשים ובציר הזמן.', side: 'bottom', onEnter: openChips },
+        { selector: 'tree-chip-focus', title: '🎯 מיקוד דינמי', body: 'תצוגה ממוקדת על אדם אחד ומשפחתו הקרובה (הורים, בני זוג, אחים, ילדים) — נהדר להבין דור אחד.', side: 'bottom', onEnter: openChips },
+        { selector: 'tree-chip-density', title: '▤ תצוגה ממוקדת/מלאה', body: 'ממוקדת מראה רק 3 דורות (הורים+אגו+ילדים) עם חצים להרחיב למעלה/למטה. מלאה מראה את הכל בבת אחת.', side: 'bottom', onEnter: openChips },
+        { selector: 'tree-zoom', title: '🔎 זום + מסך מלא', body: 'הגדלה והקטנה עם הכפתורים — או, חשוב מאוד, עם **שתי אצבעות במגע** (pinch). כפתור הריבועים נכנס למסך מלא.', side: 'left', onEnter: closeChips },
+        { selector: 'tree-nav-tab-tree', title: '🌳 תצוגת עץ', body: 'התצוגה הגרפית של עץ המשפחה — מה שאתם רואים כרגע. כאן רוב הפעולות.', side: 'top', onEnter: closeChips },
+        { selector: 'tree-nav-tab-schematic', title: '📊 תרשים', body: 'תצוגה סכמטית בלוקים — שימושית להבנת מבנה הענפים והעברה ביניהם.', side: 'top', onEnter: closeChips },
+        { selector: 'tree-nav-tab-timeline', title: '⏳ ציר זמן', body: 'אירועי המשפחה (לידות, נישואין, פטירות) על ציר כרונולוגי.', side: 'top', onEnter: closeChips },
+        { selector: 'tree-nav-layout', title: '🎨 פריסת העץ', body: 'איך העץ מצויר: קלאסי (אנכי), גריד, קשת, מדורג. כל פריסה מתאימה למצב אחר.', side: 'top', onEnter: closeChips },
+      ]
+    }
+    return [
+      { selector: 'tree-title', title: '🌳 Family name', body: 'Shows the active tree\'s family name and member count.', side: 'bottom', onEnter: closeChips },
+      { selector: 'tree-add', title: '➕ Add a member', body: 'Opens a quick form to add a new family member.', side: 'bottom', onEnter: closeChips },
+      { selector: 'tree-search', title: '🔍 Search', body: 'Find anyone by name — even members off-screen right now.', side: 'bottom', onEnter: closeChips },
+      { selector: 'tree-switcher', title: '🌿 Switch trees', body: 'Toggle between linked family trees you belong to.', side: 'bottom', onEnter: closeChips },
+      { selector: 'tree-hamburger', title: '☰ View options', body: 'Opens three power tools: advanced filter, focused mode, density. Let\'s look at them.', side: 'bottom', onEnter: closeChips },
+      { selector: 'tree-chip-filter', title: '🔍 Advanced filter', body: 'Filter by lineage (Kohen/Levi), name search, focus on a person, hide deceased / former spouses, and more. Applies to schematic + timeline too.', side: 'bottom', onEnter: openChips },
+      { selector: 'tree-chip-focus', title: '🎯 Focused mode', body: 'Zooms into one person and their immediate family (parents, spouses, siblings, children).', side: 'bottom', onEnter: openChips },
+      { selector: 'tree-chip-density', title: '▤ Compact / full', body: 'Compact shows just 3 generations with ▲/▼ to grow. Full shows everything at once.', side: 'bottom', onEnter: openChips },
+      { selector: 'tree-zoom', title: '🔎 Zoom + fullscreen', body: 'Zoom with the buttons — or, importantly, with **two-finger pinch** on touch. The arrows-icon opens fullscreen.', side: 'left', onEnter: closeChips },
+      { selector: 'tree-nav-tab-tree', title: '🌳 Tree view', body: 'The visual family tree — what you\'re looking at now. Most actions live here.', side: 'top', onEnter: closeChips },
+      { selector: 'tree-nav-tab-schematic', title: '📊 Schematic', body: 'Block-style schematic — great for understanding branch structure.', side: 'top', onEnter: closeChips },
+      { selector: 'tree-nav-tab-timeline', title: '⏳ Timeline', body: 'Family events (births, marriages, deaths) on a chronological axis.', side: 'top', onEnter: closeChips },
+      { selector: 'tree-nav-layout', title: '🎨 Layout', body: 'Pick how the tree is drawn: classic, grid, arc, or staggered.', side: 'top', onEnter: closeChips },
+    ]
+  }, [lang, setTreeControlsExpanded])
 
   const members = useMemo(
     () =>

@@ -141,6 +141,7 @@ export default function Navigation() {
               <motion.button
                 onClick={() => setViewMode(tab.id)}
                 aria-label={tab.tip}
+                data-tour={`tree-nav-tab-${tab.id}`}
                 className={`relative flex flex-col items-center gap-0.5 px-4 py-2 rounded-[1.4rem] transition-colors duration-200 ${
                   isActive ? 'text-white' : 'text-white/40 hover:text-white/70'
                 }`}
@@ -171,7 +172,7 @@ export default function Navigation() {
         {viewMode === 'tree' && (
           <>
             <div className="w-px h-8 bg-white/15 mx-1" />
-            <div className="relative" data-nav-layout-picker>
+            <div className="relative" data-nav-layout-picker data-tour="tree-nav-layout">
               <Tooltip content={t.tipNavLayout} placement="top">
                 <motion.button
                   onClick={() => {

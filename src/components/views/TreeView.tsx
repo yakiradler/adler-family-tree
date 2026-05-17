@@ -696,6 +696,7 @@ export default function TreeView({
         <div
           className="absolute z-20 no-print"
           style={{ top: 228, [rtl ? 'left' : 'right']: 12 } as React.CSSProperties}
+          data-tour="tree-chip-density"
         >
           <Tooltip
             content={
@@ -804,6 +805,7 @@ export default function TreeView({
         <div
           className="absolute z-20 no-print"
           style={{ top: 176, [rtl ? 'left' : 'right']: 12 } as React.CSSProperties}
+          data-tour="tree-chip-focus"
         >
           <Tooltip content={t.tipFocusedCentric} placement="bottom">
             <motion.button

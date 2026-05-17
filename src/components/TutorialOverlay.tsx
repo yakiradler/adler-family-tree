@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLang, isRTL } from '../i18n/useT'
@@ -7,8 +7,9 @@ import { useLang, isRTL } from '../i18n/useT'
  * Interactive guided-tour overlay.
  *
  * On first login (and again on demand from the Dashboard's "Tutorial"
- * tile) we walk the user through the app's main controls. The pattern
- * is the classic "spotlight + caption":
+ * tile + the tree-page "?" button) we walk the user through the
+ * app's main controls. The pattern is the classic "spotlight +
+ * caption":
  *
  *   • Everything outside the active step is darkened by a backdrop.
  *   • The active step's target element gets a glowing cut-out + ring.
@@ -17,7 +18,21 @@ import { useLang, isRTL } from '../i18n/useT'
  *
  * Targets are looked up by `data-tour` attribute so the tour doesn't
  * have to know component internals. If a step's target isn't on the
- * page yet (e.g. the user is on the wrong route), we skip it.
+ * page yet (e.g. the user is on the wrong route), the spotlight is
+ * suppressed and the caption is centred in the viewport.
+ *
+ * v2 improvements (driven by a user-reported "caption clipped on
+ * step 7" bug):
+ *   • Caption position is computed AFTER measuring the bubble's
+ *     real rendered size (useLayoutEffect + ref), not estimated.
+ *   • Each candidate side is checked against the actual bubble box
+ *     and the winner is the first to fully fit inside the viewport.
+ *   • If no side fits cleanly, the caption falls back to a fixed
+ *     bottom-of-viewport docked position (always visible) instead of
+ *     spilling off-screen.
+ *   • Steps can carry an `onEnter` callback so the tour can
+ *     imperatively prepare the UI (e.g. expand the hamburger so the
+ *     filter / focus / density chips become visible).
  */
 
 export interface TourStep {
@@ -27,6 +42,9 @@ export interface TourStep {
   body: string
   /** Optional preferred side of the target to anchor the caption. */
   side?: 'top' | 'bottom' | 'left' | 'right'
+  /** Fired when this step becomes active. Use it to open menus /
+   *  expand chrome so the target is visible. Idempotent. */
+  onEnter?: () => void
 }
 
 interface Props {
@@ -44,22 +62,31 @@ interface TargetRect {
 
 const HOLE_PAD = 8 // visual breathing room around the highlighted element
 const CAPTION_GAP = 14
+const EDGE_PAD = 16
 
 export default function TutorialOverlay({ open, steps, onClose }: Props) {
-  const { lang, t } = useLang()
+  const { lang } = useLang()
   const rtl = isRTL(lang)
   const [stepIndex, setStepIndex] = useState(0)
   const [rect, setRect] = useState<TargetRect | null>(null)
+  const [captionPos, setCaptionPos] = useState<{ top: number; left: number; width: number } | null>(null)
+  const captionRef = useRef<HTMLDivElement>(null)
 
-  // Reset to step 0 every time we open
+  // Reset to step 0 every time we open + fire onEnter for step 0.
   useEffect(() => {
-    if (open) setStepIndex(0)
-  }, [open])
+    if (open) {
+      setStepIndex(0)
+      steps[0]?.onEnter?.()
+    }
+  }, [open, steps])
 
-  // Resolve the current step's target rect. Re-measures on resize +
-  // when the step changes. Falls back to "advance past missing target"
-  // if no element matches, so a tour that includes a route-specific
-  // selector still finishes on the wrong route.
+  // Fire onEnter when stepIndex changes (after the initial open).
+  useEffect(() => {
+    if (!open) return
+    steps[stepIndex]?.onEnter?.()
+  }, [stepIndex, open, steps])
+
+  // Resolve the current step's target rect.
   useLayoutEffect(() => {
     if (!open) return
     const step = steps[stepIndex]
@@ -71,21 +98,15 @@ export default function TutorialOverlay({ open, steps, onClose }: Props) {
     const measure = () => {
       const el = find()
       if (!el) {
-        // Try once more on the next frame in case the target is just
-        // about to render (animations, route transitions).
-        requestAnimationFrame(() => {
-          const el2 = find()
-          if (!el2) {
-            setRect(null)
-            return
-          }
-          const r = el2.getBoundingClientRect()
-          setRect({ top: r.top, left: r.left, width: r.width, height: r.height })
-          el2.scrollIntoView({ block: 'center', behavior: 'smooth' })
-        })
+        setRect(null)
         return
       }
       const r = el.getBoundingClientRect()
+      // Bail on zero-size targets (display: none, etc.)
+      if (r.width === 0 && r.height === 0) {
+        setRect(null)
+        return
+      }
       setRect({ top: r.top, left: r.left, width: r.width, height: r.height })
       el.scrollIntoView({ block: 'center', behavior: 'smooth' })
     }
@@ -93,13 +114,90 @@ export default function TutorialOverlay({ open, steps, onClose }: Props) {
     measure()
     window.addEventListener('resize', measure)
     window.addEventListener('scroll', measure, true)
-    const t = window.setInterval(measure, 600) // catch async target appearance
+    const t = window.setInterval(measure, 500) // catch async target appearance
     return () => {
       window.removeEventListener('resize', measure)
       window.removeEventListener('scroll', measure, true)
       window.clearInterval(t)
     }
   }, [open, stepIndex, steps])
+
+  // Position the caption AFTER it has rendered so the geometry uses
+  // the bubble's true height. We try a sequence of sides + clamp to
+  // the viewport. If nothing fits we dock the caption to the bottom
+  // of the viewport — always visible, never clipped.
+  useLayoutEffect(() => {
+    if (!open) return
+    const compute = () => {
+      const bubble = captionRef.current
+      if (!bubble) return
+      const bw = bubble.offsetWidth
+      const bh = bubble.offsetHeight
+      const vw = window.innerWidth
+      const vh = window.innerHeight
+
+      const step = steps[stepIndex]
+      const preferred = step?.side ?? 'bottom'
+
+      const clampLeft = (raw: number) =>
+        Math.max(EDGE_PAD, Math.min(vw - bw - EDGE_PAD, raw))
+      const clampTop = (raw: number) =>
+        Math.max(EDGE_PAD, Math.min(vh - bh - EDGE_PAD, raw))
+      const fits = (top: number, left: number) =>
+        top >= EDGE_PAD && top + bh <= vh - EDGE_PAD
+        && left >= EDGE_PAD && left + bw <= vw - EDGE_PAD
+
+      // No target → centred on viewport.
+      if (!rect) {
+        setCaptionPos({
+          top: clampTop(vh / 2 - bh / 2),
+          left: clampLeft(vw / 2 - bw / 2),
+          width: bw,
+        })
+        return
+      }
+
+      const candidates: Array<{ side: 'top' | 'bottom' | 'left' | 'right'; top: number; left: number }> = [
+        { side: 'bottom', top: rect.top + rect.height + CAPTION_GAP, left: rect.left + rect.width / 2 - bw / 2 },
+        { side: 'top',    top: rect.top - bh - CAPTION_GAP,         left: rect.left + rect.width / 2 - bw / 2 },
+        { side: 'right',  top: rect.top + rect.height / 2 - bh / 2,  left: rect.left + rect.width + CAPTION_GAP },
+        { side: 'left',   top: rect.top + rect.height / 2 - bh / 2,  left: rect.left - bw - CAPTION_GAP },
+      ]
+
+      const order = [preferred, ...(['bottom', 'top', 'right', 'left'] as const).filter((s) => s !== preferred)]
+      for (const side of order) {
+        const c = candidates.find((cc) => cc.side === side)
+        if (!c) continue
+        if (fits(c.top, c.left)) {
+          setCaptionPos({ top: c.top, left: c.left, width: bw })
+          return
+        }
+      }
+      // Nothing fits — dock to whichever side has the most room.
+      // Usually this means the caption ends up centred horizontally
+      // and pinned to the top OR bottom of the viewport. Either way
+      // it's fully visible.
+      const dockedTop = rect.top > vh / 2
+        ? clampTop(EDGE_PAD)                        // target near bottom → caption at top
+        : clampTop(vh - bh - EDGE_PAD)              // target near top → caption at bottom
+      setCaptionPos({
+        top: dockedTop,
+        left: clampLeft(vw / 2 - bw / 2),
+        width: bw,
+      })
+    }
+    compute()
+    // Re-measure after framer-motion settles, the caption can grow
+    // ~20px between initial and final paint.
+    const raf = requestAnimationFrame(compute)
+    const raf2 = requestAnimationFrame(() => requestAnimationFrame(compute))
+    window.addEventListener('resize', compute)
+    return () => {
+      cancelAnimationFrame(raf)
+      cancelAnimationFrame(raf2)
+      window.removeEventListener('resize', compute)
+    }
+  }, [open, stepIndex, rect, steps])
 
   if (!open) return null
   const step = steps[stepIndex]
@@ -111,53 +209,6 @@ export default function TutorialOverlay({ open, steps, onClose }: Props) {
   }
   const prev = () => setStepIndex((i) => Math.max(0, i - 1))
   const skip = () => onClose()
-
-  // Caption position — placed on a sensible side of the target. We try
-  // the requested side first then fall back if it would overflow.
-  const captionPos = (() => {
-    if (!rect) {
-      // No target → centre of screen
-      return { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' as const, side: 'center' as const }
-    }
-    const vw = window.innerWidth
-    const vh = window.innerHeight
-    const captionW = Math.min(320, vw - 32)
-    const captionH = 200 // rough estimate; final height varies but this is enough for placement
-
-    const candidates: Array<{ side: 'top' | 'bottom' | 'left' | 'right'; left: number; top: number }> = []
-    candidates.push({
-      side: 'bottom',
-      left: Math.max(16, Math.min(vw - captionW - 16, rect.left + rect.width / 2 - captionW / 2)),
-      top: rect.top + rect.height + CAPTION_GAP,
-    })
-    candidates.push({
-      side: 'top',
-      left: Math.max(16, Math.min(vw - captionW - 16, rect.left + rect.width / 2 - captionW / 2)),
-      top: rect.top - captionH - CAPTION_GAP,
-    })
-    candidates.push({
-      side: 'right',
-      left: rect.left + rect.width + CAPTION_GAP,
-      top: Math.max(16, Math.min(vh - captionH - 16, rect.top + rect.height / 2 - captionH / 2)),
-    })
-    candidates.push({
-      side: 'left',
-      left: rect.left - captionW - CAPTION_GAP,
-      top: Math.max(16, Math.min(vh - captionH - 16, rect.top + rect.height / 2 - captionH / 2)),
-    })
-    // Prefer the requested side if it fits.
-    const preferred = step.side ?? 'bottom'
-    const order = [preferred, ...(['bottom', 'top', 'right', 'left'] as const).filter((s) => s !== preferred)]
-    for (const o of order) {
-      const c = candidates.find((cc) => cc.side === o)
-      if (!c) continue
-      const fits = c.top >= 16 && c.top + captionH <= vh - 16 && c.left >= 16 && c.left + captionW <= vw - 16
-      if (fits) return { left: c.left, top: c.top, side: c.side }
-    }
-    // None fits perfectly — default to bottom (clamped) anyway
-    const fallback = candidates[0]!
-    return { left: fallback.left, top: Math.max(16, Math.min(vh - captionH - 16, fallback.top)), side: 'bottom' as const }
-  })()
 
   const tourLabel = lang === 'he' ? 'מצב למידה' : 'Tutorial'
   const stepOf = lang === 'he' ? `שלב ${stepIndex + 1} מתוך ${steps.length}` : `Step ${stepIndex + 1} of ${steps.length}`
@@ -176,16 +227,12 @@ export default function TutorialOverlay({ open, steps, onClose }: Props) {
       role="dialog"
       aria-label={tourLabel}
     >
-      {/* Dark backdrop with a "hole" cut out around the target. Built
-          with an SVG so the cutout can be a rounded rect that exactly
-          matches the highlighted control. */}
+      {/* Dark backdrop with a "hole" cut out around the target. */}
       <svg
         width="100%"
         height="100%"
         style={{ position: 'absolute', inset: 0, pointerEvents: 'auto' }}
         onClick={(e) => {
-          // Tapping the backdrop dismisses the tour. Easier to bail
-          // out of than a hard "next" path.
           if (e.target === e.currentTarget) skip()
         }}
       >
@@ -223,20 +270,25 @@ export default function TutorialOverlay({ open, steps, onClose }: Props) {
         )}
       </svg>
 
-      {/* Caption bubble. */}
+      {/* Caption bubble. position: fixed so it's anchored to the
+          viewport and the computed top/left match what we measured. */}
       <AnimatePresence mode="wait">
         <motion.div
           key={stepIndex}
+          ref={captionRef}
           initial={{ opacity: 0, y: 8, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 8, scale: 0.96 }}
           transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
           style={{
-            position: 'absolute',
-            top: captionPos.top,
-            left: captionPos.left,
-            transform: 'transform' in captionPos && captionPos.transform ? captionPos.transform : undefined,
+            position: 'fixed',
+            // Hide until we have a measured position so the first
+            // paint doesn't flash in the wrong spot.
+            top: captionPos?.top ?? -9999,
+            left: captionPos?.left ?? -9999,
+            visibility: captionPos ? 'visible' : 'hidden',
             width: 'min(320px, calc(100vw - 32px))',
+            maxWidth: 'calc(100vw - 32px)',
             zIndex: 2,
           }}
         >
@@ -314,8 +366,6 @@ export default function TutorialOverlay({ open, steps, onClose }: Props) {
           </div>
         </motion.div>
       </AnimatePresence>
-      {/* unused t reference kept for future keys */}
-      <span hidden>{t.appName}</span>
     </div>,
     portalEl,
   )

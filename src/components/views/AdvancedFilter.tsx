@@ -136,6 +136,7 @@ export default function AdvancedFilter({
       // popover opens.
       className="absolute top-[124px] z-20 no-print"
       style={{ [rtl ? 'left' : 'right']: 12, position: 'absolute' } as React.CSSProperties}
+      data-tour="tree-chip-filter"
     >
     <div className="relative">
       <motion.button
