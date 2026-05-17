@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
@@ -8,6 +8,7 @@ import { isAdmin, isOnboarded } from '../lib/permissions'
 import { getRingGradient, getFallbackGradient, PersonAvatarIcon } from '../components/MemberNode'
 import AIScanModal from '../components/ai/AIScanModal'
 import ComingSoonModal from '../components/ComingSoonModal'
+import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
 import type { Member, Relationship } from '../types'
 
 interface Props { demoMode: boolean }
@@ -107,6 +108,89 @@ export default function Dashboard({ demoMode }: Props) {
   // coming and when. Wired to actual backends in a follow-up.
   const [aiTreeFromTextOpen, setAiTreeFromTextOpen] = useState(false)
   const [aiPhotoEnhanceOpen, setAiPhotoEnhanceOpen] = useState(false)
+  // Long-press / right-click → tree-card context menu. `null` when
+  // closed; otherwise carries the tree summary the user invoked on
+  // so we can show its name in the sheet title.
+  const [treeCardMenuTarget, setTreeCardMenuTarget] = useState<{ name: string } | null>(null)
+
+  // Tutorial overlay state. Auto-launches once on the user's very
+  // first visit (localStorage flag) and otherwise sits behind the
+  // manual "Tutorial" tile in the Apps grid below. Skipping or
+  // finishing the tour writes the flag so the auto-launch never
+  // pops up again.
+  const TUTORIAL_KEY = 'ft-tutorial-seen'
+  const [tutorialOpen, setTutorialOpen] = useState(false)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (window.localStorage.getItem(TUTORIAL_KEY) === '1') return
+    // small delay so the page paints first
+    const id = window.setTimeout(() => setTutorialOpen(true), 800)
+    return () => window.clearTimeout(id)
+  }, [])
+  const closeTutorial = () => {
+    try { window.localStorage.setItem(TUTORIAL_KEY, '1') } catch { /* ignore */ }
+    setTutorialOpen(false)
+  }
+
+  // Tour steps — described in Hebrew first (user's primary locale)
+  // with English fallbacks. Selectors target `data-tour` attributes
+  // added to anchor elements on the Dashboard + on the tree page.
+  const tutorialSteps: TourStep[] = useMemo(() => (
+    lang === 'he'
+      ? [
+          {
+            selector: 'dash-hero',
+            title: '👋 ברוכים הבאים!',
+            body: 'כאן המרכז של המשפחה שלכם. נעבור ביחד על המסכים והכפתורים החשובים — ב-7 שלבים קצרים.',
+            side: 'bottom',
+          },
+          {
+            selector: 'dash-stats',
+            title: 'תמונת מצב מהירה',
+            body: 'מספר החברים, הדורות והענפים — נטען אוטומטית מהעץ שלכם.',
+            side: 'bottom',
+          },
+          {
+            selector: 'dash-trees',
+            title: '🌿 ענפי המשפחה',
+            body: 'כל עץ שאתם חברים בו מופיע כאן ככרטיס. לחיצה תפתח אותו ישר ב"תצוגת עץ".',
+            side: 'top',
+          },
+          {
+            selector: 'dash-birthdays',
+            title: '🎂 ימי הולדת קרובים',
+            body: 'מי חוגג בקרוב? נוצר אוטומטית מתאריכי הלידה של חברי המשפחה.',
+            side: 'top',
+          },
+          {
+            selector: 'dash-apps',
+            title: '🚀 אפליקציות נוספות',
+            body: 'מכאן ניגשים לעץ עצמו, לימי הולדת, ולפיצ\'רי ה-AI (סריקה, בניית עץ מטקסט, שיפור תמונות).',
+            side: 'top',
+          },
+          {
+            selector: 'dash-tutorial-tile',
+            title: '✨ ההדרכה הזו',
+            body: 'תוכלו לחזור על המדריך הזה בכל זמן מהכפתור הזה. אנחנו ממליצים לעבור שוב אחרי שתוסיפו חברי משפחה.',
+            side: 'top',
+          },
+          {
+            selector: 'dash-about',
+            title: '📖 על המשפחה',
+            body: 'הסיפור של המשפחה שלכם. תוכלו לערוך אותו דרך מסך הניהול. וזהו — מוכנים להתחיל לבנות!',
+            side: 'bottom',
+          },
+        ]
+      : [
+          { selector: 'dash-hero', title: '👋 Welcome!', body: 'This is your family hub. We\'ll walk you through the key screens in 7 short steps.', side: 'bottom' },
+          { selector: 'dash-stats', title: 'Quick snapshot', body: 'Member count, generations and branches — auto-derived from your tree.', side: 'bottom' },
+          { selector: 'dash-trees', title: '🌿 Family trees', body: 'Every tree you belong to shows up here as a card. Tap one to open it.', side: 'top' },
+          { selector: 'dash-birthdays', title: '🎂 Upcoming birthdays', body: 'Who\'s celebrating soon — computed from each member\'s birth date.', side: 'top' },
+          { selector: 'dash-apps', title: '🚀 Apps', body: 'Jump into the tree itself, birthdays view, and the AI features.', side: 'top' },
+          { selector: 'dash-tutorial-tile', title: '✨ This tutorial', body: 'You can replay this walkthrough any time from this button.', side: 'top' },
+          { selector: 'dash-about', title: '📖 About the family', body: 'Your family story. Editable from Admin. That\'s it — let\'s start building!', side: 'bottom' },
+        ]
+  ), [lang])
 
   const upcoming = useMemo(() => getUpcomingBirthdays(members), [members])
   const generations = useMemo(() => computeGenerations(members, relationships), [members, relationships])
@@ -227,6 +311,7 @@ export default function Dashboard({ demoMode }: Props) {
 
         {/* Family emblem + tagline */}
         <motion.div
+          data-tour="dash-hero"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
@@ -249,6 +334,7 @@ export default function Dashboard({ demoMode }: Props) {
 
         {/* Stats strip */}
         <motion.div
+          data-tour="dash-stats"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.06 }}
@@ -301,6 +387,7 @@ export default function Dashboard({ demoMode }: Props) {
             visitor reads the family description before scanning the
             tree rail below. */}
         <motion.section
+          data-tour="dash-about"
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
@@ -344,6 +431,7 @@ export default function Dashboard({ demoMode }: Props) {
             without redesigning the page. */}
         {treeSummaries.length > 0 && (
           <motion.section
+            data-tour="dash-trees"
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, delay: 0.12 }}
@@ -377,6 +465,17 @@ export default function Dashboard({ demoMode }: Props) {
                   onClick={() => {
                     setActiveTreeId(tree.id)
                     navigate('/tree')
+                  }}
+                  onContextMenu={(e) => {
+                    // Long-press / right-click menu for the tree
+                    // card — currently surfaces a "coming soon" sheet
+                    // for the icon-edit + external-share flows the
+                    // user asked for. The backend (Supabase Storage +
+                    // share tokens with admin-gated permissions) is a
+                    // follow-up; this placeholder makes the affordance
+                    // discoverable now.
+                    e.preventDefault()
+                    setTreeCardMenuTarget(tree)
                   }}
                   className="flex-shrink-0 flex flex-col items-center gap-1.5 no-select rounded-2xl px-2 py-1.5 hover:bg-white/40 transition"
                   style={{ width: 96 }}
@@ -422,6 +521,7 @@ export default function Dashboard({ demoMode }: Props) {
 
         {/* ─── UPCOMING BIRTHDAYS ─── */}
         <motion.section
+          data-tour="dash-birthdays"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.15 }}
@@ -479,6 +579,7 @@ export default function Dashboard({ demoMode }: Props) {
 
         {/* ─── APP LAUNCHER ─── */}
         <motion.section
+          data-tour="dash-apps"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.2 }}
@@ -525,6 +626,19 @@ export default function Dashboard({ demoMode }: Props) {
               comingSoon
               tooltip={t.aiComingSoonTip}
             />
+            {/* Manual Tutorial launcher. Renders a `data-tour`
+                attribute on the tile itself so the tour can highlight
+                it during step 6 — a tiny meta-moment where the tour
+                points at its own re-entry point. */}
+            <div data-tour="dash-tutorial-tile">
+              <AppTile
+                icon="🎓"
+                label={lang === 'he' ? 'מצב למידה' : 'Tutorial'}
+                gradient="from-[#FFD60A] to-[#FF9F0A]"
+                onClick={() => setTutorialOpen(true)}
+                tooltip={lang === 'he' ? 'מדריך אינטראקטיבי על המערכת' : 'Interactive guide to the app'}
+              />
+            </div>
             {isAdmin(profile) && (
               <AppTile
                 icon="⚙️"
@@ -573,6 +687,51 @@ export default function Dashboard({ demoMode }: Props) {
         description={t.aiPhotoEnhanceDesc}
         bullets={[t.aiPhotoEnhanceBullet1, t.aiPhotoEnhanceBullet2, t.aiPhotoEnhanceBullet3]}
         gradient="from-[#34C759] to-[#30B454]"
+      />
+
+      {/* Interactive tutorial. Launches automatically on first visit
+          (localStorage flag) and on-demand from the Apps grid above. */}
+      <TutorialOverlay
+        open={tutorialOpen}
+        steps={tutorialSteps}
+        onClose={closeTutorial}
+      />
+
+      {/* Tree-card long-press menu. Two "coming soon" actions the
+          user requested:
+            • Change the tree icon (upload an image)
+            • Share an external view-only link, with admin-gated
+              generation depth (default 3, more on approval).
+          The placeholder modal explains both so the affordance is
+          discoverable while the backend lands. */}
+      <ComingSoonModal
+        open={treeCardMenuTarget !== null}
+        onClose={() => setTreeCardMenuTarget(null)}
+        icon="🌳"
+        title={
+          lang === 'he'
+            ? `אפשרויות לעץ "${treeCardMenuTarget?.name ?? ''}"`
+            : `Options for "${treeCardMenuTarget?.name ?? ''}"`
+        }
+        description={
+          lang === 'he'
+            ? 'אנחנו עובדים על שתי פעולות חדשות לכרטיס העץ. בלחיצה ארוכה / לחיצה ימנית יוצג תפריט עם:'
+            : "We're building two new actions for the tree card. Long-press / right-click will open a menu with:"
+        }
+        bullets={
+          lang === 'he'
+            ? [
+                'העלאת תמונה לאייקון של העץ',
+                'יצירת קישור שיתוף חיצוני (תצוגה בלבד)',
+                'הגבלת עומק ל-3 דורות, יותר באישור מנהל',
+              ]
+            : [
+                'Upload a custom photo as the tree icon',
+                'Generate an external view-only share link',
+                'Default depth: 3 generations, more with admin approval',
+              ]
+        }
+        gradient="from-[#34C759] to-[#007AFF]"
       />
     </div>
   )

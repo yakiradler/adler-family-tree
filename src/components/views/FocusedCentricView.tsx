@@ -250,6 +250,62 @@ export default function FocusedCentricView({
     setScale(newScale)
   }
 
+  // ── Touch pan + pinch zoom ──────────────────────────────────────
+  // Mirror of the touch handling that lives on the main TreeView.
+  // The focused view used to ignore touch events entirely, which is
+  // why mobile users got "stuck" — every gesture they tried to use
+  // for panning landed on a name card with no fallback.
+  const touchState = useRef<
+    | { mode: 'pan'; sx: number; sy: number; tx0: number; ty0: number }
+    | { mode: 'pinch'; initDist: number; initScale: number; cx: number; cy: number; tx0: number; ty0: number }
+    | null
+  >(null)
+  const onTouchStart = (e: React.TouchEvent) => {
+    if ((e.target as HTMLElement).closest('button,input,select')) return
+    const rect = wrapRef.current?.getBoundingClientRect()
+    if (!rect) return
+    if (e.touches.length === 1) {
+      const t0 = e.touches[0]
+      touchState.current = { mode: 'pan', sx: t0.clientX, sy: t0.clientY, tx0: tx, ty0: ty }
+    } else if (e.touches.length >= 2) {
+      const [a, b] = [e.touches[0], e.touches[1]]
+      const dx = b.clientX - a.clientX
+      const dy = b.clientY - a.clientY
+      const dist = Math.hypot(dx, dy) || 1
+      const cx = (a.clientX + b.clientX) / 2 - rect.left
+      const cy = (a.clientY + b.clientY) / 2 - rect.top
+      touchState.current = {
+        mode: 'pinch', initDist: dist, initScale: scale, cx, cy, tx0: tx, ty0: ty,
+      }
+    }
+  }
+  const onTouchMove = (e: React.TouchEvent) => {
+    const st = touchState.current
+    if (!st) return
+    if (st.mode === 'pan' && e.touches.length === 1) {
+      const t0 = e.touches[0]
+      setTx(st.tx0 + (t0.clientX - st.sx))
+      setTy(st.ty0 + (t0.clientY - st.sy))
+    } else if (st.mode === 'pinch' && e.touches.length >= 2) {
+      const [a, b] = [e.touches[0], e.touches[1]]
+      const dist = Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY) || 1
+      const factor = dist / st.initDist
+      const newScale = Math.max(0.2, Math.min(4, st.initScale * factor))
+      const wx = (st.cx - st.tx0) / st.initScale
+      const wy = (st.cy - st.ty0) / st.initScale
+      setTx(st.cx - wx * newScale)
+      setTy(st.cy - wy * newScale)
+      setScale(newScale)
+    }
+  }
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (e.touches.length === 0) touchState.current = null
+    else if (e.touches.length === 1) {
+      const t0 = e.touches[0]
+      touchState.current = { mode: 'pan', sx: t0.clientX, sy: t0.clientY, tx0: tx, ty0: ty }
+    }
+  }
+
   const usedGens = new Set(focusedMembers.map(fm => fm.generation))
 
   return (
@@ -334,6 +390,10 @@ export default function FocusedCentricView({
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
         onWheel={onWheel}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchEnd}
       >
         {/* ── Canvas ─────────────────────────────────────────────────────────── */}
         <div

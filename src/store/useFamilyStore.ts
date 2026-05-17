@@ -117,6 +117,12 @@ interface FamilyState {
   // popover automatically close the other when it opens.
   openTreePopover: 'filter' | 'focusPicker' | null
   setOpenTreePopover: (v: 'filter' | 'focusPicker' | null) => void
+
+  // Focused-Centric overlay state. Lifted from TreeView so TreePage
+  // can hide its own chrome while focus mode is on, otherwise the
+  // stale hamburger sits above the focused view and confuses people.
+  isFocusedMode: boolean
+  setIsFocusedMode: (v: boolean) => void
   /** All notes across all members. Per-member filtering is done in the
    *  consumer (MemberNotesTab) so we keep one canonical list and don't
    *  duplicate state. Persisted via the same localStorage layer as
@@ -503,4 +509,12 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
 
   openTreePopover: null,
   setOpenTreePopover: (openTreePopover) => set({ openTreePopover }),
+
+  // Focused-Centric overlay flag. Lifted from TreeView so TreePage
+  // can hide its own chrome (top bar, hamburger) while the focused
+  // view is on top — used to leave a stale X-button (the hamburger
+  // close glyph) floating and the user couldn't tell which control
+  // exits focus mode.
+  isFocusedMode: false,
+  setIsFocusedMode: (isFocusedMode) => set({ isFocusedMode }),
 }))

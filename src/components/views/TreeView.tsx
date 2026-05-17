@@ -130,6 +130,7 @@ export default function TreeView({
     treeControlsExpanded,
     treeFullscreen, setTreeFullscreen,
     openTreePopover, setOpenTreePopover,
+    isFocusedMode, setIsFocusedMode,
   } = useFamilyStore()
   // Narrow the population to the currently active tree. `null` means
   // the default/main tree which is everyone without a tree_id; an
@@ -150,9 +151,11 @@ export default function TreeView({
   // "פריסה" picker (rendered by Navigation) can read + change the
   // same value — see useFamilyStore for the persistence hook.
 
-  // Focused-Centric mode — replaces the full-tree canvas with a 3-generation
-  // subgraph centred on a chosen person.
-  const [isFocusedMode, setIsFocusedMode] = useState(false)
+  // Focused-Centric mode — replaces the full-tree canvas with a
+  // 3-generation subgraph centred on a chosen person. `isFocusedMode`
+  // lives in the store now so TreePage can hide its own chrome while
+  // focused mode is overlaid (otherwise the hamburger keeps floating
+  // over the focused view and people mistake it for the "exit" button).
   const [activeFocusId, setActiveFocusId] = useState<string | null>(null)
   // showFocusPicker derived from the centralised popover state so
   // opening this picker auto-closes the advanced-filter popover and

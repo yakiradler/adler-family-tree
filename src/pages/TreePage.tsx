@@ -25,7 +25,13 @@ export default function TreePage({ demoMode }: Props) {
     treeControlsExpanded, setTreeControlsExpanded,
     treeFullscreen,
     trees,
+    isFocusedMode,
   } = useFamilyStore()
+  // Hide top chrome when EITHER fullscreen OR focused mode is on.
+  // The focused-mode overlay carries its own header so a second top
+  // bar floating above it was confusing the user into clicking the
+  // hamburger as the "exit" button.
+  const hideChrome = treeFullscreen || isFocusedMode
 
   // Horizontal-swipe toggle between schematic and timeline. The tree
   // view is intentionally OFF the swipe map — it carries its own
@@ -85,8 +91,9 @@ export default function TreePage({ demoMode }: Props) {
     <div dir={dir} className="min-h-screen bg-[#F2F2F7]">
       {/* Demo banner hidden for clean UX */}
 
-      {/* Floating top bar — hidden in fullscreen mode. */}
-      {!treeFullscreen && (
+      {/* Floating top bar — hidden in fullscreen mode AND while
+          the focused-centric overlay is on. */}
+      {!hideChrome && (
       <div className="absolute top-0 left-0 right-0 z-30 px-3 pt-3 no-print" style={{ top: demoMode ? 20 : 0 }}>
         <div className="glass rounded-2xl px-3 py-2 flex items-center gap-3 shadow-glass-sm max-w-[600px] mx-auto">
           <Tooltip content={t.tipBackHome} placement="bottom" align="start">
@@ -155,7 +162,7 @@ export default function TreePage({ demoMode }: Props) {
                 by default now and this single button reveals them.
                 The button itself moves with the visibility state so
                 its label is unambiguous. */}
-            {!treeFullscreen && (
+            {!hideChrome && (
             <div className={`absolute z-30 no-print top-[72px] ${isRTL(lang) ? 'left-3' : 'right-3'}`}>
             <Tooltip content={t.tipTreeControlsToggle} placement="bottom" align="end">
             <motion.button
@@ -193,7 +200,7 @@ export default function TreePage({ demoMode }: Props) {
 
             {/* AdvancedFilter — hidden by default; revealed via the
                 same hamburger as the other tree-page chips. */}
-            {treeControlsExpanded && !treeFullscreen && (
+            {treeControlsExpanded && !hideChrome && (
               <AdvancedFilter
                 filters={filters}
                 onChange={setFilters}
