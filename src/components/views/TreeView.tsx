@@ -258,6 +258,22 @@ export default function TreeView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes.length, canvasW, canvasH, layoutMode])
 
+  // Track the wrapper's pixel size in state so the minimap can read
+  // it without poking at the ref during render (a react-hooks/refs
+  // violation). The ResizeObserver fires on layout changes and
+  // viewport resizes so the minimap's viewport rectangle stays
+  // accurate as the user resizes the window.
+  const [viewportSize, setViewportSize] = useState({ w: 1024, h: 720 })
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const measure = () => setViewportSize({ w: el.clientWidth, h: el.clientHeight })
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   const onWheel = (e: React.WheelEvent) => {
     e.preventDefault()
     const delta = -e.deltaY * 0.0015
@@ -529,8 +545,8 @@ export default function TreeView({
           tx={tx}
           ty={ty}
           scale={scale}
-          viewportW={wrapRef.current?.clientWidth ?? 1024}
-          viewportH={wrapRef.current?.clientHeight ?? 720}
+          viewportW={viewportSize.w}
+          viewportH={viewportSize.h}
           scalePercent={scale * 100}
           onNavigate={(newTx, newTy) => {
             setTx(newTx)
