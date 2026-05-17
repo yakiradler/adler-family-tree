@@ -685,15 +685,14 @@ export default function TreeView({
         </div>
       )}
 
-      {/* Compact / Wide density toggle.
-          Hidden by default — surfaced only when the user opens the
-          floating-controls hamburger at the top of the page (the
-          three top chips used to crowd the mobile viewport so we
-          collapsed them behind one button). */}
+      {/* Compact / Wide density toggle — moved to the THIRD slot
+          (top: 228) per a direct user request. New stack order from
+          the hamburger downward is now: Filter (124) → Focused (176)
+          → Density (228). */}
       {members.length > 0 && treeControlsExpanded && (
         <div
           className="absolute z-20 no-print"
-          style={{ top: 124, [rtl ? 'left' : 'right']: 12 } as React.CSSProperties}
+          style={{ top: 228, [rtl ? 'left' : 'right']: 12 } as React.CSSProperties}
         >
           <Tooltip
             content={
@@ -768,7 +767,11 @@ export default function TreeView({
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 16, opacity: 0 }}
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute z-20 no-print left-1/2 -translate-x-1/2 bottom-[190px]"
+            // Tucked just above the bottom nav island so it sits
+            // close to the visible bottom of the tree on most
+            // screens. left-1/2 + translate keeps it centred on
+            // both mobile and desktop.
+            className="absolute z-20 no-print left-1/2 -translate-x-1/2 bottom-[124px]"
           >
             <Tooltip content={t.tipExpandDown} placement="top">
               <button
@@ -787,8 +790,7 @@ export default function TreeView({
         )}
       </AnimatePresence>
 
-      {/* Focused-Centric mode button — also revealed by the top
-          hamburger. */}
+      {/* Focused-Centric mode button — second slot in the stack. */}
       {members.length > 0 && treeControlsExpanded && (
         <div
           className="absolute z-20 no-print"

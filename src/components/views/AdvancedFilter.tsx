@@ -127,12 +127,14 @@ export default function AdvancedFilter({
       // Density) so the three controls stack vertically instead of
       // splitting across both edges of the screen — the user
       // explicitly asked for them to live together.
-      // top-[228px] = below hamburger (72) + Density (124) + Focused
-      // (176) so the new chip lands as the bottom item in the column.
+      // top-[124px] = the FIRST slot beneath the hamburger.
+      // Order in the hamburger column is now Filter (124) →
+      // Focused (176) → Density (228), per the user's explicit
+      // request that Filter come first.
       // `relative` so the absolute popover below positions against
       // the chip and the chip itself doesn't get re-sized when the
       // popover opens.
-      className="absolute top-[228px] z-20 no-print"
+      className="absolute top-[124px] z-20 no-print"
       style={{ [rtl ? 'left' : 'right']: 12, position: 'absolute' } as React.CSSProperties}
     >
     <div className="relative">

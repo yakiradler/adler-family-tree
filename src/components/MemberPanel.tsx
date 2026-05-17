@@ -197,12 +197,14 @@ export default function MemberPanel({ onClose }: Props) {
 
   return (
     <div
-      // height: 100% lets the panel match its WRAPPER's height (see
-      // TreePage), which is what controls the actual cap on phone vs
-      // desktop. The previous calc(100vh - 120px) ignored the bottom
-      // navigation and clipped the last action button on mobile.
+      // The panel fills its wrapper exactly. `min-height: 0` on the
+      // flex column is crucial — without it the browser refuses to
+      // shrink the body below its content size, and the
+      // `overflow-y-auto` inside never activates (which is why a
+      // tall profile was previously "stuck" with no way to scroll
+      // down to the action buttons).
       className="glass-strong rounded-[24px] shadow-glass-lg flex flex-col bg-white relative"
-      style={{ maxHeight: '100%', height: '100%' }}
+      style={{ height: '100%', minHeight: 0, maxHeight: '100%' }}
       onClick={(e) => e.stopPropagation()}
     >
       {/* ─── HEADER cover ─── */}
@@ -256,8 +258,16 @@ export default function MemberPanel({ onClose }: Props) {
         </div>
       </div>
 
-      {/* ─── SCROLL BODY ─── */}
-      <div className="flex-1 overflow-y-auto rounded-b-[24px]">
+      {/* ─── SCROLL BODY ───
+          flex-1 takes the remaining height after header + avatar.
+          min-h-0 lets the body shrink below its own intrinsic size,
+          which is what actually allows overflow-y-auto to kick in
+          on tall profiles. -webkit-overflow-scrolling: touch keeps
+          momentum scrolling alive on iOS Safari. */}
+      <div
+        className="flex-1 overflow-y-auto rounded-b-[24px]"
+        style={{ minHeight: 0, WebkitOverflowScrolling: 'touch' }}
+      >
         <div className="px-4 pt-2 flex flex-col items-center text-center">
           <div className="w-full">
             <h2 className="text-sf-headline font-bold text-[#1C1C1E] leading-tight">

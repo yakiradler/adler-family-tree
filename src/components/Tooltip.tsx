@@ -59,6 +59,14 @@ export default function Tooltip({
   const wrapRef = useRef<HTMLSpanElement>(null)
   const bubbleRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<number | null>(null)
+  // When the user taps the wrapped element, the browser fires
+  // pointerdown → click → focus on the underlying button. The
+  // focus alone would otherwise schedule the tooltip to open ~350 ms
+  // after the tap, which the user (correctly) called annoying:
+  // "the bubble pops on every click". This ref short-circuits the
+  // *next* focus event that arrives via a touch tap so only mouse
+  // hover + keyboard focus actually trigger the tooltip.
+  const ignoreNextFocus = useRef(false)
 
   const cancelTimer = () => {
     if (timerRef.current !== null) {
@@ -73,6 +81,19 @@ export default function Tooltip({
   const close = () => {
     cancelTimer()
     setOpen(false)
+  }
+  const handleFocus = () => {
+    if (ignoreNextFocus.current) {
+      ignoreNextFocus.current = false
+      return
+    }
+    scheduleOpen()
+  }
+  const handlePointerDown = () => {
+    // Touch/click cancels any pending hover-open AND prevents the
+    // synthetic focus that follows from reopening the tooltip.
+    ignoreNextFocus.current = true
+    close()
   }
 
   useEffect(() => () => cancelTimer(), [])
@@ -162,12 +183,12 @@ export default function Tooltip({
       className="relative inline-flex"
       onMouseEnter={scheduleOpen}
       onMouseLeave={close}
-      onFocus={scheduleOpen}
+      onFocus={handleFocus}
       onBlur={close}
       // Tap on the wrapped child closes any pending / open tooltip
-      // so the user gets immediate feedback that their click was
-      // received, not a stale label hovering next to the action.
-      onPointerDown={close}
+      // AND arms the ignore-next-focus latch so the synthetic focus
+      // that fires immediately after a tap won't re-open the bubble.
+      onPointerDown={handlePointerDown}
     >
       {children}
       {portalEl && createPortal(
