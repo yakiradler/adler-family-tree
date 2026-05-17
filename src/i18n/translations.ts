@@ -300,6 +300,8 @@ export const translations = {
     treeShowMoreDescendants: 'הצג דור צאצאים נוסף',
     treeHideAncestors: 'הסתר דור עליון',
     treeHideDescendants: 'הסתר דור תחתון',
+    treeDensityCompactTip: 'מציג רק 3 דורות בלבד — הורים, האדם המרכזי, וילדים. אפשר להרחיב למעלה/למטה דור בכל פעם.',
+    treeDensityWideTip: 'מציג את כל הדורות בעץ. לחץ למעבר לתצוגה ממוקדת.',
 
     // Tree export menu
     exportBtn: 'ייצוא',
@@ -857,6 +859,8 @@ export const translations = {
     treeShowMoreDescendants: 'Show another generation down',
     treeHideAncestors: 'Hide top generation',
     treeHideDescendants: 'Hide bottom generation',
+    treeDensityCompactTip: 'Shows only 3 generations — parents, the focal person, and children. You can expand one generation up or down at a time.',
+    treeDensityWideTip: 'Shows all generations in the tree. Tap to switch to focused view.',
 
     // Tree export menu
     exportBtn: 'Export',

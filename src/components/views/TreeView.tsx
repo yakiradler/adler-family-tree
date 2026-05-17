@@ -14,6 +14,7 @@ import type { FilterState } from './AdvancedFilter'
 import { applyTreeFilters } from './applyTreeFilters'
 import FocusedCentricView from './FocusedCentricView'
 import TreeMiniMap from './TreeMiniMap'
+import Tooltip from '../Tooltip'
 import { exportTreeAsPNG, printTree } from '../../lib/treeExport'
 
 export type { LayoutMode } from './treeLayout'
@@ -663,25 +664,33 @@ export default function TreeView({
           className="absolute z-20 no-print"
           style={{ top: 72, [rtl ? 'left' : 'right']: 168 } as React.CSSProperties}
         >
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setDensity((d) => (d === 'compact' ? 'wide' : 'compact'))}
-            aria-label={density === 'compact' ? t.treeDensityCompact : t.treeDensityWide}
-            title={density === 'compact' ? t.treeDensityCompact : t.treeDensityWide}
-            className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 shadow-glass font-semibold text-[12.5px] border transition ${
-              density === 'compact'
-                ? 'bg-gradient-to-r from-[#34C759] to-[#30B454] text-white border-transparent'
-                : 'bg-white/95 text-[#1C1C1E] border-white/70 hover:bg-white'
-            }`}
+          <Tooltip
+            content={
+              <span style={{ display: 'inline-block', maxWidth: 240, whiteSpace: 'normal' }}>
+                {density === 'compact' ? t.treeDensityCompactTip : t.treeDensityWideTip}
+              </span>
+            }
+            placement="bottom"
           >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <rect x="1.5" y="2" width="11" height="2.5" rx="0.6" fill="currentColor" opacity="0.85" />
-              <rect x="1.5" y="5.75" width="11" height="2.5" rx="0.6" fill="currentColor" />
-              <rect x="1.5" y="9.5" width="11" height="2.5" rx="0.6" fill="currentColor" opacity="0.85" />
-            </svg>
-            <span>{density === 'compact' ? t.treeDensityCompact : t.treeDensityWide}</span>
-          </motion.button>
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setDensity((d) => (d === 'compact' ? 'wide' : 'compact'))}
+              aria-label={density === 'compact' ? t.treeDensityCompact : t.treeDensityWide}
+              className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 shadow-glass font-semibold text-[12.5px] border transition ${
+                density === 'compact'
+                  ? 'bg-gradient-to-r from-[#34C759] to-[#30B454] text-white border-transparent'
+                  : 'bg-white/95 text-[#1C1C1E] border-white/70 hover:bg-white'
+              }`}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <rect x="1.5" y="2" width="11" height="2.5" rx="0.6" fill="currentColor" opacity="0.85" />
+                <rect x="1.5" y="5.75" width="11" height="2.5" rx="0.6" fill="currentColor" />
+                <rect x="1.5" y="9.5" width="11" height="2.5" rx="0.6" fill="currentColor" opacity="0.85" />
+              </svg>
+              <span>{density === 'compact' ? t.treeDensityCompact : t.treeDensityWide}</span>
+            </motion.button>
+          </Tooltip>
         </div>
       )}
 
@@ -712,7 +721,9 @@ export default function TreeView({
 
       {/* Bottom: "show another descendant generation" — appears when
           the compact window doesn't yet reach the youngest generation.
-          Sits above the zoom controls + layout picker stack. */}
+          Sits ABOVE the layout picker (which itself now sits above
+          the bottom navigation island) so all three controls
+          stack cleanly without overlap. */}
       <AnimatePresence>
         {canExpandDown && (
           <motion.button
@@ -725,7 +736,7 @@ export default function TreeView({
             type="button"
             aria-label={t.treeShowMoreDescendants}
             title={t.treeShowMoreDescendants}
-            className="absolute z-20 no-print left-1/2 -translate-x-1/2 bottom-[88px] flex items-center gap-1.5 rounded-full px-3.5 py-1.5 bg-white/95 text-[#007AFF] text-[11px] font-bold shadow-glass border border-white/70 hover:bg-white active:scale-95 transition"
+            className="absolute z-20 no-print left-1/2 -translate-x-1/2 bottom-[190px] flex items-center gap-1.5 rounded-full px-3.5 py-1.5 bg-white/95 text-[#007AFF] text-[11px] font-bold shadow-glass border border-white/70 hover:bg-white active:scale-95 transition"
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path d="M2.5 5l3.5 3.5L9.5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -916,7 +927,12 @@ function LayoutPicker({
   return (
     <div
       data-layout-picker
-      className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none"
+      // Anchored ABOVE the bottom navigation island so the two
+      // controls don't overlap on small viewports. Navigation lives
+      // at bottom-6 (24 px) and its island is ~56 px tall plus a hide
+      // pill above it (~28 px + 8 px gap) → ~120 px is the first
+      // safe slot. We add a touch more breathing room for legibility.
+      className="absolute bottom-[136px] left-1/2 -translate-x-1/2 z-20 pointer-events-none"
     >
       <div className="relative pointer-events-auto flex flex-col items-center gap-2">
         {/* Expanded option list — appears ABOVE the main button */}
