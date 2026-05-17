@@ -83,6 +83,51 @@
   }
 }
 
+/*
+ * Print stylesheet.
+ *
+ * The Export menu's "Print / Save as PDF" option just calls
+ * window.print(); everything below this comment governs what the
+ * browser actually puts on paper.
+ *
+ * Goal: a clean, ink-friendly snapshot of the tree without any of
+ * the live-app chrome. We hide every UI overlay (.no-print) and
+ * leave the tree canvas as the only visible element. The browser's
+ * "Fit to page" option in the print dialog handles cross-page
+ * scaling — better than trying to compute a print scale in JS where
+ * page size + margins are user-configurable.
+ */
+@media print {
+  /* Use the full sheet — defaults add ~10mm margins which crowd
+     the tree. Landscape is the natural orientation for wide trees. */
+  @page {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+
+  /* Strip the global page tint so the canvas's own mesh background
+     paints cleanly. */
+  html, body {
+    background: white !important;
+  }
+
+  /* Any element opted out of print via .no-print disappears. We
+     apply this class to: top bars, member panel, navigation,
+     minimap, zoom buttons, layout picker, advanced filter,
+     install/version banners. */
+  .no-print {
+    display: none !important;
+  }
+
+  /* The tree canvas wrapper grows out of its fixed dimensions so
+     the browser can place the full tree at full size and offer the
+     user "Fit to page" if they need it. */
+  .tree-canvas-print-host {
+    height: auto !important;
+    overflow: visible !important;
+  }
+}
+
 @layer utilities {
   .text-sf-title1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.2; }
   .text-sf-title2 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; line-height: 1.2; }

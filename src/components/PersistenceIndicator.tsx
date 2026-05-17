@@ -92,7 +92,7 @@ export default function PersistenceIndicator() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-          className="pointer-events-none fixed top-3 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px] font-bold shadow-lg"
+          className="pointer-events-none fixed top-3 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px] font-bold shadow-lg no-print"
           style={
             state.kind === 'saved'
               ? { background: '#34C759', color: '#FFFFFF' }

@@ -44,7 +44,7 @@ export default function TreePage({ demoMode }: Props) {
       {/* Demo banner hidden for clean UX */}
 
       {/* Floating top bar */}
-      <div className="absolute top-0 left-0 right-0 z-30 px-3 pt-3" style={{ top: demoMode ? 20 : 0 }}>
+      <div className="absolute top-0 left-0 right-0 z-30 px-3 pt-3 no-print" style={{ top: demoMode ? 20 : 0 }}>
         <div className="glass rounded-2xl px-3 py-2 flex items-center gap-3 shadow-glass-sm max-w-[600px] mx-auto">
           <motion.button whileTap={{ scale: 0.9 }} onClick={() => navigate('/home')}
             className="w-8 h-8 rounded-xl bg-white/70 flex items-center justify-center border border-white/60">
@@ -118,7 +118,7 @@ export default function TreePage({ demoMode }: Props) {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setSelectedMemberId(null)}
-              className="fixed inset-0 bg-black/15 backdrop-blur-[2px] z-40 md:bg-transparent md:backdrop-blur-0"
+              className="fixed inset-0 bg-black/15 backdrop-blur-[2px] z-40 md:bg-transparent md:backdrop-blur-0 no-print"
             />
           )}
           {selectedMemberId && (
@@ -141,7 +141,7 @@ export default function TreePage({ demoMode }: Props) {
               // heavily-zoomed user would see the panel inflate to half
               // the viewport. transform-origin pins the anchored corner
               // so the panel scales toward its edge, not its centre.
-              className={`fixed z-50 w-[calc(100vw-32px)] max-w-[260px] bottom-4 md:bottom-auto md:top-20 ${
+              className={`fixed z-50 w-[calc(100vw-32px)] max-w-[260px] bottom-4 md:bottom-auto md:top-20 no-print ${
                 isRTL(lang) ? 'left-4' : 'right-4'
               }`}
               style={{
@@ -158,7 +158,9 @@ export default function TreePage({ demoMode }: Props) {
 
       <AddMemberModal open={addOpen} onClose={() => setAddOpen(false)} />
       <TreeSearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
-      <Navigation />
+      <div className="no-print">
+        <Navigation />
+      </div>
     </div>
   )
 }

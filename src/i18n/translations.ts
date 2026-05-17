@@ -287,6 +287,12 @@ export const translations = {
     notesImageAdd: 'הוסף תמונה',
     notesImageRemove: 'הסר תמונה',
 
+    // Tree export menu
+    exportBtn: 'ייצוא',
+    exportPrint: 'הדפס / שמור כ-PDF',
+    exportPNG: 'שמור כתמונה (PNG)',
+    exportBusy: 'מייצא…',
+
     // Admin Control Panel
     adminTitle: 'לוח בקרת מנהל',
     adminSubtitle: 'ניהול המערכת, המשתמשים והמשפחה',
@@ -823,6 +829,12 @@ export const translations = {
     notesLoginToWrite: 'Sign in to write a memory',
     notesImageAdd: 'Add a photo',
     notesImageRemove: 'Remove photo',
+
+    // Tree export menu
+    exportBtn: 'Export',
+    exportPrint: 'Print / Save as PDF',
+    exportPNG: 'Save as image (PNG)',
+    exportBusy: 'Exporting…',
 
     // Admin Control Panel
     adminTitle: 'Admin Control Panel',

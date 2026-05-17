@@ -121,7 +121,7 @@ export default function VersionUpdateModal() {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.25 }}
-          className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm no-print"
           onClick={dismiss}
         >
           {/* Confetti layer — sits behind the card so the falling

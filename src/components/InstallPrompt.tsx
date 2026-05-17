@@ -116,7 +116,7 @@ export default function InstallPrompt() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 32 }}
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="fixed bottom-4 inset-x-4 z-[60] mx-auto max-w-[420px]"
+          className="fixed bottom-4 inset-x-4 z-[60] mx-auto max-w-[420px] no-print"
         >
           <div className="glass-strong shadow-glass-lg rounded-2xl p-3 flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#007AFF] to-[#32ADE6] flex items-center justify-center flex-shrink-0">
@@ -167,7 +167,7 @@ export default function InstallPrompt() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 32 }}
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="fixed bottom-4 inset-x-4 z-[60] mx-auto max-w-[420px]"
+          className="fixed bottom-4 inset-x-4 z-[60] mx-auto max-w-[420px] no-print"
         >
           <div className="glass-strong shadow-glass-lg rounded-2xl p-3 flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#007AFF] to-[#32ADE6] flex items-center justify-center flex-shrink-0">
