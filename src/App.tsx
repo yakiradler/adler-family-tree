@@ -12,6 +12,7 @@ import Landing from './pages/Landing'
 import ThemeShell from './components/ThemeShell'
 import PersistenceIndicator from './components/PersistenceIndicator'
 import { ADLER_MEMBERS, ADLER_RELATIONSHIPS } from './data/adlerFamily'
+import { isPendingOnboarding } from './lib/pendingOnboarding'
 import type { Profile } from './types'
 import type { Session } from '@supabase/supabase-js'
 
@@ -265,10 +266,27 @@ export default function App() {
   // ALL hooks must run BEFORE any conditional early return — otherwise
   // React's hook order changes between renders (authLoading flips) and
   // the app crashes with "Rendered more hooks than during the previous
-  // render", which presents to the user as a blank white screen. This
-  // selector subscription sits up here for that reason; downstream
-  // route guards consume it via the local `profile` const.
-  const profile = useFamilyStore((s) => s.profile)
+  // render", which presents to the user as a blank white screen.
+  //
+  // Subscribe to the pending-onboarding localStorage flag. It's set by
+  // Auth.tsx the moment a SIGNUP succeeds and cleared by the wizard's
+  // submit handler. Existing-user logins never set the flag, so the
+  // wizard never blocks them — fixes the previous regression where
+  // returning users were forced through the questionnaire because their
+  // (pre-feature) profile.onboarded_at column was null.
+  const [pendingOnboarding, setPendingOnboarding] = useState<boolean>(isPendingOnboarding)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    // Refresh the flag whenever anything in the app toggles it — most
+    // importantly, after wizard submission removes the key.
+    const sync = () => setPendingOnboarding(isPendingOnboarding())
+    window.addEventListener('ft-pending-onboarding-changed', sync)
+    window.addEventListener('storage', sync) // cross-tab safety net
+    return () => {
+      window.removeEventListener('ft-pending-onboarding-changed', sync)
+      window.removeEventListener('storage', sync)
+    }
+  }, [])
 
   if (authLoading) {
     return (
@@ -283,13 +301,13 @@ export default function App() {
   }
 
   const isAuth = (demoMode && demoEntered) || !!session
-  // Force unboarded signed-in users through the wizard before they
-  // can reach any in-app route. The check intentionally uses the live
-  // store profile so completing the wizard immediately re-opens the
-  // gates without needing a page refresh. The demo admin profile
-  // ships with a non-null onboarded_at, so the gate only catches
-  // fresh signups (see Auth.tsx demo-signup branch).
-  const needsOnboarding = isAuth && !!profile && !profile.onboarded_at
+  // Wizard gate only fires when the user JUST signed up — never on
+  // plain logins, even if the existing profile happens to have
+  // onboarded_at === null (legacy rows pre-date the wizard). The flag
+  // is set inside Auth.tsx immediately after a successful signup and
+  // cleared by the wizard's submit handler. See the useState +
+  // event-listener pair above for how this flips reactively.
+  const needsOnboarding = isAuth && pendingOnboarding
 
   return (
     <div dir={dir} className="min-h-screen">

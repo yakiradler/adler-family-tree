@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang } from '../../i18n/useT'
 import { supabase } from '../../lib/supabase'
+import { clearPendingOnboarding } from '../../lib/pendingOnboarding'
 import type { UserRole, Lineage } from '../../types'
 
 /**
@@ -225,6 +226,13 @@ export default function OnboardingWizard() {
           },
         })
       }
+      // The user is done with the gate — clear the localStorage flag
+      // so App.tsx's route guard stops sending them to /onboarding the
+      // next time they navigate anywhere. We do this last, only after
+      // both the profile patch and the tree/access-request side-effects
+      // committed, so a failure mid-flight leaves them where they were
+      // and the gate keeps catching them on retry.
+      clearPendingOnboarding()
       setStep(5)
     } finally {
       setBusy(false)

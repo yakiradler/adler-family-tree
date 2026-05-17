@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useFamilyStore } from '../store/useFamilyStore'
+import { markPendingOnboarding } from '../lib/pendingOnboarding'
 import { useLang } from '../i18n/useT'
 
 type AuthMode = 'login' | 'signup'
@@ -66,6 +67,12 @@ export default function Auth({ demoMode = false, onDemoEnter }: Props) {
             role: 'user',
             onboarded_at: null,
           })
+          // Flip the "this session just signed up" flag so App.tsx's
+          // route guard forces /onboarding. Plain logins never set
+          // this, so returning users aren't dragged through the wizard
+          // every time they sign in (the regression a real user
+          // reported after the initial deploy).
+          markPendingOnboarding()
           // flushSync forces the demo-entered flag to land in App's
           // state BEFORE we trigger navigation. Otherwise React 18
           // batches the setState with the navigate, /onboarding renders
@@ -91,11 +98,17 @@ export default function Auth({ demoMode = false, onDemoEnter }: Props) {
         // an email and re-login first. When confirmation IS required,
         // there's no session yet, so we keep showing the existing
         // "check your email" prompt and the wizard runs after the user
-        // confirms + logs in.
+        // confirms + logs in (the flag below survives that redirect).
         if (data.session) {
+          markPendingOnboarding()
           navigate('/onboarding')
           return
         }
+        // Email-confirmation path: mark the intent anyway so the post-
+        // confirmation login also lands inside the wizard. Login-only
+        // sessions (no signup attempt) never touch this code, so the
+        // existing-user regression doesn't recur.
+        markPendingOnboarding()
         setSuccess(t.authCheckEmail)
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
