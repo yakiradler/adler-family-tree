@@ -8,6 +8,7 @@ import JumpToFamilyTreeButton from './JumpToFamilyTreeButton'
 import RelationshipManager from './RelationshipManager'
 import LineageBadge from './LineageBadge'
 import MemberNotesSection from './MemberNotesSection'
+import ComingSoonModal from './ComingSoonModal'
 import { canEditMember, canManageRelationships } from '../lib/permissions'
 import { buildParentMap, resolveLineage } from '../lib/lineage'
 import type { Member, SpouseStatus } from '../types'
@@ -41,6 +42,10 @@ export default function MemberPanel({ onClose }: Props) {
   const [copyToTreeOpen, setCopyToTreeOpen] = useState(false)
   const [copying, setCopying] = useState(false)
   const [copyDone, setCopyDone] = useState(false)
+  // "Coming soon" feature placeholders — wired to a friendly modal
+  // that explains what each will do once the backend lands.
+  const [aiTreeFromTextOpen, setAiTreeFromTextOpen] = useState(false)
+  const [aiPhotoEnhanceOpen, setAiPhotoEnhanceOpen] = useState(false)
 
   const member = useMemo(
     () => members.find(m => m.id === selectedMemberId) ?? null,
@@ -528,6 +533,36 @@ export default function MemberPanel({ onClose }: Props) {
               <span>{t.relManageBtn}</span>
             </button>
             )}
+            {/* ── AI: build relatives from text (coming soon) ── */}
+            <button
+              type="button"
+              onClick={() => setAiTreeFromTextOpen(true)}
+              aria-label={t.aiTreeFromTextLabel}
+              title={t.aiComingSoonTip}
+              className="w-full py-2.5 rounded-2xl border border-[#FF9F0A]/40 text-[#B8730A] text-sf-subhead font-semibold active:scale-[0.98] transition flex items-center justify-center gap-2 hover:bg-[#FF9F0A]/5 relative"
+            >
+              <span className="absolute top-1 end-2 text-[8.5px] font-bold text-[#FF9F0A] bg-[#FF9F0A]/12 rounded-full px-1.5 py-0.5">
+                🚀
+              </span>
+              <span>📝</span>
+              <span>{t.aiTreeFromTextLabel}</span>
+            </button>
+
+            {/* ── AI: enhance photo (coming soon) ── */}
+            <button
+              type="button"
+              onClick={() => setAiPhotoEnhanceOpen(true)}
+              aria-label={t.aiPhotoEnhanceLabel}
+              title={t.aiComingSoonTip}
+              className="w-full py-2.5 rounded-2xl border border-[#34C759]/40 text-[#1F7A3A] text-sf-subhead font-semibold active:scale-[0.98] transition flex items-center justify-center gap-2 hover:bg-[#34C759]/5 relative"
+            >
+              <span className="absolute top-1 end-2 text-[8.5px] font-bold text-[#34C759] bg-[#34C759]/12 rounded-full px-1.5 py-0.5">
+                🚀
+              </span>
+              <span>🖼</span>
+              <span>{t.aiPhotoEnhanceLabel}</span>
+            </button>
+
             {/* ── Copy to another tree ── */}
             {editAllowed && (
             <button
@@ -565,6 +600,26 @@ export default function MemberPanel({ onClose }: Props) {
 
       <EditMemberModal open={editOpen} onClose={() => setEditOpen(false)} member={member} />
       <RelationshipManager open={relOpen} onClose={() => setRelOpen(false)} member={member} />
+
+      {/* Coming-soon explainers for the two AI placeholders above. */}
+      <ComingSoonModal
+        open={aiTreeFromTextOpen}
+        onClose={() => setAiTreeFromTextOpen(false)}
+        icon="📝"
+        title={t.aiTreeFromTextLabel}
+        description={t.aiTreeFromTextDesc}
+        bullets={[t.aiTreeFromTextBullet1, t.aiTreeFromTextBullet2, t.aiTreeFromTextBullet3]}
+        gradient="from-[#FF9F0A] to-[#FF375F]"
+      />
+      <ComingSoonModal
+        open={aiPhotoEnhanceOpen}
+        onClose={() => setAiPhotoEnhanceOpen(false)}
+        icon="🖼"
+        title={t.aiPhotoEnhanceLabel}
+        description={t.aiPhotoEnhanceDesc}
+        bullets={[t.aiPhotoEnhanceBullet1, t.aiPhotoEnhanceBullet2, t.aiPhotoEnhanceBullet3]}
+        gradient="from-[#34C759] to-[#30B454]"
+      />
 
       {/* ── Copy to tree dialog ── */}
       <AnimatePresence>

@@ -303,6 +303,19 @@ export const translations = {
     treeDensityCompactTip: 'מציג רק 3 דורות בלבד — הורים, האדם המרכזי, וילדים. אפשר להרחיב למעלה/למטה דור בכל פעם.',
     treeDensityWideTip: 'מציג את כל הדורות בעץ. לחץ למעבר לתצוגה ממוקדת.',
 
+    // AI features — coming soon
+    aiTreeFromTextLabel: 'בנה עץ מטקסט',
+    aiTreeFromTextDesc: 'כתוב במילים פשוטות מי קשור למי — "אבא יוסי נולד 1955, ילדים: רון, מיכל..." — והבינה המלאכותית תבנה את העץ עבורך. אם משהו לא יהיה ברור — היא תשאל אותך.',
+    aiTreeFromTextBullet1: 'תיאור משפחתי חופשי, בעברית פשוטה',
+    aiTreeFromTextBullet2: 'זיהוי אוטומטי של שמות, תאריכים וקשרים',
+    aiTreeFromTextBullet3: 'שאלות הבהרה בעת הצורך',
+    aiPhotoEnhanceLabel: 'שפר תמונה',
+    aiPhotoEnhanceDesc: 'הופך תמונות ישנות לחיות — מוסיף צבע לשחור-לבן, מחדד פנים מטושטשות, ומשפר איכות של תמונות סרוקות.',
+    aiPhotoEnhanceBullet1: 'צביעת תמונות שחור-לבן',
+    aiPhotoEnhanceBullet2: 'חידוד פנים בתמונות ישנות',
+    aiPhotoEnhanceBullet3: 'הגדלת רזולוציה ושיפור איכות',
+    aiComingSoonTip: 'בקרוב — לחץ להסבר',
+
     // Tree export menu
     exportBtn: 'ייצוא',
     exportPrint: 'הדפס / שמור כ-PDF',
@@ -861,6 +874,19 @@ export const translations = {
     treeHideDescendants: 'Hide bottom generation',
     treeDensityCompactTip: 'Shows only 3 generations — parents, the focal person, and children. You can expand one generation up or down at a time.',
     treeDensityWideTip: 'Shows all generations in the tree. Tap to switch to focused view.',
+
+    // AI features — coming soon
+    aiTreeFromTextLabel: 'Build tree from text',
+    aiTreeFromTextDesc: 'Describe your family in plain language — "Dad Yossi born 1955, kids: Ron, Michal..." — and AI will build the tree for you. If something is unclear, it will ask.',
+    aiTreeFromTextBullet1: 'Free-form family description, in plain English or Hebrew',
+    aiTreeFromTextBullet2: 'Automatic detection of names, dates and relationships',
+    aiTreeFromTextBullet3: 'Clarifying questions when needed',
+    aiPhotoEnhanceLabel: 'Enhance photo',
+    aiPhotoEnhanceDesc: 'Brings old photos back to life — colourises black-and-white, sharpens blurry faces, and upscales scanned images.',
+    aiPhotoEnhanceBullet1: 'Colourise black-and-white photos',
+    aiPhotoEnhanceBullet2: 'Sharpen faces in old pictures',
+    aiPhotoEnhanceBullet3: 'Upscale + improve quality',
+    aiComingSoonTip: 'Coming soon — click for details',
 
     // Tree export menu
     exportBtn: 'Export',

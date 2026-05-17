@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import { isAdmin, isOnboarded } from '../lib/permissions'
 import { getRingGradient, getFallbackGradient, PersonAvatarIcon } from '../components/MemberNode'
 import AIScanModal from '../components/ai/AIScanModal'
+import ComingSoonModal from '../components/ComingSoonModal'
 import type { Member, Relationship } from '../types'
 
 interface Props { demoMode: boolean }
@@ -101,6 +102,11 @@ export default function Dashboard({ demoMode }: Props) {
   const dir = isRTL(lang) ? 'rtl' : 'ltr'
   const navigate = useNavigate()
   const [aiScanOpen, setAiScanOpen] = useState(false)
+  // Two "coming soon" placeholder features the user wants visible in
+  // the UI now so the affordance exists; the modal explains what's
+  // coming and when. Wired to actual backends in a follow-up.
+  const [aiTreeFromTextOpen, setAiTreeFromTextOpen] = useState(false)
+  const [aiPhotoEnhanceOpen, setAiPhotoEnhanceOpen] = useState(false)
 
   const upcoming = useMemo(() => getUpcomingBirthdays(members), [members])
   const generations = useMemo(() => computeGenerations(members, relationships), [members, relationships])
@@ -363,6 +369,26 @@ export default function Dashboard({ demoMode }: Props) {
               gradient="from-[#5E5CE6] to-[#BF5AF2]"
               onClick={() => setAiScanOpen(true)}
             />
+            {/* "Coming soon" tiles — flagged visually with a small
+                "בקרוב" badge in the corner. Tapping opens a friendly
+                modal that explains what the feature will do; the
+                actual backend hookup is a follow-up commit. */}
+            <AppTile
+              icon="📝"
+              label={t.aiTreeFromTextLabel}
+              gradient="from-[#FF9F0A] to-[#FF375F]"
+              onClick={() => setAiTreeFromTextOpen(true)}
+              comingSoon
+              tooltip={t.aiComingSoonTip}
+            />
+            <AppTile
+              icon="🖼"
+              label={t.aiPhotoEnhanceLabel}
+              gradient="from-[#34C759] to-[#30B454]"
+              onClick={() => setAiPhotoEnhanceOpen(true)}
+              comingSoon
+              tooltip={t.aiComingSoonTip}
+            />
             {isAdmin(profile) && (
               <AppTile
                 icon="⚙️"
@@ -402,6 +428,27 @@ export default function Dashboard({ demoMode }: Props) {
           setTimeout(() => alert(`${count} ${t.aiScanAddedCount} ✓`), 50)
         }}
       />
+
+      {/* "Coming soon" placeholders — same component, different copy
+          per feature. Backend hookup lands in a follow-up commit. */}
+      <ComingSoonModal
+        open={aiTreeFromTextOpen}
+        onClose={() => setAiTreeFromTextOpen(false)}
+        icon="📝"
+        title={t.aiTreeFromTextLabel}
+        description={t.aiTreeFromTextDesc}
+        bullets={[t.aiTreeFromTextBullet1, t.aiTreeFromTextBullet2, t.aiTreeFromTextBullet3]}
+        gradient="from-[#FF9F0A] to-[#FF375F]"
+      />
+      <ComingSoonModal
+        open={aiPhotoEnhanceOpen}
+        onClose={() => setAiPhotoEnhanceOpen(false)}
+        icon="🖼"
+        title={t.aiPhotoEnhanceLabel}
+        description={t.aiPhotoEnhanceDesc}
+        bullets={[t.aiPhotoEnhanceBullet1, t.aiPhotoEnhanceBullet2, t.aiPhotoEnhanceBullet3]}
+        gradient="from-[#34C759] to-[#30B454]"
+      />
     </div>
   )
 }
@@ -429,15 +476,36 @@ function MiniAvatar({ member }: { member: Member }) {
   )
 }
 
-function AppTile({ icon, label, gradient, onClick }: { icon: string; label: string; gradient: string; onClick: () => void }) {
+function AppTile({
+  icon, label, gradient, onClick, comingSoon, tooltip,
+}: {
+  icon: string
+  label: string
+  gradient: string
+  onClick: () => void
+  /** Renders a small "בקרוב" / "soon" ribbon in the corner +
+   *  dims the tile slightly so it reads as not-yet-shipped. */
+  comingSoon?: boolean
+  /** Native title attribute — quick hover hint without pulling in a
+   *  custom tooltip component on a low-density grid. */
+  tooltip?: string
+}) {
   return (
     <motion.button
       whileHover={{ y: -3 }}
       whileTap={{ scale: 0.96 }}
       onClick={onClick}
-      className="glass-strong rounded-3xl p-3 flex flex-col items-center gap-2 shadow-glass active:shadow-glass-sm transition"
+      title={tooltip}
+      className="glass-strong rounded-3xl p-3 flex flex-col items-center gap-2 shadow-glass active:shadow-glass-sm transition relative"
     >
-      <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md`}>
+      {comingSoon && (
+        <span className="absolute top-1.5 end-1.5 rounded-full bg-[#FF9F0A] text-white text-[9px] font-bold px-1.5 py-0.5 shadow-sm">
+          {/* No translation needed — same word reads in both locales
+              when paired with the emoji.  */}
+          🚀
+        </span>
+      )}
+      <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md ${comingSoon ? 'opacity-90' : ''}`}>
         <span className="text-xl">{icon}</span>
       </div>
       <p className="text-[12px] font-semibold text-[#1C1C1E] text-center leading-tight">{label}</p>
