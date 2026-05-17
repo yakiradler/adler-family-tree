@@ -1,25 +1,27 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 
 /**
- * Apple-style glass tooltip.
+ * Apple-style glass tooltip — hover/focus only.
  *
- * Surfaces a short explanation when the wrapped element is hovered
- * (desktop) or long-pressed (touch). Built to a few principles the
- * user named directly: visually match the rest of the system, be
- * gently transparent (glass + saturated backdrop blur), and welcoming
- * enough that "both a kid and a grown-up" can read what a button does
- * without prior training.
+ * Rendered through React.createPortal into document.body so it
+ * always sits ABOVE every other layer in the app (dropdowns, modals,
+ * the navigation island, expanding chip columns). Position is
+ * computed against the wrapped child's getBoundingClientRect, not via
+ * absolute positioning relative to a styled parent — so transforms or
+ * `overflow: hidden` containers can't clip the bubble.
  *
- * Trigger behaviour:
- *   • Mouse-enter / focus-in   → open after 350 ms (avoids flicker
- *                                while hopping between controls).
- *   • Touch-press long enough  → opens immediately so a phone user
- *                                can still discover labels.
- *   • Mouse-leave / blur / tap → close.
+ * Trigger behaviour (deliberately strict):
+ *   • Mouse-enter / keyboard-focus  → open after `openDelay` ms.
+ *   • Mouse-leave / blur            → close.
+ *   • Click / tap                   → does NOT trigger the tooltip,
+ *                                     and an active click on the
+ *                                     wrapped element closes it.
  *
- * The popup ignores pointer events so it never eats a click on an
- * adjacent button.
+ * The previous version popped on every tap, which the user
+ * explicitly called out as "really not good" — tooltips are for
+ * discovery, not for confirming actions.
  */
 
 interface TooltipProps {
@@ -35,6 +37,15 @@ interface TooltipProps {
   maxWidth?: number
 }
 
+interface Position {
+  top: number
+  left: number
+  caretOffset: number  // px offset of the caret from the matching edge
+}
+
+const GAP = 10        // px between wrapped element and the bubble
+const EDGE_PAD = 8    // min distance the bubble keeps from the viewport edge
+
 export default function Tooltip({
   content,
   children,
@@ -44,6 +55,9 @@ export default function Tooltip({
   maxWidth = 240,
 }: TooltipProps) {
   const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState<Position | null>(null)
+  const wrapRef = useRef<HTMLSpanElement>(null)
+  const bubbleRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<number | null>(null)
 
   const cancelTimer = () => {
@@ -52,12 +66,10 @@ export default function Tooltip({
       timerRef.current = null
     }
   }
-
   const scheduleOpen = () => {
     cancelTimer()
     timerRef.current = window.setTimeout(() => setOpen(true), openDelay)
   }
-
   const close = () => {
     cancelTimer()
     setOpen(false)
@@ -65,87 +77,169 @@ export default function Tooltip({
 
   useEffect(() => () => cancelTimer(), [])
 
-  // Position classes per side. We use logical (start/end) where
-  // possible so RTL flips automatically.
-  const posClasses = (() => {
-    if (placement === 'top') return 'bottom-full mb-2'
-    if (placement === 'bottom') return 'top-full mt-2'
-    if (placement === 'left') return 'end-full me-2'
-    return 'start-full ms-2'
-  })()
-  const alignClasses = (() => {
-    if (placement === 'top' || placement === 'bottom') {
-      if (align === 'start') return 'start-0'
-      if (align === 'end') return 'end-0'
-      return 'left-1/2 -translate-x-1/2'
+  // Recompute position whenever the tooltip opens (and on scroll /
+  // resize while open). We measure the bubble itself so the geometry
+  // accounts for the actual rendered width — which depends on the
+  // copy + the maxWidth cap.
+  useLayoutEffect(() => {
+    if (!open) return
+    const compute = () => {
+      const anchor = wrapRef.current?.getBoundingClientRect()
+      const bubble = bubbleRef.current?.getBoundingClientRect()
+      if (!anchor || !bubble) return
+      const vw = window.innerWidth
+      const vh = window.innerHeight
+
+      let top = 0
+      let left = 0
+
+      if (placement === 'bottom') {
+        top = anchor.bottom + GAP
+        left =
+          align === 'start' ? anchor.left
+          : align === 'end' ? anchor.right - bubble.width
+          : anchor.left + anchor.width / 2 - bubble.width / 2
+      } else if (placement === 'top') {
+        top = anchor.top - bubble.height - GAP
+        left =
+          align === 'start' ? anchor.left
+          : align === 'end' ? anchor.right - bubble.width
+          : anchor.left + anchor.width / 2 - bubble.width / 2
+      } else if (placement === 'left') {
+        left = anchor.left - bubble.width - GAP
+        top =
+          align === 'start' ? anchor.top
+          : align === 'end' ? anchor.bottom - bubble.height
+          : anchor.top + anchor.height / 2 - bubble.height / 2
+      } else {
+        // right
+        left = anchor.right + GAP
+        top =
+          align === 'start' ? anchor.top
+          : align === 'end' ? anchor.bottom - bubble.height
+          : anchor.top + anchor.height / 2 - bubble.height / 2
+      }
+
+      // Clamp to viewport with EDGE_PAD margin so the bubble never
+      // gets cut off (the main bug the user reported with cropped
+      // tooltips on the screen edges).
+      const clampedLeft = Math.max(EDGE_PAD, Math.min(left, vw - bubble.width - EDGE_PAD))
+      const clampedTop = Math.max(EDGE_PAD, Math.min(top, vh - bubble.height - EDGE_PAD))
+
+      // Caret offset: keep the arrow visually pointing at the anchor
+      // even after we clamped the bubble away from the edge.
+      let caretOffset = bubble.width / 2  // default centre
+      if (placement === 'top' || placement === 'bottom') {
+        const anchorCx = anchor.left + anchor.width / 2
+        caretOffset = Math.max(12, Math.min(bubble.width - 12, anchorCx - clampedLeft))
+      } else {
+        const anchorCy = anchor.top + anchor.height / 2
+        caretOffset = Math.max(12, Math.min(bubble.height - 12, anchorCy - clampedTop))
+      }
+
+      setPos({ top: clampedTop, left: clampedLeft, caretOffset })
     }
-    if (align === 'start') return 'top-0'
-    if (align === 'end') return 'bottom-0'
-    return 'top-1/2 -translate-y-1/2'
-  })()
-  const caretSide = (() => {
-    if (placement === 'top') return 'bottom-[-4px] left-1/2 -translate-x-1/2'
-    if (placement === 'bottom') return 'top-[-4px] left-1/2 -translate-x-1/2'
-    if (placement === 'left') return 'right-[-4px] top-1/2 -translate-y-1/2'
-    return 'left-[-4px] top-1/2 -translate-y-1/2'
-  })()
+    // First pass before paint, then a second pass on the next frame
+    // so the bubble has its final size after the spring-in animation
+    // settles enough to measure.
+    compute()
+    const raf = requestAnimationFrame(compute)
+    window.addEventListener('resize', compute)
+    window.addEventListener('scroll', compute, true)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('resize', compute)
+      window.removeEventListener('scroll', compute, true)
+    }
+  }, [open, placement, align])
+
+  // Portal target. SSR-safe.
+  const portalEl = typeof document !== 'undefined' ? document.body : null
 
   return (
     <span
+      ref={wrapRef}
       className="relative inline-flex"
       onMouseEnter={scheduleOpen}
       onMouseLeave={close}
       onFocus={scheduleOpen}
       onBlur={close}
-      onTouchStart={scheduleOpen}
-      onTouchEnd={() => window.setTimeout(close, 1400)}
-      onTouchCancel={close}
+      // Tap on the wrapped child closes any pending / open tooltip
+      // so the user gets immediate feedback that their click was
+      // received, not a stale label hovering next to the action.
+      onPointerDown={close}
     >
       {children}
-      <AnimatePresence>
-        {open && (
-          <motion.span
-            key="tip"
-            initial={{ opacity: 0, y: placement === 'bottom' ? -6 : placement === 'top' ? 6 : 0, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: placement === 'bottom' ? -6 : placement === 'top' ? 6 : 0, scale: 0.96 }}
-            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-            role="tooltip"
-            className={`pointer-events-none absolute z-[80] rounded-2xl px-3 py-2 text-[12px] font-medium leading-snug ${posClasses} ${alignClasses}`}
-            style={{
-              maxWidth,
-              // Apple-style glass: high backdrop blur + slight
-              // saturate so colours behind the bubble pop through
-              // gently. The bubble itself is mostly dark + slightly
-              // see-through so it reads as floating chrome instead of
-              // a solid label.
-              background: 'rgba(28, 28, 30, 0.78)',
-              color: 'rgba(255, 255, 255, 0.96)',
-              backdropFilter: 'blur(18px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(18px) saturate(180%)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              boxShadow: '0 12px 30px rgba(0, 0, 0, 0.18), 0 4px 10px rgba(0, 0, 0, 0.10)',
-              whiteSpace: 'normal',
-            }}
-          >
-            {content}
-            {/* Caret — small rotated square poking out toward the
-                wrapped element. Same fill + border as the bubble so
-                it reads as one continuous shape. */}
-            <span
-              aria-hidden
-              className={`absolute w-2 h-2 rotate-45 ${caretSide}`}
+      {portalEl && createPortal(
+        <AnimatePresence>
+          {open && (
+            <motion.div
+              key="tip"
+              ref={bubbleRef}
+              role="tooltip"
+              initial={{ opacity: 0, y: placement === 'bottom' ? -6 : placement === 'top' ? 6 : 0, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: placement === 'bottom' ? -6 : placement === 'top' ? 6 : 0, scale: 0.96 }}
+              transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+              className="pointer-events-none fixed rounded-2xl px-3 py-2 text-[12px] font-medium leading-snug"
               style={{
-                background: 'rgba(28, 28, 30, 0.78)',
-                borderLeft: '1px solid rgba(255, 255, 255, 0.12)',
-                borderTop: '1px solid rgba(255, 255, 255, 0.12)',
+                top: pos?.top ?? -9999,
+                left: pos?.left ?? -9999,
+                maxWidth,
+                zIndex: 2147483646,
+                textAlign: 'center',                // ← centred copy
+                background: 'rgba(28, 28, 30, 0.82)',
+                color: 'rgba(255, 255, 255, 0.96)',
                 backdropFilter: 'blur(18px) saturate(180%)',
                 WebkitBackdropFilter: 'blur(18px) saturate(180%)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                boxShadow: '0 12px 30px rgba(0, 0, 0, 0.22), 0 4px 10px rgba(0, 0, 0, 0.12)',
+                whiteSpace: 'normal',
+                // Hide visually until we've computed a real position
+                // so the first paint doesn't flash in the wrong spot.
+                visibility: pos ? 'visible' : 'hidden',
               }}
-            />
-          </motion.span>
-        )}
-      </AnimatePresence>
+            >
+              {content}
+              {/* Caret — small rotated square pointing back at the
+                  wrapped element, positioned dynamically so it tracks
+                  the anchor even after we clamped the bubble away from
+                  a viewport edge. */}
+              {pos && (placement === 'top' || placement === 'bottom') && (
+                <span
+                  aria-hidden
+                  className="absolute w-2 h-2 rotate-45"
+                  style={{
+                    left: pos.caretOffset - 4,
+                    [placement === 'bottom' ? 'top' : 'bottom']: -4,
+                    background: 'rgba(28, 28, 30, 0.82)',
+                    borderLeft: placement === 'bottom' ? '1px solid rgba(255,255,255,0.12)' : 'none',
+                    borderTop: placement === 'bottom' ? '1px solid rgba(255,255,255,0.12)' : 'none',
+                    borderRight: placement === 'top' ? '1px solid rgba(255,255,255,0.12)' : 'none',
+                    borderBottom: placement === 'top' ? '1px solid rgba(255,255,255,0.12)' : 'none',
+                    backdropFilter: 'blur(18px) saturate(180%)',
+                    WebkitBackdropFilter: 'blur(18px) saturate(180%)',
+                  }}
+                />
+              )}
+              {pos && (placement === 'left' || placement === 'right') && (
+                <span
+                  aria-hidden
+                  className="absolute w-2 h-2 rotate-45"
+                  style={{
+                    top: pos.caretOffset - 4,
+                    [placement === 'right' ? 'left' : 'right']: -4,
+                    background: 'rgba(28, 28, 30, 0.82)',
+                    backdropFilter: 'blur(18px) saturate(180%)',
+                    WebkitBackdropFilter: 'blur(18px) saturate(180%)',
+                  }}
+                />
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        portalEl,
+      )}
     </span>
   )
 }

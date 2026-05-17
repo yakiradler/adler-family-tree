@@ -23,6 +23,7 @@ export default function TreePage({ demoMode }: Props) {
     selectedMemberId, setSelectedMemberId, profile,
     members: allMembers, relationships, activeTreeId, viewMode, setViewMode,
     treeControlsExpanded, setTreeControlsExpanded,
+    treeFullscreen,
   } = useFamilyStore()
 
   // Horizontal-swipe toggle between schematic and timeline. The tree
@@ -60,7 +61,8 @@ export default function TreePage({ demoMode }: Props) {
     <div dir={dir} className="min-h-screen bg-[#F2F2F7]">
       {/* Demo banner hidden for clean UX */}
 
-      {/* Floating top bar */}
+      {/* Floating top bar — hidden in fullscreen mode. */}
+      {!treeFullscreen && (
       <div className="absolute top-0 left-0 right-0 z-30 px-3 pt-3 no-print" style={{ top: demoMode ? 20 : 0 }}>
         <div className="glass rounded-2xl px-3 py-2 flex items-center gap-3 shadow-glass-sm max-w-[600px] mx-auto">
           <Tooltip content={t.tipBackHome} placement="bottom" align="start">
@@ -108,6 +110,7 @@ export default function TreePage({ demoMode }: Props) {
           </Tooltip>
         </div>
       </div>
+      )}
 
       {/* Tree canvas + side panel */}
       <div className="relative">
@@ -122,11 +125,13 @@ export default function TreePage({ demoMode }: Props) {
                 by default now and this single button reveals them.
                 The button itself moves with the visibility state so
                 its label is unambiguous. */}
+            {!treeFullscreen && (
             <div className={`absolute z-30 no-print top-[72px] ${isRTL(lang) ? 'left-3' : 'right-3'}`}>
             <Tooltip content={t.tipTreeControlsToggle} placement="bottom" align="end">
             <motion.button
               type="button"
               onClick={() => setTreeControlsExpanded(!treeControlsExpanded)}
+              data-tree-hamburger
               whileTap={{ scale: 0.94 }}
               aria-label={treeControlsExpanded ? t.treeControlsClose : t.treeControlsOpen}
               className={`w-10 h-10 rounded-full shadow-glass flex items-center justify-center transition ${
@@ -154,10 +159,11 @@ export default function TreePage({ demoMode }: Props) {
             </motion.button>
             </Tooltip>
             </div>
+            )}
 
             {/* AdvancedFilter — hidden by default; revealed via the
                 same hamburger as the other tree-page chips. */}
-            {treeControlsExpanded && (
+            {treeControlsExpanded && !treeFullscreen && (
               <AdvancedFilter
                 filters={filters}
                 onChange={setFilters}
@@ -205,7 +211,7 @@ export default function TreePage({ demoMode }: Props) {
         </AnimatePresence>
 
         <AnimatePresence>
-          {selectedMemberId && (
+          {selectedMemberId && !treeFullscreen && (
             <motion.div
               key="panel-backdrop"
               initial={{ opacity: 0 }}
@@ -215,7 +221,7 @@ export default function TreePage({ demoMode }: Props) {
               className="fixed inset-0 bg-black/15 backdrop-blur-[2px] z-40 md:bg-transparent md:backdrop-blur-0 no-print"
             />
           )}
-          {selectedMemberId && (
+          {selectedMemberId && !treeFullscreen && (
             <motion.div
               key="panel"
               initial={{ opacity: 0, x: isRTL(lang) ? -40 : 40 }}
@@ -252,9 +258,11 @@ export default function TreePage({ demoMode }: Props) {
 
       <AddMemberModal open={addOpen} onClose={() => setAddOpen(false)} />
       <TreeSearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
-      <div className="no-print">
-        <Navigation />
-      </div>
+      {!treeFullscreen && (
+        <div className="no-print">
+          <Navigation />
+        </div>
+      )}
     </div>
   )
 }

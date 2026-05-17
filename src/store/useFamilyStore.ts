@@ -106,6 +106,10 @@ interface FamilyState {
   treeControlsExpanded: boolean
   setTreeControlsExpanded: (v: boolean) => void
 
+  // ── Tree fullscreen ────────────────────────────────────────────────
+  treeFullscreen: boolean
+  setTreeFullscreen: (v: boolean) => void
+
   // ── Member notes (comments + memories) ─────────────────────────────
   /** All notes across all members. Per-member filtering is done in the
    *  consumer (MemberNotesTab) so we keep one canonical list and don't
@@ -481,4 +485,13 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   // ── Tree-view floating-controls visibility ─────────────────────────
   treeControlsExpanded: false,
   setTreeControlsExpanded: (treeControlsExpanded) => set({ treeControlsExpanded }),
+
+  // ── Tree fullscreen ────────────────────────────────────────────────
+  // When true, ALL floating chrome (top bar, panels, nav island,
+  // floating chips, zoom/export controls) is hidden so the user has
+  // an unobstructed view of the tree. A small "exit" button stays
+  // pinned in the same spot the fullscreen toggle lives so the user
+  // can always get back to the chrome.
+  treeFullscreen: false,
+  setTreeFullscreen: (treeFullscreen) => set({ treeFullscreen }),
 }))

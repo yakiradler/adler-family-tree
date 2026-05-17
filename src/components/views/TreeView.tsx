@@ -128,6 +128,7 @@ export default function TreeView({
     activeTreeId,
     layoutMode,
     treeControlsExpanded,
+    treeFullscreen, setTreeFullscreen,
   } = useFamilyStore()
   // Narrow the population to the currently active tree. `null` means
   // the default/main tree which is everyone without a tree_id; an
@@ -592,6 +593,7 @@ export default function TreeView({
           right-anchor stack. The button is unobtrusive (icon-only)
           until tapped, then a small popover surfaces both routes
           (browser print → PDF, or canvas-rendered PNG). */}
+      {!treeFullscreen && (
       <ExportMenu
         t={t}
         nodes={nodes}
@@ -601,8 +603,42 @@ export default function TreeView({
         canvasH={canvasH}
         offsetX={offsetX}
       />
+      )}
 
-      {/* Zoom controls */}
+      {/* Fullscreen toggle. ALWAYS visible (even in fullscreen mode)
+          so the user can always get back to the chrome.  When the
+          mode flips, every other piece of UI tagged below with
+          `!treeFullscreen` disappears, giving an uncluttered canvas. */}
+      <div className="absolute bottom-4 right-4 z-30 no-print" style={{ transform: 'translateY(-200px)' }}>
+        <Tooltip content={treeFullscreen ? t.tipFullscreenExit : t.tipFullscreenEnter} placement="left">
+          <motion.button
+            type="button"
+            onClick={() => setTreeFullscreen(!treeFullscreen)}
+            whileTap={{ scale: 0.93 }}
+            aria-label={treeFullscreen ? t.tipFullscreenExit : t.tipFullscreenEnter}
+            className={`w-10 h-10 rounded-full shadow-glass flex items-center justify-center transition ${
+              treeFullscreen
+                ? 'bg-[#1C1C1E] text-white'
+                : 'glass-strong text-[#007AFF]'
+            }`}
+          >
+            {treeFullscreen ? (
+              // Exit fullscreen — arrows pointing inward
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M6 2v3H3M10 2v3h3M6 14v-3H3M10 14v-3h3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            ) : (
+              // Enter fullscreen — arrows pointing outward
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M2 5V2h3M14 5V2h-3M2 11v3h3M14 11v3h-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+          </motion.button>
+        </Tooltip>
+      </div>
+
+      {/* Zoom controls — hidden in fullscreen mode. */}
+      {!treeFullscreen && (
       <div className="absolute bottom-4 right-4 flex flex-col gap-1.5 z-10 no-print">
         <Tooltip content={t.tipZoomIn} placement="left">
           <button
@@ -630,6 +666,7 @@ export default function TreeView({
           </button>
         </Tooltip>
       </div>
+      )}
 
       {/* Bird's-eye minimap — sits in the bottom-left and surfaces the
           zoom % in its header, replacing the previous standalone badge.
@@ -637,7 +674,7 @@ export default function TreeView({
           adds visual noise without buying any navigation benefit.
           Wrapped in `.no-print` so it doesn't paint over the tree on
           paper. */}
-      {nodes.length >= 4 && (
+      {nodes.length >= 4 && !treeFullscreen && (
         <div className="no-print">
           <TreeMiniMap
             nodes={nodes}

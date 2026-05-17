@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLang, isRTL } from '../../i18n/useT'
 import type { Member, Relationship } from '../../types'
@@ -93,8 +93,24 @@ export default function AdvancedFilter({
     [members],
   )
 
+  // Close on outside click — the popover used to grow the chip's
+  // container width when it opened, which made the BUTTON visually
+  // shift sideways. The fix: render the popover absolutely below the
+  // chip so the chip's own footprint never changes, plus close on a
+  // tap outside.
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('[data-advanced-filter]')) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [open])
+
   return (
     <div
+      data-advanced-filter
       // Sits BELOW the floating tree top-bar (which is ~64px tall) so the
       // chip is never hidden behind it. Anchored on the SAME side as
       // the hamburger + the chips it reveals (Focused-Centric,
@@ -103,9 +119,13 @@ export default function AdvancedFilter({
       // explicitly asked for them to live together.
       // top-[228px] = below hamburger (72) + Density (124) + Focused
       // (176) so the new chip lands as the bottom item in the column.
+      // `relative` so the absolute popover below positions against
+      // the chip and the chip itself doesn't get re-sized when the
+      // popover opens.
       className="absolute top-[228px] z-20 no-print"
-      style={{ [rtl ? 'left' : 'right']: 12 } as React.CSSProperties}
+      style={{ [rtl ? 'left' : 'right']: 12, position: 'absolute' } as React.CSSProperties}
     >
+    <div className="relative">
       <motion.button
         type="button"
         onClick={() => setOpen(o => !o)}
@@ -141,7 +161,13 @@ export default function AdvancedFilter({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.96 }}
             transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-            className="mt-2 glass-strong rounded-2xl shadow-glass p-3 w-[280px] space-y-3"
+            // `absolute` so the popover overlays BELOW the chip
+            // without growing the chip's container — that's what
+            // caused the chip to "slide sideways" when expanded.
+            // Anchored to the same edge the chip itself is on,
+            // capped to fit inside the viewport on small screens.
+            className="absolute top-full mt-2 glass-strong rounded-2xl shadow-glass p-3 w-[min(280px,calc(100vw-32px))] space-y-3"
+            style={{ [rtl ? 'left' : 'right']: 0 } as React.CSSProperties}
           >
             {/* Lineage segmented control */}
             <div>
@@ -321,6 +347,7 @@ export default function AdvancedFilter({
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
     </div>
   )
 }

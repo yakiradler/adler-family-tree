@@ -13,6 +13,7 @@ export default function Navigation() {
   const {
     viewMode, setViewMode, profile, editRequests,
     layoutMode, setLayoutMode,
+    setTreeControlsExpanded,
   } = useFamilyStore()
   const { t } = useLang()
   const navigate = useNavigate()
@@ -22,6 +23,18 @@ export default function Navigation() {
   // kept here so its visibility flips cleanly when the user
   // switches view modes.
   const [layoutOpen, setLayoutOpen] = useState(false)
+
+  // Close on outside click — keeps the layout popover from lingering
+  // when the user taps elsewhere on the canvas.
+  useEffect(() => {
+    if (!layoutOpen) return
+    const onDoc = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('[data-nav-layout-picker]')) setLayoutOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [layoutOpen])
 
   // Persisted hide-state so the user's preference survives across
   // page loads. A returning visitor who tucked the bar away keeps
@@ -157,10 +170,15 @@ export default function Navigation() {
         {viewMode === 'tree' && (
           <>
             <div className="w-px h-8 bg-white/15 mx-1" />
-            <div className="relative">
+            <div className="relative" data-nav-layout-picker>
               <Tooltip content={t.tipNavLayout} placement="top">
                 <motion.button
-                  onClick={() => setLayoutOpen((o) => !o)}
+                  onClick={() => {
+                    // Close the top hamburger column when this popover
+                    // opens so we don't have two open at once.
+                    setTreeControlsExpanded(false)
+                    setLayoutOpen((o) => !o)
+                  }}
                   className="relative flex flex-col items-center gap-0.5 px-3 py-2 rounded-[1.4rem] text-white/40 hover:text-white/70 transition-colors"
                   whileTap={{ scale: 0.93 }}
                   aria-label={t.layoutPickerNavLabel}
@@ -179,7 +197,15 @@ export default function Navigation() {
                     exit={{ opacity: 0, y: 8, scale: 0.9 }}
                     transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
                     onClick={(e) => e.stopPropagation()}
-                    className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 z-30 glass-strong shadow-glass rounded-3xl p-2 border border-white/60 flex flex-col gap-1 min-w-[180px]"
+                    // Anchored above the layout button. `max-w` +
+                    // `right-clamped via translate` keeps the popover
+                    // inside the viewport on narrow mobile screens
+                    // (previously cropped on the side).
+                    className="absolute bottom-full mb-3 z-30 glass-strong shadow-glass rounded-3xl p-2 border border-white/60 flex flex-col gap-1 w-[min(220px,calc(100vw-32px))]"
+                    style={{
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                    }}
                   >
                     {([
                       ['classic', t.layoutClassic],

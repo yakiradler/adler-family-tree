@@ -340,6 +340,8 @@ export const translations = {
     tipPanelRelManage: 'נהל קשרים משפחתיים (הורים, ילדים, בני זוג)',
     tipPanelCopyToTree: 'העתק את האדם הזה לעץ משפחה אחר',
     tipPanelDelete: 'מחק את האדם מהעץ (לא ניתן לבטל)',
+    tipFullscreenEnter: 'מסך מלא — הסתר את כל הכפתורים',
+    tipFullscreenExit: 'יציאה ממסך מלא — החזר את הכפתורים',
 
     // AI features — coming soon
     aiTreeFromTextLabel: 'בנה עץ מטקסט',
@@ -950,6 +952,8 @@ export const translations = {
     tipPanelRelManage: 'Manage family relationships (parents, children, spouses)',
     tipPanelCopyToTree: 'Copy this person to another family tree',
     tipPanelDelete: 'Delete this person from the tree (cannot be undone)',
+    tipFullscreenEnter: 'Fullscreen — hide all buttons',
+    tipFullscreenExit: 'Exit fullscreen — bring buttons back',
 
     // AI features — coming soon
     aiTreeFromTextLabel: 'Build tree from text',
