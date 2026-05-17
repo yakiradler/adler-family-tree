@@ -10,11 +10,12 @@ import Navigation from '../components/Navigation'
 import AddMemberModal from '../components/AddMemberModal'
 import TreeSearchModal from '../components/TreeSearchModal'
 import TreeSwitcher from '../components/TreeSwitcher'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import AdvancedFilter, { DEFAULT_FILTERS, type FilterState } from '../components/views/AdvancedFilter'
 import { useBrowserZoom } from '../hooks/useBrowserZoom'
 import { useHorizontalSwipe } from '../hooks/useHorizontalSwipe'
 import Tooltip from '../components/Tooltip'
+import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
 
 interface Props { demoMode: boolean }
 
@@ -55,6 +56,48 @@ export default function TreePage({ demoMode }: Props) {
   // dominate the viewport. We apply an inverse transform so the panel
   // stays at a roughly constant physical size regardless of zoom.
   const browserZoom = useBrowserZoom()
+
+  // Tutorial overlay tailored to the TREE page itself. The user said
+  // a guided walkthrough is "even more important" here than on the
+  // dashboard because the tree has the most controls.
+  //
+  // Auto-launches once on the user's first visit to the tree (separate
+  // localStorage key from the dashboard tour) and is replayable from
+  // the new "?" button next to the search icon.
+  const TREE_TUTORIAL_KEY = 'ft-tree-tutorial-seen'
+  const [treeTutorialOpen, setTreeTutorialOpen] = useState(false)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (window.localStorage.getItem(TREE_TUTORIAL_KEY) === '1') return
+    if (viewMode !== 'tree') return
+    const id = window.setTimeout(() => setTreeTutorialOpen(true), 700)
+    return () => window.clearTimeout(id)
+  }, [viewMode])
+  const closeTreeTutorial = () => {
+    try { window.localStorage.setItem(TREE_TUTORIAL_KEY, '1') } catch { /* ignore */ }
+    setTreeTutorialOpen(false)
+  }
+  const treeTutorialSteps: TourStep[] = useMemo(() => (
+    lang === 'he'
+      ? [
+          { selector: 'tree-title', title: '🌳 שם המשפחה', body: 'כאן רואים את שם המשפחה של העץ הפעיל (למשל "משפחת אדלר") ואת מספר החברים בו.', side: 'bottom' },
+          { selector: 'tree-add', title: '➕ הוסף חבר משפחה', body: 'לחיצה תפתח טופס מהיר להוספת חבר משפחה חדש לעץ הפעיל.', side: 'bottom' },
+          { selector: 'tree-search', title: '🔍 חיפוש בעץ', body: 'מחפש בן או בת משפחה לפי שם בתוך כל העץ — גם אם הם מחוץ למסך כרגע.', side: 'bottom' },
+          { selector: 'tree-switcher', title: '🌿 מעבר בין עצים', body: 'אם יש לכם כמה עצי משפחה (אבא, אמא, בני זוג), אפשר לעבור ביניהם מכאן.', side: 'bottom' },
+          { selector: 'tree-hamburger', title: '☰ אפשרויות תצוגה', body: 'תפריט עם 3 כפתורי-על: סינון מתקדם (לפי כהן/לוי, גרושים, נפטרים), מיקוד דינמי (אדם וקרוביו), ותצוגה ממוקדת/מלאה.', side: 'bottom' },
+          { selector: 'tree-zoom', title: '🔎 זום ומסך מלא', body: 'הגדל / הקטן את העץ, או היכנס למסך מלא כדי לראות רק את העץ ללא רעשים.', side: 'left' },
+          { selector: 'tree-nav', title: '⬇️ ניווט בין תצוגות', body: 'מעבר בין עץ, תרשים, ציר זמן. כאן גם בוחרים את פריסת העץ (קלאסי / גריד / קשת / מדורג).', side: 'top' },
+        ]
+      : [
+          { selector: 'tree-title', title: '🌳 Family name', body: 'Shows the active tree\'s family name (e.g. "Adler Family") and the member count.', side: 'bottom' },
+          { selector: 'tree-add', title: '➕ Add a family member', body: 'Opens a quick form for adding a new member to the active tree.', side: 'bottom' },
+          { selector: 'tree-search', title: '🔍 Search the tree', body: 'Find a member by name across the whole tree — even off-screen.', side: 'bottom' },
+          { selector: 'tree-switcher', title: '🌿 Switch trees', body: 'If you belong to several family trees, swap between them here.', side: 'bottom' },
+          { selector: 'tree-hamburger', title: '☰ View options', body: 'Three super-controls: advanced filter, focused-centric mode, compact / wide density.', side: 'bottom' },
+          { selector: 'tree-zoom', title: '🔎 Zoom + fullscreen', body: 'Zoom in / out, or enter fullscreen for a chrome-free tree.', side: 'left' },
+          { selector: 'tree-nav', title: '⬇️ Switch views', body: 'Tree, schematic, timeline — and pick the tree\'s layout (classic / grid / arc / staggered).', side: 'top' },
+        ]
+  ), [lang])
 
   const members = useMemo(
     () =>
@@ -105,7 +148,7 @@ export default function TreePage({ demoMode }: Props) {
               </svg>
             </motion.button>
           </Tooltip>
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0" data-tour="tree-title">
             <h1 className="text-sf-headline font-bold text-[#1C1C1E] leading-none flex items-center gap-2">
               <span>🌳</span>
               {/* Family surname takes the prominent slot — used to
@@ -122,9 +165,25 @@ export default function TreePage({ demoMode }: Props) {
           {/* Tree switcher visible on every viewport so mobile users can
               navigate between linked family trees too. The compact
               variant collapses well into the top bar. */}
-          <TreeSwitcher />
+          <div data-tour="tree-switcher">
+            <TreeSwitcher />
+          </div>
+          {/* Replay-the-tutorial button — a tiny "?" pill so a user
+              who's lost in the tree can summon the guided walkthrough
+              again without going back to the home screen. */}
+          <Tooltip content={lang === 'he' ? 'הצג מדריך אינטראקטיבי' : 'Show interactive tutorial'} placement="bottom">
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => setTreeTutorialOpen(true)}
+              aria-label={lang === 'he' ? 'מדריך' : 'Tutorial'}
+              className="w-8 h-8 rounded-xl bg-white/70 flex items-center justify-center border border-white/60 hover:bg-white/90 transition text-[#007AFF] font-bold text-[12px]"
+            >
+              ?
+            </motion.button>
+          </Tooltip>
           <Tooltip content={t.tipSearch} placement="bottom">
             <motion.button
+              data-tour="tree-search"
               whileTap={{ scale: 0.9 }}
               onClick={() => setSearchOpen(true)}
               aria-label={t.tipSearch}
@@ -137,7 +196,10 @@ export default function TreePage({ demoMode }: Props) {
             </motion.button>
           </Tooltip>
           <Tooltip content={t.tipAddMember} placement="bottom" align="end">
-            <motion.button whileTap={{ scale: 0.93 }} onClick={() => setAddOpen(true)}
+            <motion.button
+              data-tour="tree-add"
+              whileTap={{ scale: 0.93 }}
+              onClick={() => setAddOpen(true)}
               aria-label={t.tipAddMember}
               className="w-8 h-8 bg-gradient-to-br from-[#007AFF] to-[#32ADE6] rounded-xl flex items-center justify-center shadow-md">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -163,7 +225,7 @@ export default function TreePage({ demoMode }: Props) {
                 The button itself moves with the visibility state so
                 its label is unambiguous. */}
             {!hideChrome && (
-            <div className={`absolute z-30 no-print top-[72px] ${isRTL(lang) ? 'left-3' : 'right-3'}`}>
+            <div className={`absolute z-30 no-print top-[72px] ${isRTL(lang) ? 'left-3' : 'right-3'}`} data-tour="tree-hamburger">
             <Tooltip content={t.tipTreeControlsToggle} placement="bottom" align="end">
             <motion.button
               type="button"
@@ -361,6 +423,16 @@ export default function TreePage({ demoMode }: Props) {
           <Navigation />
         </div>
       )}
+
+      {/* Interactive tree-page tutorial. Auto-launches on the user's
+          very first visit to the tree (different localStorage key
+          from the Dashboard tour so each gets a fresh discovery) and
+          can be replayed any time via the "?" button in the top bar. */}
+      <TutorialOverlay
+        open={treeTutorialOpen}
+        steps={treeTutorialSteps}
+        onClose={closeTreeTutorial}
+      />
     </div>
   )
 }

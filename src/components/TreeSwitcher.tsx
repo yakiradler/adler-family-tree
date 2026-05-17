@@ -103,15 +103,17 @@ export default function TreeSwitcher({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.97 }}
             transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-            // Centred horizontally relative to the trigger — the user
-            // asked for both mobile + desktop to centre the popover
-            // beneath the chip. Width clamped to viewport so it never
-            // crops at the edges. `position: fixed` (well, absolute
-            // anchored to the wrapping `relative` div) + the centred
-            // translateX keeps the alignment stable when window
-            // resizes.
-            className="absolute z-30 mt-2 w-[min(280px,calc(100vw-24px))] rounded-2xl bg-white/95 backdrop-blur-2xl border border-white/60 shadow-glass-lg p-2"
+            // Switched from `position: absolute` (centred under the
+            // chip — which sat off to one side of the top bar and
+            // therefore looked off-centre too) to `position: fixed`
+            // anchored to the VIEWPORT centre. That's what the user
+            // expects: the popover lands in the middle of the screen
+            // regardless of where the chip happens to live.
+            // Width still clamped to fit the smallest phone.
+            className="z-[60] w-[min(280px,calc(100vw-24px))] rounded-2xl bg-white/95 backdrop-blur-2xl border border-white/60 shadow-glass-lg p-2"
             style={{
+              position: 'fixed',
+              top: 64,
               left: '50%',
               transform: 'translateX(-50%)',
             }}

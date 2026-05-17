@@ -126,6 +126,7 @@ export default function Navigation() {
         {!hidden && (
       <motion.div
         key="nav-island"
+        data-tour="tree-nav"
         layout
         className="island flex items-center gap-1 px-2 py-2"
         initial={{ y: 80, opacity: 0 }}

@@ -616,7 +616,7 @@ export default function TreeView({
           fullscreen toggle. The remaining zoom +/− controls hide
           themselves in fullscreen; the fullscreen button itself
           stays so the user can always get back to the chrome. */}
-      <div className="absolute bottom-4 right-4 flex flex-col gap-1.5 z-30 no-print">
+      <div className="absolute bottom-4 right-4 flex flex-col gap-1.5 z-30 no-print" data-tour="tree-zoom">
         {!treeFullscreen && (
           <>
             <Tooltip content={t.tipZoomIn} placement="left">
@@ -738,8 +738,15 @@ export default function TreeView({
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -16, opacity: 0 }}
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute z-20 no-print left-1/2 -translate-x-1/2 top-[120px]"
-          >
+            // `inset-x-0 mx-auto w-fit` is a more reliable centring
+            // recipe than `left-1/2 -translate-x-1/2` for absolutely-
+            // positioned elements inside an RTL container — the latter
+            // was rendering off-centre on the user's mobile screenshot.
+            // `flex justify-center` on the wrapper makes the inner
+            // button stay glued to the centre regardless of its own
+            // width.
+            className="absolute z-20 no-print inset-x-0 top-[120px] flex justify-center pointer-events-none"
+          ><div className="pointer-events-auto">
             <Tooltip content={t.tipExpandUp} placement="bottom">
               <button
                 onClick={() => setExtraUp((e) => e + 1)}
@@ -753,7 +760,7 @@ export default function TreeView({
                 <span>{t.treeShowMoreAncestors}</span>
               </button>
             </Tooltip>
-          </motion.div>
+          </div></motion.div>
         )}
       </AnimatePresence>
 
@@ -770,12 +777,11 @@ export default function TreeView({
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 16, opacity: 0 }}
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            // Tucked just above the bottom nav island so it sits
-            // close to the visible bottom of the tree on most
-            // screens. left-1/2 + translate keeps it centred on
-            // both mobile and desktop.
-            className="absolute z-20 no-print left-1/2 -translate-x-1/2 bottom-[124px]"
-          >
+            // Same centring recipe as the expand-up button above —
+            // `inset-x-0 + flex justify-center` is the reliable
+            // mobile-RTL form.
+            className="absolute z-20 no-print inset-x-0 bottom-[124px] flex justify-center pointer-events-none"
+          ><div className="pointer-events-auto">
             <Tooltip content={t.tipExpandDown} placement="top">
               <button
                 onClick={() => setExtraDown((e) => e + 1)}
@@ -789,7 +795,7 @@ export default function TreeView({
                 <span>{t.treeShowMoreDescendants}</span>
               </button>
             </Tooltip>
-          </motion.div>
+          </div></motion.div>
         )}
       </AnimatePresence>
 
