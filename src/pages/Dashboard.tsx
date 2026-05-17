@@ -787,7 +787,12 @@ function AppTile({
       whileTap={{ scale: 0.96 }}
       onClick={onClick}
       title={tooltip}
-      className="glass-strong rounded-3xl p-3 flex flex-col items-center gap-2 shadow-glass active:shadow-glass-sm transition relative"
+      // Fixed height + centred content so every tile in the grid is
+      // the same size regardless of whether its label is one word or
+      // two lines. Before this constraint, "בנה עץ מטקסט" rendered
+      // visibly taller than its single-word neighbours and broke the
+      // visual grid the user flagged in a screenshot.
+      className="glass-strong rounded-3xl p-3 h-[118px] flex flex-col items-center justify-center gap-2 shadow-glass active:shadow-glass-sm transition relative"
     >
       {comingSoon && (
         <span className="absolute top-1.5 end-1.5 rounded-full bg-[#FF9F0A] text-white text-[9px] font-bold px-1.5 py-0.5 shadow-sm">
@@ -796,10 +801,15 @@ function AppTile({
           🚀
         </span>
       )}
-      <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md ${comingSoon ? 'opacity-90' : ''}`}>
+      <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md flex-none ${comingSoon ? 'opacity-90' : ''}`}>
         <span className="text-xl">{icon}</span>
       </div>
-      <p className="text-[12px] font-semibold text-[#1C1C1E] text-center leading-tight">{label}</p>
+      {/* Label is clamped to 2 lines so a longer name does NOT make
+          the tile grow vertically. line-clamp keeps the layout grid
+          uniform across locales. */}
+      <p className="text-[12px] font-semibold text-[#1C1C1E] text-center leading-tight line-clamp-2 px-1">
+        {label}
+      </p>
     </motion.button>
   )
 }
