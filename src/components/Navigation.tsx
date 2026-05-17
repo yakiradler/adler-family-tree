@@ -1,15 +1,29 @@
-import { motion } from 'framer-motion'
+import { useEffect, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang } from '../i18n/useT'
 import { isAdmin } from '../lib/permissions'
 import type { ViewMode } from '../types'
 
+const HIDDEN_KEY = 'ft-nav-hidden'
+
 export default function Navigation() {
   const { viewMode, setViewMode, profile, editRequests } = useFamilyStore()
   const { t } = useLang()
   const navigate = useNavigate()
   const pendingCount = editRequests.length
+
+  // Persisted hide-state so the user's preference survives across
+  // page loads. A returning visitor who tucked the bar away keeps
+  // their cleaner viewport without having to hide it on every visit.
+  const [hidden, setHidden] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return window.localStorage.getItem(HIDDEN_KEY) === '1'
+  })
+  useEffect(() => {
+    try { window.localStorage.setItem(HIDDEN_KEY, hidden ? '1' : '0') } catch { /* ignore */ }
+  }, [hidden])
 
   const tabs: { id: ViewMode; label: string; icon: React.ReactNode }[] = [
     {
@@ -56,13 +70,42 @@ export default function Navigation() {
   ]
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 no-select">
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 no-select flex flex-col items-center gap-2">
+      {/* Hide / show toggle. Sits just above the navigation island so
+          it's reachable with the same thumb travel as the buttons
+          themselves. Persists to localStorage (see HIDDEN_KEY above)
+          so the user only has to make the choice once. */}
+      <motion.button
+        type="button"
+        onClick={() => setHidden((h) => !h)}
+        whileTap={{ scale: 0.9 }}
+        className="island px-3 py-1 flex items-center gap-1 text-white/80 hover:text-white text-[10.5px] font-semibold transition-colors"
+        aria-label={hidden ? t.navShow : t.navHide}
+        title={hidden ? t.navShow : t.navHide}
+      >
+        <motion.svg
+          width="11"
+          height="11"
+          viewBox="0 0 12 12"
+          fill="none"
+          animate={{ rotate: hidden ? 180 : 0 }}
+          transition={{ duration: 0.18 }}
+        >
+          <path d="M3 5l3 3 3-3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+        </motion.svg>
+        <span>{hidden ? t.navShow : t.navHide}</span>
+      </motion.button>
+
+      <AnimatePresence initial={false}>
+        {!hidden && (
       <motion.div
+        key="nav-island"
         layout
         className="island flex items-center gap-1 px-2 py-2"
         initial={{ y: 80, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.3, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        exit={{ y: 100, opacity: 0 }}
+        transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
       >
         {tabs.map((tab) => {
           const isActive = viewMode === tab.id
@@ -120,6 +163,8 @@ export default function Navigation() {
           </motion.button>
         )}
       </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

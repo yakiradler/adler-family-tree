@@ -289,6 +289,18 @@ export const translations = {
     notesAddLink: 'הוסף זיכרון / תגובה',
     notesComposerCancel: 'ביטול',
 
+    // Navigation hide/show
+    navHide: 'הסתר',
+    navShow: 'הצג',
+
+    // Tree density (compact / wide)
+    treeDensityCompact: 'תצוגה ממוקדת',
+    treeDensityWide: 'תצוגה מלאה',
+    treeShowMoreAncestors: 'הצג דור הורים נוסף',
+    treeShowMoreDescendants: 'הצג דור צאצאים נוסף',
+    treeHideAncestors: 'הסתר דור עליון',
+    treeHideDescendants: 'הסתר דור תחתון',
+
     // Tree export menu
     exportBtn: 'ייצוא',
     exportPrint: 'הדפס / שמור כ-PDF',
@@ -833,6 +845,18 @@ export const translations = {
     notesImageRemove: 'Remove photo',
     notesAddLink: 'Add memory / comment',
     notesComposerCancel: 'Cancel',
+
+    // Navigation hide/show
+    navHide: 'Hide',
+    navShow: 'Show',
+
+    // Tree density (compact / wide)
+    treeDensityCompact: 'Compact view',
+    treeDensityWide: 'Full view',
+    treeShowMoreAncestors: 'Show another generation up',
+    treeShowMoreDescendants: 'Show another generation down',
+    treeHideAncestors: 'Hide top generation',
+    treeHideDescendants: 'Hide bottom generation',
 
     // Tree export menu
     exportBtn: 'Export',

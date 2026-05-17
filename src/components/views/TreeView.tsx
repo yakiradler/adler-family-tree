@@ -189,12 +189,89 @@ export default function TreeView({
   const filteredCount = filtered.members.length
   useEffect(() => { onMatchedCount?.(filteredCount) }, [filteredCount, onMatchedCount])
 
-  const nodes = useMemo(
+  const fullNodes = useMemo(
     () => buildLayout(filtered.members, filtered.relationships, layoutMode, {
       showFormerSpouses: filters.showFormerSpouses,
     }),
     [filtered, layoutMode, filters.showFormerSpouses],
   )
+
+  // ── Compact / Wide density ──────────────────────────────────────────
+  // "Compact" trims the rendered population to a small window of
+  // generations around the user's anchor (their selected member, or
+  // the median generation if no one's selected). The point is to
+  // tame wide trees — researchers consistently land on ~3 visible
+  // generations as the sweet spot before the eye starts losing
+  // branches. The user can expand that window one generation at a
+  // time in either direction via the ▲ / ▼ controls below. "Wide"
+  // (the legacy behaviour) shows everything at once.
+  const [density, setDensity] = useState<'compact' | 'wide'>(() => {
+    if (typeof window === 'undefined') return 'wide'
+    const v = window.localStorage.getItem('ft-tree-density')
+    return v === 'compact' ? 'compact' : 'wide'
+  })
+  useEffect(() => {
+    try { window.localStorage.setItem('ft-tree-density', density) } catch { /* ignore */ }
+  }, [density])
+
+  // Extra generations beyond the 1-up / 1-down baseline ("3-window"):
+  //   visible = [center - 1 - extraUp .. center + 1 + extraDown]
+  // Tap ▲ → extraUp++, tap ▼ → extraDown++. Stays 0 until the user
+  // explicitly asks for more.
+  const [extraUp, setExtraUp] = useState(0)
+  const [extraDown, setExtraDown] = useState(0)
+  // Reset the expansion whenever the user switches between compact
+  // and wide so they start from the 3-generation baseline next time.
+  useEffect(() => {
+    if (density === 'wide') {
+      setExtraUp(0)
+      setExtraDown(0)
+    }
+  }, [density])
+
+  const genRange = useMemo(() => {
+    if (fullNodes.length === 0) return { min: 0, max: 0 }
+    const gens = fullNodes.map((n) => n.generation)
+    return { min: Math.min(...gens), max: Math.max(...gens) }
+  }, [fullNodes])
+
+  // Anchor generation: the user's selected member, or the centre of
+  // the tree as a sensible default so a fresh visit lands on a
+  // visually-balanced 3-generation slice.
+  const centerGen = useMemo(() => {
+    if (selectedMemberId) {
+      const sel = fullNodes.find((n) => n.member.id === selectedMemberId)
+      if (sel) return sel.generation
+    }
+    return Math.floor((genRange.min + genRange.max) / 2)
+  }, [fullNodes, selectedMemberId, genRange.min, genRange.max])
+
+  const windowMin = density === 'compact'
+    ? Math.max(genRange.min, centerGen - 1 - extraUp)
+    : genRange.min
+  const windowMax = density === 'compact'
+    ? Math.min(genRange.max, centerGen + 1 + extraDown)
+    : genRange.max
+  // ▲ / ▼ visibility — hide once we've revealed everything in that
+  // direction. The user shouldn't get a button that does nothing.
+  const canExpandUp = density === 'compact' && windowMin > genRange.min
+  const canExpandDown = density === 'compact' && windowMax < genRange.max
+
+  // Shift the visible nodes so the topmost one sits at y = pad — keeps
+  // the auto-fit logic + the canvas height calc happy when generations
+  // above are hidden (which would otherwise leave a tall empty band
+  // at the top of the canvas).
+  const nodes = useMemo(() => {
+    if (density === 'wide') return fullNodes
+    const visible = fullNodes.filter(
+      (n) => n.generation >= windowMin && n.generation <= windowMax,
+    )
+    if (visible.length === 0) return fullNodes // safety net
+    const minVisibleY = Math.min(...visible.map((n) => n.y))
+    const yShift = -minVisibleY
+    return visible.map((n) => ({ ...n, y: n.y + yShift }))
+  }, [fullNodes, density, windowMin, windowMax])
+
   const { lines, spouseLines } = useMemo(
     () => buildConnectors(nodes, filtered.relationships),
     [nodes, filtered.relationships],
@@ -575,6 +652,88 @@ export default function TreeView({
           />
         </div>
       )}
+
+      {/* Compact / Wide density toggle.
+          Sits next to the Focused-Centric button. In Compact mode
+          only ~3 generations are rendered at once (parents + ego +
+          children); the user expands the slice via the ▲ / ▼
+          controls that appear at the top + bottom of the canvas. */}
+      {members.length > 0 && (
+        <div
+          className="absolute z-20 no-print"
+          style={{ top: 72, [rtl ? 'left' : 'right']: 168 } as React.CSSProperties}
+        >
+          <motion.button
+            type="button"
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setDensity((d) => (d === 'compact' ? 'wide' : 'compact'))}
+            aria-label={density === 'compact' ? t.treeDensityCompact : t.treeDensityWide}
+            title={density === 'compact' ? t.treeDensityCompact : t.treeDensityWide}
+            className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 shadow-glass font-semibold text-[12.5px] border transition ${
+              density === 'compact'
+                ? 'bg-gradient-to-r from-[#34C759] to-[#30B454] text-white border-transparent'
+                : 'bg-white/95 text-[#1C1C1E] border-white/70 hover:bg-white'
+            }`}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1.5" y="2" width="11" height="2.5" rx="0.6" fill="currentColor" opacity="0.85" />
+              <rect x="1.5" y="5.75" width="11" height="2.5" rx="0.6" fill="currentColor" />
+              <rect x="1.5" y="9.5" width="11" height="2.5" rx="0.6" fill="currentColor" opacity="0.85" />
+            </svg>
+            <span>{density === 'compact' ? t.treeDensityCompact : t.treeDensityWide}</span>
+          </motion.button>
+        </div>
+      )}
+
+      {/* ── ▲ / ▼ generation-expand controls ── */}
+      {/* Top: "show another ancestor generation" — appears when the
+          compact window doesn't yet reach the oldest generation. */}
+      <AnimatePresence>
+        {canExpandUp && (
+          <motion.button
+            key="expand-up"
+            initial={{ y: -16, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -16, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            onClick={() => setExtraUp((e) => e + 1)}
+            type="button"
+            aria-label={t.treeShowMoreAncestors}
+            title={t.treeShowMoreAncestors}
+            className="absolute z-20 no-print left-1/2 -translate-x-1/2 top-[120px] flex items-center gap-1.5 rounded-full px-3.5 py-1.5 bg-white/95 text-[#007AFF] text-[11px] font-bold shadow-glass border border-white/70 hover:bg-white active:scale-95 transition"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M2.5 7l3.5-3.5L9.5 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span>{t.treeShowMoreAncestors}</span>
+          </motion.button>
+        )}
+      </AnimatePresence>
+
+      {/* Bottom: "show another descendant generation" — appears when
+          the compact window doesn't yet reach the youngest generation.
+          Sits above the zoom controls + layout picker stack. */}
+      <AnimatePresence>
+        {canExpandDown && (
+          <motion.button
+            key="expand-down"
+            initial={{ y: 16, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 16, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            onClick={() => setExtraDown((e) => e + 1)}
+            type="button"
+            aria-label={t.treeShowMoreDescendants}
+            title={t.treeShowMoreDescendants}
+            className="absolute z-20 no-print left-1/2 -translate-x-1/2 bottom-[88px] flex items-center gap-1.5 rounded-full px-3.5 py-1.5 bg-white/95 text-[#007AFF] text-[11px] font-bold shadow-glass border border-white/70 hover:bg-white active:scale-95 transition"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M2.5 5l3.5 3.5L9.5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span>{t.treeShowMoreDescendants}</span>
+          </motion.button>
+        )}
+      </AnimatePresence>
 
       {/* Focused-Centric mode button */}
       {members.length > 0 && (
