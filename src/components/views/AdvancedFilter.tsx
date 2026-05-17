@@ -96,10 +96,15 @@ export default function AdvancedFilter({
   return (
     <div
       // Sits BELOW the floating tree top-bar (which is ~64px tall) so the
-      // chip is never hidden behind it. Anchored to the visual-right in
-      // RTL and visual-left in LTR.
-      className="absolute top-[72px] z-20 no-print"
-      style={{ [rtl ? 'right' : 'left']: 12 } as React.CSSProperties}
+      // chip is never hidden behind it. Anchored on the SAME side as
+      // the hamburger + the chips it reveals (Focused-Centric,
+      // Density) so the three controls stack vertically instead of
+      // splitting across both edges of the screen — the user
+      // explicitly asked for them to live together.
+      // top-[228px] = below hamburger (72) + Density (124) + Focused
+      // (176) so the new chip lands as the bottom item in the column.
+      className="absolute top-[228px] z-20 no-print"
+      style={{ [rtl ? 'left' : 'right']: 12 } as React.CSSProperties}
     >
       <motion.button
         type="button"

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang } from '../i18n/useT'
 import { isAdmin } from '../lib/permissions'
+import Tooltip from './Tooltip'
 import type { ViewMode } from '../types'
 
 const HIDDEN_KEY = 'ft-nav-hidden'
@@ -33,10 +34,11 @@ export default function Navigation() {
     try { window.localStorage.setItem(HIDDEN_KEY, hidden ? '1' : '0') } catch { /* ignore */ }
   }, [hidden])
 
-  const tabs: { id: ViewMode; label: string; icon: React.ReactNode }[] = [
+  const tabs: { id: ViewMode; label: string; tip: string; icon: React.ReactNode }[] = [
     {
       id: 'tree',
       label: t.navTree,
+      tip: t.tipNavTree,
       icon: (
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
           <circle cx="10" cy="4" r="2.5" fill="currentColor" />
@@ -49,6 +51,7 @@ export default function Navigation() {
     {
       id: 'schematic',
       label: t.navChart,
+      tip: t.tipNavSchematic,
       icon: (
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
           <rect x="3" y="2" width="14" height="4" rx="1.5" fill="currentColor" opacity="0.8" />
@@ -63,6 +66,7 @@ export default function Navigation() {
     {
       id: 'timeline',
       label: t.navTimeline,
+      tip: t.tipNavTimeline,
       icon: (
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
           <line x1="10" y1="2" x2="10" y2="18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -83,13 +87,13 @@ export default function Navigation() {
           it's reachable with the same thumb travel as the buttons
           themselves. Persists to localStorage (see HIDDEN_KEY above)
           so the user only has to make the choice once. */}
+      <Tooltip content={hidden ? t.tipNavShow : t.tipNavHide} placement="top">
       <motion.button
         type="button"
         onClick={() => setHidden((h) => !h)}
         whileTap={{ scale: 0.9 }}
         className="island px-3 py-1 flex items-center gap-1 text-white/80 hover:text-white text-[10.5px] font-semibold transition-colors"
         aria-label={hidden ? t.navShow : t.navHide}
-        title={hidden ? t.navShow : t.navHide}
       >
         <motion.svg
           width="11"
@@ -103,6 +107,7 @@ export default function Navigation() {
         </motion.svg>
         <span>{hidden ? t.navShow : t.navHide}</span>
       </motion.button>
+      </Tooltip>
 
       <AnimatePresence initial={false}>
         {!hidden && (
@@ -118,26 +123,28 @@ export default function Navigation() {
         {tabs.map((tab) => {
           const isActive = viewMode === tab.id
           return (
-            <motion.button
-              key={tab.id}
-              onClick={() => setViewMode(tab.id)}
-              className={`relative flex flex-col items-center gap-0.5 px-4 py-2 rounded-[1.4rem] transition-colors duration-200 ${
-                isActive ? 'text-white' : 'text-white/40 hover:text-white/70'
-              }`}
-              whileTap={{ scale: 0.93 }}
-            >
-              {isActive && (
-                <motion.div
-                  layoutId="nav-pill"
-                  className="absolute inset-0 bg-white/15 rounded-[1.4rem]"
-                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                />
-              )}
-              <span className="relative z-10">{tab.icon}</span>
-              <span className="relative z-10 text-[10px] font-medium tracking-wide">
-                {tab.label}
-              </span>
-            </motion.button>
+            <Tooltip key={tab.id} content={tab.tip} placement="top">
+              <motion.button
+                onClick={() => setViewMode(tab.id)}
+                aria-label={tab.tip}
+                className={`relative flex flex-col items-center gap-0.5 px-4 py-2 rounded-[1.4rem] transition-colors duration-200 ${
+                  isActive ? 'text-white' : 'text-white/40 hover:text-white/70'
+                }`}
+                whileTap={{ scale: 0.93 }}
+              >
+                {isActive && (
+                  <motion.div
+                    layoutId="nav-pill"
+                    className="absolute inset-0 bg-white/15 rounded-[1.4rem]"
+                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                  />
+                )}
+                <span className="relative z-10">{tab.icon}</span>
+                <span className="relative z-10 text-[10px] font-medium tracking-wide">
+                  {tab.label}
+                </span>
+              </motion.button>
+            </Tooltip>
           )
         })}
 
@@ -151,15 +158,17 @@ export default function Navigation() {
           <>
             <div className="w-px h-8 bg-white/15 mx-1" />
             <div className="relative">
-              <motion.button
-                onClick={() => setLayoutOpen((o) => !o)}
-                className="relative flex flex-col items-center gap-0.5 px-3 py-2 rounded-[1.4rem] text-white/40 hover:text-white/70 transition-colors"
-                whileTap={{ scale: 0.93 }}
-                aria-label={t.layoutPickerNavLabel}
-              >
-                <LayoutIcon mode={layoutMode} />
-                <span className="text-[10px] font-medium tracking-wide">{t.layoutPickerNavLabel}</span>
-              </motion.button>
+              <Tooltip content={t.tipNavLayout} placement="top">
+                <motion.button
+                  onClick={() => setLayoutOpen((o) => !o)}
+                  className="relative flex flex-col items-center gap-0.5 px-3 py-2 rounded-[1.4rem] text-white/40 hover:text-white/70 transition-colors"
+                  whileTap={{ scale: 0.93 }}
+                  aria-label={t.layoutPickerNavLabel}
+                >
+                  <LayoutIcon mode={layoutMode} />
+                  <span className="text-[10px] font-medium tracking-wide">{t.layoutPickerNavLabel}</span>
+                </motion.button>
+              </Tooltip>
 
               <AnimatePresence>
                 {layoutOpen && (
@@ -215,8 +224,10 @@ export default function Navigation() {
         <div className="w-px h-8 bg-white/15 mx-1" />
 
         {isAdmin(profile) && (
+          <Tooltip content={t.tipNavAdmin} placement="top">
           <motion.button
             onClick={() => navigate('/admin')}
+            aria-label={t.tipNavAdmin}
             className="relative flex flex-col items-center gap-0.5 px-3 py-2 rounded-[1.4rem] text-white/40 hover:text-white/70 transition-colors"
             whileTap={{ scale: 0.93 }}
           >
@@ -240,6 +251,7 @@ export default function Navigation() {
             )}
             <span className="text-[10px] font-medium tracking-wide">{t.navAdmin}</span>
           </motion.button>
+          </Tooltip>
         )}
       </motion.div>
         )}

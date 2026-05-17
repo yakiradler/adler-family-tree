@@ -14,6 +14,7 @@ import { useMemo, useState } from 'react'
 import AdvancedFilter, { DEFAULT_FILTERS, type FilterState } from '../components/views/AdvancedFilter'
 import { useBrowserZoom } from '../hooks/useBrowserZoom'
 import { useHorizontalSwipe } from '../hooks/useHorizontalSwipe'
+import Tooltip from '../components/Tooltip'
 
 interface Props { demoMode: boolean }
 
@@ -62,12 +63,15 @@ export default function TreePage({ demoMode }: Props) {
       {/* Floating top bar */}
       <div className="absolute top-0 left-0 right-0 z-30 px-3 pt-3 no-print" style={{ top: demoMode ? 20 : 0 }}>
         <div className="glass rounded-2xl px-3 py-2 flex items-center gap-3 shadow-glass-sm max-w-[600px] mx-auto">
-          <motion.button whileTap={{ scale: 0.9 }} onClick={() => navigate('/home')}
-            className="w-8 h-8 rounded-xl bg-white/70 flex items-center justify-center border border-white/60">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d={isRTL(lang) ? 'M5 3l4 4-4 4' : 'M9 3L5 7l4 4'} stroke="#636366" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </motion.button>
+          <Tooltip content={t.tipBackHome} placement="bottom" align="start">
+            <motion.button whileTap={{ scale: 0.9 }} onClick={() => navigate('/home')}
+              aria-label={t.tipBackHome}
+              className="w-8 h-8 rounded-xl bg-white/70 flex items-center justify-center border border-white/60">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d={isRTL(lang) ? 'M5 3l4 4-4 4' : 'M9 3L5 7l4 4'} stroke="#636366" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </motion.button>
+          </Tooltip>
           <div className="flex-1 min-w-0">
             <h1 className="text-sf-headline font-bold text-[#1C1C1E] leading-none flex items-center gap-2">
               <span>🌳</span> {t.viewTree}
@@ -80,24 +84,28 @@ export default function TreePage({ demoMode }: Props) {
               navigate between linked family trees too. The compact
               variant collapses well into the top bar. */}
           <TreeSwitcher />
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => setSearchOpen(true)}
-            title={t.treeSearchTitle}
-            aria-label={t.treeSearchTitle}
-            className="w-8 h-8 rounded-xl bg-white/70 flex items-center justify-center border border-white/60 hover:bg-white/90 transition"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <circle cx="6" cy="6" r="4.2" stroke="#636366" strokeWidth="1.6" />
-              <path d="M9.2 9.2l2.6 2.6" stroke="#636366" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
-          </motion.button>
-          <motion.button whileTap={{ scale: 0.93 }} onClick={() => setAddOpen(true)}
-            className="w-8 h-8 bg-gradient-to-br from-[#007AFF] to-[#32ADE6] rounded-xl flex items-center justify-center shadow-md">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M7 2v10M2 7h10" stroke="white" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </motion.button>
+          <Tooltip content={t.tipSearch} placement="bottom">
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => setSearchOpen(true)}
+              aria-label={t.tipSearch}
+              className="w-8 h-8 rounded-xl bg-white/70 flex items-center justify-center border border-white/60 hover:bg-white/90 transition"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <circle cx="6" cy="6" r="4.2" stroke="#636366" strokeWidth="1.6" />
+                <path d="M9.2 9.2l2.6 2.6" stroke="#636366" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            </motion.button>
+          </Tooltip>
+          <Tooltip content={t.tipAddMember} placement="bottom" align="end">
+            <motion.button whileTap={{ scale: 0.93 }} onClick={() => setAddOpen(true)}
+              aria-label={t.tipAddMember}
+              className="w-8 h-8 bg-gradient-to-br from-[#007AFF] to-[#32ADE6] rounded-xl flex items-center justify-center shadow-md">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M7 2v10M2 7h10" stroke="white" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </motion.button>
+          </Tooltip>
         </div>
       </div>
 
@@ -114,15 +122,14 @@ export default function TreePage({ demoMode }: Props) {
                 by default now and this single button reveals them.
                 The button itself moves with the visibility state so
                 its label is unambiguous. */}
+            <div className={`absolute z-30 no-print top-[72px] ${isRTL(lang) ? 'left-3' : 'right-3'}`}>
+            <Tooltip content={t.tipTreeControlsToggle} placement="bottom" align="end">
             <motion.button
               type="button"
               onClick={() => setTreeControlsExpanded(!treeControlsExpanded)}
               whileTap={{ scale: 0.94 }}
               aria-label={treeControlsExpanded ? t.treeControlsClose : t.treeControlsOpen}
-              title={treeControlsExpanded ? t.treeControlsClose : t.treeControlsOpen}
-              className={`absolute z-30 no-print top-[72px] ${
-                isRTL(lang) ? 'left-3' : 'right-3'
-              } w-10 h-10 rounded-full shadow-glass flex items-center justify-center transition ${
+              className={`w-10 h-10 rounded-full shadow-glass flex items-center justify-center transition ${
                 treeControlsExpanded
                   ? 'bg-[#1C1C1E] text-white'
                   : 'bg-white/95 text-[#1C1C1E] border border-white/70 hover:bg-white'
@@ -145,6 +152,8 @@ export default function TreePage({ demoMode }: Props) {
                 )}
               </motion.svg>
             </motion.button>
+            </Tooltip>
+            </div>
 
             {/* AdvancedFilter — hidden by default; revealed via the
                 same hamburger as the other tree-page chips. */}

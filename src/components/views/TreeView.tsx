@@ -604,25 +604,31 @@ export default function TreeView({
 
       {/* Zoom controls */}
       <div className="absolute bottom-4 right-4 flex flex-col gap-1.5 z-10 no-print">
-        <button
-          onClick={() => zoomBy(1.2)}
-          className="w-10 h-10 rounded-full glass-strong shadow-glass flex items-center justify-center text-[#007AFF] font-bold text-lg active:scale-95 transition"
-          aria-label="zoom in"
-        >+</button>
-        <button
-          onClick={() => zoomBy(1 / 1.2)}
-          className="w-10 h-10 rounded-full glass-strong shadow-glass flex items-center justify-center text-[#007AFF] font-bold text-lg active:scale-95 transition"
-          aria-label="zoom out"
-        >−</button>
-        <button
-          onClick={fitToView}
-          className="w-10 h-10 rounded-full glass-strong shadow-glass flex items-center justify-center active:scale-95 transition"
-          aria-label="fit"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M2 5V2h3M14 5V2h-3M2 11v3h3M14 11v3h-3" stroke="#007AFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
+        <Tooltip content={t.tipZoomIn} placement="left">
+          <button
+            onClick={() => zoomBy(1.2)}
+            className="w-10 h-10 rounded-full glass-strong shadow-glass flex items-center justify-center text-[#007AFF] font-bold text-lg active:scale-95 transition"
+            aria-label={t.tipZoomIn}
+          >+</button>
+        </Tooltip>
+        <Tooltip content={t.tipZoomOut} placement="left">
+          <button
+            onClick={() => zoomBy(1 / 1.2)}
+            className="w-10 h-10 rounded-full glass-strong shadow-glass flex items-center justify-center text-[#007AFF] font-bold text-lg active:scale-95 transition"
+            aria-label={t.tipZoomOut}
+          >−</button>
+        </Tooltip>
+        <Tooltip content={t.tipFitToView} placement="left">
+          <button
+            onClick={fitToView}
+            className="w-10 h-10 rounded-full glass-strong shadow-glass flex items-center justify-center active:scale-95 transition"
+            aria-label={t.tipFitToView}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M2 5V2h3M14 5V2h-3M2 11v3h3M14 11v3h-3" stroke="#007AFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </Tooltip>
       </div>
 
       {/* Bird's-eye minimap — sits in the bottom-left and surfaces the
@@ -696,23 +702,28 @@ export default function TreeView({
           compact window doesn't yet reach the oldest generation. */}
       <AnimatePresence>
         {canExpandUp && (
-          <motion.button
-            key="expand-up"
+          <motion.div
+            key="expand-up-wrap"
             initial={{ y: -16, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -16, opacity: 0 }}
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            onClick={() => setExtraUp((e) => e + 1)}
-            type="button"
-            aria-label={t.treeShowMoreAncestors}
-            title={t.treeShowMoreAncestors}
-            className="absolute z-20 no-print left-1/2 -translate-x-1/2 top-[120px] flex items-center gap-1.5 rounded-full px-3.5 py-1.5 bg-white/95 text-[#007AFF] text-[11px] font-bold shadow-glass border border-white/70 hover:bg-white active:scale-95 transition"
+            className="absolute z-20 no-print left-1/2 -translate-x-1/2 top-[120px]"
           >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M2.5 7l3.5-3.5L9.5 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <span>{t.treeShowMoreAncestors}</span>
-          </motion.button>
+            <Tooltip content={t.tipExpandUp} placement="bottom">
+              <button
+                onClick={() => setExtraUp((e) => e + 1)}
+                type="button"
+                aria-label={t.treeShowMoreAncestors}
+                className="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 bg-white/95 text-[#007AFF] text-[11px] font-bold shadow-glass border border-white/70 hover:bg-white active:scale-95 transition"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M2.5 7l3.5-3.5L9.5 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span>{t.treeShowMoreAncestors}</span>
+              </button>
+            </Tooltip>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -723,23 +734,28 @@ export default function TreeView({
           stack cleanly without overlap. */}
       <AnimatePresence>
         {canExpandDown && (
-          <motion.button
-            key="expand-down"
+          <motion.div
+            key="expand-down-wrap"
             initial={{ y: 16, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 16, opacity: 0 }}
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            onClick={() => setExtraDown((e) => e + 1)}
-            type="button"
-            aria-label={t.treeShowMoreDescendants}
-            title={t.treeShowMoreDescendants}
-            className="absolute z-20 no-print left-1/2 -translate-x-1/2 bottom-[190px] flex items-center gap-1.5 rounded-full px-3.5 py-1.5 bg-white/95 text-[#007AFF] text-[11px] font-bold shadow-glass border border-white/70 hover:bg-white active:scale-95 transition"
+            className="absolute z-20 no-print left-1/2 -translate-x-1/2 bottom-[190px]"
           >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M2.5 5l3.5 3.5L9.5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <span>{t.treeShowMoreDescendants}</span>
-          </motion.button>
+            <Tooltip content={t.tipExpandDown} placement="top">
+              <button
+                onClick={() => setExtraDown((e) => e + 1)}
+                type="button"
+                aria-label={t.treeShowMoreDescendants}
+                className="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 bg-white/95 text-[#007AFF] text-[11px] font-bold shadow-glass border border-white/70 hover:bg-white active:scale-95 transition"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M2.5 5l3.5 3.5L9.5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span>{t.treeShowMoreDescendants}</span>
+              </button>
+            </Tooltip>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -750,30 +766,32 @@ export default function TreeView({
           className="absolute z-20 no-print"
           style={{ top: 176, [rtl ? 'left' : 'right']: 12 } as React.CSSProperties}
         >
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.95 }}
-            onClick={() => {
-              if (isFocusedMode) {
-                setIsFocusedMode(false)
-              } else if (selectedMemberId) {
-                enterFocusMode(selectedMemberId)
-              } else {
-                setShowFocusPicker(s => !s)
-              }
-            }}
-            className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 shadow-glass font-semibold text-[12.5px] border transition ${
-              isFocusedMode
-                ? 'bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white border-transparent'
-                : 'bg-white/95 text-[#1C1C1E] border-white/70 hover:bg-white'
-            }`}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <circle cx="7" cy="7" r="2.8" stroke="currentColor" strokeWidth="1.6" />
-              <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3" strokeDasharray="3 2" />
-            </svg>
-            <span>{t.focusedEnterBtn}</span>
-          </motion.button>
+          <Tooltip content={t.tipFocusedCentric} placement="bottom">
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                if (isFocusedMode) {
+                  setIsFocusedMode(false)
+                } else if (selectedMemberId) {
+                  enterFocusMode(selectedMemberId)
+                } else {
+                  setShowFocusPicker(s => !s)
+                }
+              }}
+              className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 shadow-glass font-semibold text-[12.5px] border transition ${
+                isFocusedMode
+                  ? 'bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white border-transparent'
+                  : 'bg-white/95 text-[#1C1C1E] border-white/70 hover:bg-white'
+              }`}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <circle cx="7" cy="7" r="2.8" stroke="currentColor" strokeWidth="1.6" />
+                <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3" strokeDasharray="3 2" />
+              </svg>
+              <span>{t.focusedEnterBtn}</span>
+            </motion.button>
+          </Tooltip>
 
           {/* Person picker — appears when no member is selected */}
           <AnimatePresence>
@@ -959,26 +977,27 @@ function ExportMenu({
           )}
         </AnimatePresence>
 
-        <motion.button
-          type="button"
-          whileTap={{ scale: 0.93 }}
-          onClick={() => setOpen((o) => !o)}
-          aria-label={t.exportBtn}
-          title={t.exportBtn}
-          className="w-10 h-10 rounded-full glass-strong shadow-glass flex items-center justify-center active:scale-95 transition relative"
-        >
-          {busy ? (
-            <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="10" stroke="#007AFF" strokeOpacity="0.3" strokeWidth="3" />
-              <path d="M12 2a10 10 0 0 1 10 10" stroke="#007AFF" strokeWidth="3" strokeLinecap="round" />
-            </svg>
-          ) : (
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M8 2v8M5 7l3 3 3-3" stroke="#007AFF" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M2 11v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="#007AFF" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          )}
-        </motion.button>
+        <Tooltip content={t.tipExport} placement="left">
+          <motion.button
+            type="button"
+            whileTap={{ scale: 0.93 }}
+            onClick={() => setOpen((o) => !o)}
+            aria-label={t.exportBtn}
+            className="w-10 h-10 rounded-full glass-strong shadow-glass flex items-center justify-center active:scale-95 transition relative"
+          >
+            {busy ? (
+              <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="#007AFF" strokeOpacity="0.3" strokeWidth="3" />
+                <path d="M12 2a10 10 0 0 1 10 10" stroke="#007AFF" strokeWidth="3" strokeLinecap="round" />
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M8 2v8M5 7l3 3 3-3" stroke="#007AFF" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M2 11v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="#007AFF" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+          </motion.button>
+        </Tooltip>
       </div>
     </div>
   )
