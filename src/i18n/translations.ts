@@ -284,6 +284,8 @@ export const translations = {
     notesDeleteConfirm: 'למחוק זיכרון זה?',
     notesAuthorAnonymous: 'אנונימי',
     notesLoginToWrite: 'התחבר כדי לכתוב זיכרון',
+    notesImageAdd: 'הוסף תמונה',
+    notesImageRemove: 'הסר תמונה',
 
     // Admin Control Panel
     adminTitle: 'לוח בקרת מנהל',
@@ -819,6 +821,8 @@ export const translations = {
     notesDeleteConfirm: 'Delete this memory?',
     notesAuthorAnonymous: 'Anonymous',
     notesLoginToWrite: 'Sign in to write a memory',
+    notesImageAdd: 'Add a photo',
+    notesImageRemove: 'Remove photo',
 
     // Admin Control Panel
     adminTitle: 'Admin Control Panel',

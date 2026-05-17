@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang } from '../i18n/useT'
+import { fileToDownscaledDataURL } from '../lib/imageResize'
 import type { MemberNote, MemberNoteKind } from '../types'
 
 /**
@@ -57,6 +58,28 @@ export default function MemberNotesTab({ memberId }: Props) {
   const [kind, setKind] = useState<MemberNoteKind>('memory')
   const [posting, setPosting] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  // Optional inline image — captured as a (downscaled) data URL so it
+  // can ride along in the same localStorage payload as the note text.
+  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null)
+  const [imageBusy, setImageBusy] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const onPickImage = async (file: File | undefined) => {
+    if (!file) return
+    setImageBusy(true)
+    try {
+      const dataUrl = await fileToDownscaledDataURL(file)
+      setImageDataUrl(dataUrl)
+    } catch {
+      // Silently ignore — the user can pick again. Visible failure
+      // mode would be over-engineering for a v1 attachment flow.
+    } finally {
+      setImageBusy(false)
+      // Reset the input so the same file can be re-picked after a
+      // remove → re-pick cycle.
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
 
   // Filter + sort: newest first. Memoised so typing in the composer
   // doesn't re-derive the entire list.
@@ -72,7 +95,9 @@ export default function MemberNotesTab({ memberId }: Props) {
   const isAdmin = profile?.role === 'admin'
 
   const post = async () => {
-    if (!profile || !body.trim() || posting) return
+    // Allow an image-only post (no body) so the user can drop a
+    // family photo without forcing a caption.
+    if (!profile || (!body.trim() && !imageDataUrl) || posting) return
     setPosting(true)
     try {
       await addNote({
@@ -81,8 +106,10 @@ export default function MemberNotesTab({ memberId }: Props) {
         author_name: profile.full_name || t.notesAuthorAnonymous,
         body: body.trim(),
         kind,
+        image_url: imageDataUrl,
       })
       setBody('')
+      setImageDataUrl(null)
     } finally {
       setPosting(false)
     }
@@ -121,11 +148,69 @@ export default function MemberNotesTab({ memberId }: Props) {
             rows={3}
             className="w-full bg-white rounded-xl p-2.5 text-[12px] text-[#1C1C1E] placeholder:text-[#8E8E93] outline-none focus:ring-2 focus:ring-[#007AFF]/40 resize-none"
           />
-          <div className="flex justify-end">
+
+          {/* Image preview — shown only when one has been picked.
+              Keeps the composer skinny by default so it doesn't crowd
+              the feed below. */}
+          {imageDataUrl && (
+            <div className="relative rounded-xl overflow-hidden bg-white">
+              <img
+                src={imageDataUrl}
+                alt=""
+                className="block w-full max-h-48 object-cover"
+              />
+              <button
+                type="button"
+                onClick={() => setImageDataUrl(null)}
+                aria-label={t.notesImageRemove}
+                title={t.notesImageRemove}
+                className="absolute top-1.5 end-1.5 w-7 h-7 rounded-full bg-black/55 hover:bg-black/75 text-white flex items-center justify-center transition"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+          )}
+
+          {/* Hidden file input — driven by the camera-icon button so
+              the picker styling stays consistent with the rest of the
+              composer. `accept="image/*"` enables the iOS / Android
+              native image picker (camera + library). */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => onPickImage(e.target.files?.[0])}
+          />
+
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={imageBusy || posting}
+              aria-label={t.notesImageAdd}
+              title={t.notesImageAdd}
+              className="w-9 h-9 rounded-xl bg-white text-[#007AFF] active:scale-95 transition disabled:opacity-50 flex items-center justify-center"
+            >
+              {imageBusy ? (
+                <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.3" />
+                  <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                </svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+                  <rect x="2.5" y="5" width="15" height="11" rx="2" stroke="currentColor" strokeWidth="1.6" />
+                  <path d="M7 5l1.5-2h3L13 5" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                  <circle cx="10" cy="11" r="3" stroke="currentColor" strokeWidth="1.6" />
+                </svg>
+              )}
+            </button>
             <button
               type="button"
               onClick={post}
-              disabled={!body.trim() || posting}
+              disabled={(!body.trim() && !imageDataUrl) || posting}
               className="px-3 py-1.5 rounded-xl bg-[#007AFF] text-white text-[12px] font-bold active:scale-95 transition disabled:opacity-40 disabled:active:scale-100"
             >
               {posting ? '…' : t.notesAddBtn}
@@ -237,9 +322,26 @@ export default function MemberNotesTab({ memberId }: Props) {
             {formatRelative(note.created_at, lang)}
           </span>
         </div>
-        <p className="text-[12px] text-[#1C1C1E] leading-relaxed whitespace-pre-wrap">
-          {note.body}
-        </p>
+        {note.body && (
+          <p className="text-[12px] text-[#1C1C1E] leading-relaxed whitespace-pre-wrap">
+            {note.body}
+          </p>
+        )}
+        {note.image_url && (
+          <button
+            type="button"
+            onClick={() => window.open(note.image_url ?? '', '_blank', 'noopener,noreferrer')}
+            className={`block w-full rounded-xl overflow-hidden bg-[#F2F2F7] active:scale-[0.98] transition ${note.body ? 'mt-2' : ''}`}
+            aria-label="open image"
+          >
+            <img
+              src={note.image_url}
+              alt=""
+              loading="lazy"
+              className="block w-full max-h-56 object-cover"
+            />
+          </button>
+        )}
         {canDelete && (
           <div className="flex justify-end mt-1.5">
             <button

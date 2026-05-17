@@ -12,6 +12,7 @@ import Landing from './pages/Landing'
 import ThemeShell from './components/ThemeShell'
 import PersistenceIndicator from './components/PersistenceIndicator'
 import InstallPrompt from './components/InstallPrompt'
+import VersionUpdateModal from './components/VersionUpdateModal'
 import { ADLER_MEMBERS, ADLER_RELATIONSHIPS } from './data/adlerFamily'
 import { isPendingOnboarding } from './lib/pendingOnboarding'
 import type { Profile } from './types'
@@ -328,6 +329,10 @@ export default function App() {
           user dismissal, so it only shows up when there's something
           to actually install. */}
       <InstallPrompt />
+      {/* "New version available" celebration modal. Polls
+          /version.json in the background and pops once per fresh
+          deploy — see useVersionCheck for the cadence. */}
+      <VersionUpdateModal />
       <HashRouter>
         <ThemeShell>
           {/* Suspense boundary for the lazy-loaded routes. The fallback

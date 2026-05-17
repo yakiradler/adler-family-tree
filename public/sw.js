@@ -25,7 +25,10 @@
  *   clients drop their stale caches on activate. Asset hashes already
  *   handle per-build cache busting; this is for SW upgrades only.
  */
-const CACHE_VERSION = 'v1'
+// Bumped to v2 when we started bypassing /version.json caching so
+// the in-app update prompt sees fresh data. Old clients will pick
+// up the new SW and drop the v1 cache on activate.
+const CACHE_VERSION = 'v2'
 const CACHE_NAME = `adler-tree-${CACHE_VERSION}`
 
 // Pre-cache the SPA entry so an offline cold-start still boots the
@@ -71,6 +74,24 @@ self.addEventListener('fetch', (event) => {
   // Skip range / partial requests; respondWith can't satisfy them
   // from cache reliably.
   if (req.headers.has('range')) return
+
+  // Always go to network for the version probe — the whole point of
+  // this file is to detect fresh deploys, and a cached response
+  // would defeat that. The fetch failure path returns a synthetic
+  // payload that signals "no update" so we don't pop the modal when
+  // the user is plain offline.
+  if (url.pathname.endsWith('/version.json')) {
+    event.respondWith(
+      fetch(req, { cache: 'no-store' }).catch(
+        () =>
+          new Response(JSON.stringify({ version: null, offline: true }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      ),
+    )
+    return
+  }
 
   const isHashedAsset = url.pathname.includes('/assets/')
   const isNavigation = req.mode === 'navigate'

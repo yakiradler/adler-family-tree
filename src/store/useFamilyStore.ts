@@ -419,6 +419,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
           author_name: optimistic.author_name,
           body: optimistic.body,
           kind: optimistic.kind,
+          image_url: optimistic.image_url ?? null,
         })
         .select()
         .single()

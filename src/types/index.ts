@@ -182,4 +182,13 @@ export interface MemberNote {
   kind: MemberNoteKind
   /** ISO timestamp. Used both for sorting and the displayed date. */
   created_at: string
+  /**
+   * Optional inline image — stored as a data URL in demo mode (so it
+   * round-trips through localStorage along with the rest of the note)
+   * or as a Supabase Storage public URL once that's wired up. The
+   * MemberNotesTab composer caps uploads at ~1 MB and downscales to
+   * a sensible max dimension before encoding, to keep the
+   * ft-state-v3 payload under the localStorage quota.
+   */
+  image_url?: string | null
 }
