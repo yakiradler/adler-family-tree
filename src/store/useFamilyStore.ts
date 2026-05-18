@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { supabase } from '../lib/supabase'
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import type {
   Member, Relationship, EditRequest, ViewMode, Profile,
   AccessRequest, UserRole, FamilyTree, MemberNote,
@@ -10,8 +10,22 @@ import type {
 // RLS-blocked update could appear to "save" (optimistic local state +
 // green toast) but vanish on refresh once fetchMembers/fetchRelationships
 // pulled the unchanged server state back. The PersistenceIndicator
-// listens for this event and shows a red "save failed" pill so the
-// user knows their change didn't reach the database.
+// listens for this event and shows an amber "saved locally — server
+// sync failed" pill so the user knows their change didn't reach the db.
+//
+// Two guardrails so this toast doesn't become noise:
+//   1. In pure demo mode (no env vars) every call fails by definition —
+//      that's the *expected* state, so we silence the dispatch entirely.
+//      The console.warn stays for debugging.
+//   2. With real env vars but a persistent failure (e.g. RLS misconfig)
+//      a user reported the toast popping on EVERY action — typing in a
+//      text field triggers updateMember per keystroke, so the screen
+//      was constantly showing the warning. We throttle the dispatch to
+//      at most one toast per ~20s so the first failure is still
+//      visible but the rest stay silent until something changes.
+const REMOTE_FAIL_THROTTLE_MS = 20_000
+let lastRemoteFailureAt = 0
+
 function reportSupabaseFailure(op: string, err: unknown) {
   if (typeof window === 'undefined') return
   const message =
@@ -20,6 +34,13 @@ function reportSupabaseFailure(op: string, err: unknown) {
     : 'unknown'
   // eslint-disable-next-line no-console
   console.warn(`[supabase ${op}]`, err)
+
+  if (!isSupabaseConfigured) return  // demo mode — local-only is expected
+
+  const now = Date.now()
+  if (now - lastRemoteFailureAt < REMOTE_FAIL_THROTTLE_MS) return
+  lastRemoteFailureAt = now
+
   window.dispatchEvent(
     new CustomEvent('ft-supabase-failed', { detail: { op, message } }),
   )
