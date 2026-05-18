@@ -80,7 +80,12 @@ export default function Landing() {
           className="mx-auto w-[380px] sm:w-[500px] h-[380px] sm:h-[500px] max-w-full"
         >
           <motion.img
-            src="/icon-app-glyph.png"
+            // Query string is a cache-buster: the first transparent
+            // build of this file went out as 3-channel RGB and
+            // browsers cached it as a hard black square. Bumping the
+            // `?v=` forces a re-fetch even if the asset name is
+            // stable. Increment on future asset swaps.
+            src="/icon-app-glyph.png?v=2"
             alt="InfiniTree"
             width={1000}
             height={1000}
