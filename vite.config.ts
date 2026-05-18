@@ -21,7 +21,7 @@ const BUILT_AT_ISO = new Date().toISOString()
  */
 function writeVersionJsonPlugin(): Plugin {
   return {
-    name: 'adler-tree:write-version-json',
+    name: 'infinitree:write-version-json',
     apply: 'build',
     closeBundle() {
       const outFile = resolve(__dirname, 'dist', 'version.json')
@@ -41,7 +41,7 @@ function writeVersionJsonPlugin(): Plugin {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), writeVersionJsonPlugin()],
-  base: process.env.GITHUB_ACTIONS ? '/adler-family-tree/' : '/',
+  base: '/',
   define: {
     // Available in source as `__BUILD_VERSION__` / `__BUILT_AT__`.
     // See src/types/global.d.ts for the type declarations.
