@@ -1,21 +1,22 @@
-// Generates two assets from a single authored source:
+// Generates two assets from the authored InfiniTree glyph:
 //
 //   public/icon-app.png        — 512×512 PNG, soft cyan→white gradient
 //                                tile behind the glyph. Used by the PWA
-//                                manifest + Apple touch icon (anywhere
-//                                an OS draws the icon on its own
-//                                background — home screen, install
-//                                prompt, splash).
+//                                manifest + Apple touch icon.
 //
-//   public/icon-app-glyph.png  — 1024×1024 PNG, transparent background,
-//                                glyph only. Used everywhere INSIDE the
-//                                app (BrandMark in headers, Landing
-//                                hero) so the mark sits on whatever
-//                                surface it's rendered over.
+//   public/icon-app-glyph.png  — square PNG, TRUE TRANSPARENT
+//                                background, glyph only. Used in the
+//                                Landing hero so the mark floats over
+//                                the page background with no card
+//                                around it.
 //
-// Source: public/icon-app-source.png — the authored glyph on a flat
-// white background. The white surround is removed via a luminance-keyed
-// alpha mask, then composited onto the gradient tile for the OS icon.
+// Approach: build an alpha mask (white where the glyph is, black
+// elsewhere) and apply it to the source via sharp's `composite` with
+// `dest-in` blend mode — anywhere the mask is opaque, the source
+// shows; anywhere the mask is transparent, the destination becomes
+// transparent. This is sharp's canonical pattern for white-knockout
+// and produces a real RGBA PNG (the previous `joinChannel` route
+// silently dropped the 4th channel on the way to PNG encoding).
 
 import sharp from 'sharp'
 import { writeFileSync } from 'node:fs'
@@ -29,45 +30,31 @@ const OUT_GLYPH  = resolve(__dirname, '..', 'public', 'icon-app-glyph.png')
 const SIZE = 512
 const RADIUS = 112
 
-async function knockWhiteOut(inputBuffer) {
-  // Each near-white pixel becomes fully transparent; coloured pixels
-  // keep their RGB and gain an alpha proportional to how far they sit
-  // from white. The smooth ramp preserves anti-aliasing on stroke
-  // edges so the glyph doesn't fringe when composited on a coloured
-  // background later.
-  const { data, info } = await sharp(inputBuffer)
+async function buildTransparentGlyph() {
+  // Build the alpha mask: invert the source so white→black/dark→bright,
+  // collapse to single-channel grayscale, then boost contrast so anti-
+  // aliased strokes carry partial alpha rather than going fully clear.
+  // Final mask is opaque (white) where the glyph is, transparent
+  // (black) where the source was white background.
+  const mask = await sharp(SOURCE)
+    .removeAlpha()
+    .negate()
+    .grayscale()
+    .linear(1.8, 0)
+    .toColorspace('b-w')
+    .toBuffer()
+
+  // Apply the mask via `dest-in`: keep destination (= glyph colours)
+  // only where the mask is opaque. Result is the glyph with a real
+  // alpha channel and a clean transparent surround.
+  return sharp(SOURCE)
     .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true })
-
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i], g = data[i + 1], b = data[i + 2]
-    const minC = Math.min(r, g, b)
-    // 255 → 0 alpha, 192 → fully opaque, with a smooth in-between.
-    const alpha = Math.min(255, Math.max(0, (255 - minC) * 4))
-    data[i + 3] = alpha
-  }
-
-  return sharp(data, {
-    raw: { width: info.width, height: info.height, channels: 4 },
-  }).png().toBuffer()
+    .composite([{ input: mask, blend: 'dest-in' }])
+    .png({ compressionLevel: 9 })
+    .toBuffer()
 }
 
-async function run() {
-  // ── Glyph asset: transparent-bg PNG, 1024×1024 source preserved ──
-  const sourceMeta = await sharp(SOURCE).metadata()
-  const glyphSize = Math.max(sourceMeta.width ?? 1024, sourceMeta.height ?? 1024)
-  const glyphSquare = await sharp(SOURCE)
-    .resize(glyphSize, glyphSize, {
-      fit: 'contain',
-      background: { r: 255, g: 255, b: 255, alpha: 1 },
-    })
-    .toBuffer()
-  const glyphTransparent = await knockWhiteOut(glyphSquare)
-  writeFileSync(OUT_GLYPH, glyphTransparent)
-  console.log(`wrote ${OUT_GLYPH} (${glyphTransparent.length} bytes)`)
-
-  // ── Tile asset: gradient rounded square + glyph centred on top ──
+async function buildGradientTile(glyphBuffer) {
   const bgSvg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
       <defs>
@@ -82,16 +69,36 @@ async function run() {
   `
   const bg = await sharp(Buffer.from(bgSvg)).png().toBuffer()
   const inner = Math.round(SIZE * 0.82)
-  const glyphForTile = await sharp(glyphTransparent)
-    .resize(inner, inner, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+  const glyphForTile = await sharp(glyphBuffer)
+    .resize(inner, inner, {
+      fit: 'contain',
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
     .toBuffer()
   const offset = Math.round((SIZE - inner) / 2)
-  const tile = await sharp(bg)
+  return sharp(bg)
     .composite([{ input: glyphForTile, top: offset, left: offset }])
     .png({ compressionLevel: 9 })
     .toBuffer()
+}
+
+async function run() {
+  const glyph = await buildTransparentGlyph()
+  writeFileSync(OUT_GLYPH, glyph)
+  const tile = await buildGradientTile(glyph)
   writeFileSync(OUT_TILE, tile)
-  console.log(`wrote ${OUT_TILE} (${tile.length} bytes)`)
+
+  // Sanity-check the glyph really did come out with alpha. Earlier
+  // attempts silently produced 3-channel RGB which rendered as a
+  // solid black surround in the browser; failing loudly here keeps
+  // that regression from sneaking back.
+  const meta = await sharp(OUT_GLYPH).metadata()
+  if (!meta.hasAlpha || meta.channels !== 4) {
+    throw new Error(`icon-app-glyph.png missing alpha channel (channels=${meta.channels}, hasAlpha=${meta.hasAlpha})`)
+  }
+
+  console.log(`wrote ${OUT_GLYPH} (${glyph.length} bytes, ${meta.channels}-channel, hasAlpha=${meta.hasAlpha})`)
+  console.log(`wrote ${OUT_TILE}  (${tile.length} bytes)`)
 }
 
 run().catch((err) => {

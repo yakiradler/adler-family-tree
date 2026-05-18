@@ -27,7 +27,7 @@ export default function BrandMark({ size = 32, className, static: noAnim = false
   if (noAnim) {
     return (
       <img
-        src="/icon-app-glyph.png"
+        src="/icon-app.png"
         width={size}
         height={size}
         alt="InfiniTree"
@@ -40,7 +40,7 @@ export default function BrandMark({ size = 32, className, static: noAnim = false
   }
   return (
     <motion.img
-      src="/icon-app-glyph.png"
+      src="/icon-app.png"
       width={size}
       height={size}
       alt="InfiniTree"
