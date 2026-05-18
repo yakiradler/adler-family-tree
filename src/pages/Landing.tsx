@@ -72,7 +72,7 @@ export default function Landing() {
           <h1 className="text-[36px] sm:text-[56px] leading-[1.05] font-bold tracking-tight text-[#1C1C1E]">
             {t.landingHeroTitle}
             <br />
-            <span className="bg-gradient-to-r from-[#3CCB89] via-[#26B5A6] to-[#1A8E96] bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-[#4ED88E] via-[#1FBEC4] to-[#1A7AC9] bg-clip-text text-transparent">
               {t.landingHeroTitleAccent}
             </span>
           </h1>
@@ -85,7 +85,7 @@ export default function Landing() {
               whileHover={{ y: -2 }}
               whileTap={{ scale: 0.97 }}
               onClick={() => navigate(primaryCtaPath)}
-              className="group relative overflow-hidden rounded-full px-7 py-3.5 bg-gradient-to-r from-[#3CCB89] to-[#26B5A6] text-white text-[15px] font-semibold shadow-lg shadow-emerald-300/40"
+              className="group relative overflow-hidden rounded-full px-7 py-3.5 bg-gradient-to-r from-[#1FBEC4] to-[#1A7AC9] text-white text-[15px] font-semibold shadow-lg shadow-cyan-300/40"
             >
               <span className="relative z-10 inline-flex items-center gap-2">
                 {t.landingCTA}

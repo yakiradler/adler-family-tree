@@ -1,127 +1,111 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <!--
-    InfiniTree app icon. White rounded-square background, organic tree
-    with infinity-symbol trunk in green→teal gradient. Designed to
-    match the brand mark used across the app (Landing, PWA, favicon).
-    `purpose: "any maskable"` in the manifest means Android can re-
-    clip this; the glyph sits inside a generous safe area.
+    InfiniTree app icon (v2). Organic flowing tree whose trunk is an
+    infinity loop. Stroke-based: ribbons of varying weight that fan up
+    into the canopy and down into the roots, mirroring around the
+    horizontal axis of the infinity. Palette shifted toward
+    green→cyan→blue so the mark reads as a continuous gradient from
+    leaves to roots.
   -->
   <defs>
     <linearGradient id="treeGrad" x1="0.5" y1="0" x2="0.5" y2="1">
-      <stop offset="0%" stop-color="#3CCB89"/>
-      <stop offset="55%" stop-color="#26B5A6"/>
-      <stop offset="100%" stop-color="#1A8E96"/>
+      <stop offset="0%"  stop-color="#4ED88E"/>
+      <stop offset="40%" stop-color="#1FBEC4"/>
+      <stop offset="100%" stop-color="#1A7AC9"/>
     </linearGradient>
     <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#FFFFFF"/>
-      <stop offset="100%" stop-color="#F2FBF8"/>
+      <stop offset="0%"   stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#F0FAFB"/>
     </linearGradient>
   </defs>
 
   <rect width="512" height="512" rx="112" fill="url(#bgGrad)"/>
 
-  <g transform="translate(256 60)" fill="none" stroke="url(#treeGrad)"
-     stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+  <g transform="translate(256 256)"
+     fill="none"
+     stroke="url(#treeGrad)"
+     stroke-linecap="round"
+     stroke-linejoin="round">
 
-    <!-- ── Crown: layered leafy branches ─────────────────────────── -->
-    <!-- Central thick stem rising into the canopy -->
-    <path d="M0 200 C -4 150, -2 100, 0 60" stroke-width="10"/>
+    <!-- ─── CANOPY: 5 ribbon-branches per side, ascending ────────── -->
+    <!-- Center stem -->
+    <path d="M 0 -30 C -2 -80, -3 -130, 0 -180" stroke-width="9"/>
 
-    <!-- Main left branch -->
-    <path d="M-2 110 C -40 90, -80 80, -110 50
-             M-2 110 C -55 100, -95 110, -118 80
-             M-2 110 C -30 70, -55 50, -75 25" stroke-width="5"/>
-    <!-- Main right branch -->
-    <path d="M2 110 C 40 90, 80 80, 110 50
-             M2 110 C 55 100, 95 110, 118 80
-             M2 110 C 30 70, 55 50, 75 25" stroke-width="5"/>
-    <!-- Upper inner branches -->
-    <path d="M-1 70 C -25 50, -40 30, -50 0
-             M1 70 C 25 50, 40 30, 50 0
-             M0 50 C -15 25, -10 5, 0 -10
-             M0 50 C 15 25, 10 5, 0 -10" stroke-width="4"/>
+    <!-- Inner pair, swooping up and slightly out -->
+    <path d="M -2 -50 C -25 -80, -45 -110, -55 -150 C -58 -165, -50 -175, -42 -178" stroke-width="6"/>
+    <path d="M  2 -50 C  25 -80,  45 -110,  55 -150 C  58 -165,  50 -175,  42 -178" stroke-width="6"/>
 
-    <!-- Leaves: clusters of small ellipses along the branches -->
+    <!-- Mid pair, wider arc -->
+    <path d="M -4 -40 C -50 -65, -90 -85, -118 -120 C -125 -132, -118 -145, -108 -147" stroke-width="5"/>
+    <path d="M  4 -40 C  50 -65,  90 -85,  118 -120 C  125 -132,  118 -145,  108 -147" stroke-width="5"/>
+
+    <!-- Outer pair, gentle horizontal fan -->
+    <path d="M -6 -30 C -65 -45, -125 -55, -160 -80 C -170 -88, -165 -100, -155 -100" stroke-width="4"/>
+    <path d="M  6 -30 C  65 -45,  125 -55,  160 -80 C  170 -88,  165 -100,  155 -100" stroke-width="4"/>
+
+    <!-- Inner shoots near the top of the stem -->
+    <path d="M  0 -130 C -15 -150, -22 -165, -25 -180" stroke-width="4"/>
+    <path d="M  0 -130 C  15 -150,  22 -165,  25 -180" stroke-width="4"/>
+    <path d="M  0 -160 C -8 -180, -12 -195, -10 -208" stroke-width="3"/>
+    <path d="M  0 -160 C  8 -180,  12 -195,  10 -208" stroke-width="3"/>
+
+    <!-- Leaf tips: small teardrops on the ends of the branches -->
     <g fill="url(#treeGrad)" stroke="none">
-      <!-- Top crown leaves -->
-      <ellipse cx="0" cy="-15" rx="9" ry="14"/>
-      <ellipse cx="-18" cy="-5" rx="8" ry="12" transform="rotate(-25 -18 -5)"/>
-      <ellipse cx="18" cy="-5" rx="8" ry="12" transform="rotate(25 18 -5)"/>
-      <ellipse cx="-35" cy="10" rx="8" ry="13" transform="rotate(-30 -35 10)"/>
-      <ellipse cx="35" cy="10" rx="8" ry="13" transform="rotate(30 35 10)"/>
-      <ellipse cx="-50" cy="25" rx="9" ry="13" transform="rotate(-40 -50 25)"/>
-      <ellipse cx="50" cy="25" rx="9" ry="13" transform="rotate(40 50 25)"/>
-
-      <!-- Mid layer -->
-      <ellipse cx="-70" cy="35" rx="9" ry="13" transform="rotate(-55 -70 35)"/>
-      <ellipse cx="70" cy="35" rx="9" ry="13" transform="rotate(55 70 35)"/>
-      <ellipse cx="-90" cy="50" rx="9" ry="13" transform="rotate(-65 -90 50)"/>
-      <ellipse cx="90" cy="50" rx="9" ry="13" transform="rotate(65 90 50)"/>
-
-      <!-- Outer leaves -->
-      <ellipse cx="-110" cy="55" rx="8" ry="12" transform="rotate(-70 -110 55)"/>
-      <ellipse cx="110" cy="55" rx="8" ry="12" transform="rotate(70 110 55)"/>
-      <ellipse cx="-120" cy="78" rx="8" ry="12" transform="rotate(-80 -120 78)"/>
-      <ellipse cx="120" cy="78" rx="8" ry="12" transform="rotate(80 120 78)"/>
-
-      <!-- Inner upper leaves around center stem -->
-      <ellipse cx="-10" cy="40" rx="7" ry="11" transform="rotate(-15 -10 40)"/>
-      <ellipse cx="10" cy="40" rx="7" ry="11" transform="rotate(15 10 40)"/>
-      <ellipse cx="-25" cy="55" rx="7" ry="11" transform="rotate(-25 -25 55)"/>
-      <ellipse cx="25" cy="55" rx="7" ry="11" transform="rotate(25 25 55)"/>
-      <ellipse cx="-45" cy="70" rx="7" ry="11" transform="rotate(-40 -45 70)"/>
-      <ellipse cx="45" cy="70" rx="7" ry="11" transform="rotate(40 45 70)"/>
-      <ellipse cx="-65" cy="80" rx="7" ry="11" transform="rotate(-55 -65 80)"/>
-      <ellipse cx="65" cy="80" rx="7" ry="11" transform="rotate(55 65 80)"/>
-      <ellipse cx="-15" cy="90" rx="7" ry="11" transform="rotate(-10 -15 90)"/>
-      <ellipse cx="15" cy="90" rx="7" ry="11" transform="rotate(10 15 90)"/>
-      <ellipse cx="-35" cy="105" rx="7" ry="11" transform="rotate(-25 -35 105)"/>
-      <ellipse cx="35" cy="105" rx="7" ry="11" transform="rotate(25 35 105)"/>
+      <ellipse cx="0"    cy="-205" rx="7"  ry="13"/>
+      <ellipse cx="-12"  cy="-205" rx="6"  ry="11" transform="rotate(-15 -12 -205)"/>
+      <ellipse cx="12"   cy="-205" rx="6"  ry="11" transform="rotate(15 12 -205)"/>
+      <ellipse cx="-27"  cy="-185" rx="6"  ry="11" transform="rotate(-30 -27 -185)"/>
+      <ellipse cx="27"   cy="-185" rx="6"  ry="11" transform="rotate(30 27 -185)"/>
+      <ellipse cx="-45"  cy="-180" rx="7"  ry="12" transform="rotate(-35 -45 -180)"/>
+      <ellipse cx="45"   cy="-180" rx="7"  ry="12" transform="rotate(35 45 -180)"/>
+      <ellipse cx="-70"  cy="-160" rx="7"  ry="12" transform="rotate(-50 -70 -160)"/>
+      <ellipse cx="70"   cy="-160" rx="7"  ry="12" transform="rotate(50 70 -160)"/>
+      <ellipse cx="-105" cy="-150" rx="7"  ry="12" transform="rotate(-60 -105 -150)"/>
+      <ellipse cx="105"  cy="-150" rx="7"  ry="12" transform="rotate(60 105 -150)"/>
+      <ellipse cx="-130" cy="-125" rx="7"  ry="12" transform="rotate(-75 -130 -125)"/>
+      <ellipse cx="130"  cy="-125" rx="7"  ry="12" transform="rotate(75 130 -125)"/>
+      <ellipse cx="-155" cy="-100" rx="6"  ry="10" transform="rotate(-85 -155 -100)"/>
+      <ellipse cx="155"  cy="-100" rx="6"  ry="10" transform="rotate(85 155 -100)"/>
     </g>
 
-    <!-- ── Infinity-trunk ─────────────────────────────────────────── -->
-    <!-- Figure-8 woven into the trunk, centered around y=240 -->
+    <!-- ─── INFINITY-TRUNK ───────────────────────────────────────── -->
+    <!-- Single flowing figure-8 path centered around y=0.
+         Uses Catmull-Rom-ish cubic curves so the two loops meet at
+         the center with a smooth crossover, not a kink. -->
     <path d="
-      M -10 200
-      C -60 200, -90 230, -90 260
-      C -90 290, -60 320, -10 290
-      C 10 280, -10 280, 10 290
-      C 60 320, 90 290, 90 260
-      C 90 230, 60 200, 10 200
-      C -10 210, 10 210, -10 200
-      Z
-    " stroke-width="9" />
+      M 0 -30
+      C -50 -30, -85 -10, -85 15
+      C -85 40, -50 55, -10 35
+      C 0 30, 0 30, 10 35
+      C 50 55, 85 40, 85 15
+      C 85 -10, 50 -30, 0 -30 Z
+    " stroke-width="9"/>
 
-    <!-- Inner highlight for depth -->
-    <path d="
-      M -8 220
-      C -50 220, -75 245, -75 263
-      C -75 282, -50 300, -10 278
-    " stroke-width="3" stroke-opacity="0.55"/>
-    <path d="
-      M 8 220
-      C 50 220, 75 245, 75 263
-      C 75 282, 50 300, 10 278
-    " stroke-width="3" stroke-opacity="0.55"/>
+    <!-- Inner highlight strands to suggest depth in the loops -->
+    <path d="M -10 -15 C -50 -15, -72 0, -72 16 C -72 33, -50 42, -15 28" stroke-width="3" stroke-opacity="0.55"/>
+    <path d="M  10 -15 C  50 -15,  72 0,  72 16 C  72 33,  50 42,  15 28" stroke-width="3" stroke-opacity="0.55"/>
 
-    <!-- ── Roots: mirror of crown, smaller, fanning down ─────────── -->
-    <path d="M0 305 C -2 340, -5 370, -10 395" stroke-width="6"/>
-    <path d="M0 305 C 2 340, 5 370, 10 395" stroke-width="6"/>
-    <path d="M-8 320 C -25 345, -40 365, -55 380" stroke-width="4"/>
-    <path d="M8 320 C 25 345, 40 365, 55 380" stroke-width="4"/>
-    <path d="M-12 335 C -35 360, -50 385, -65 400" stroke-width="3"/>
-    <path d="M12 335 C 35 360, 50 385, 65 400" stroke-width="3"/>
-    <path d="M0 340 C -3 365, -5 385, -3 395" stroke-width="3"/>
+    <!-- ─── ROOTS: mirror of canopy, ribbons fanning down ─────────── -->
+    <path d="M 0 55 C -2 100, -3 140, 0 175" stroke-width="7"/>
 
-    <!-- Small root tip ellipses for visual weight -->
+    <path d="M -2 70 C -22 95, -36 120, -42 150 C -45 162, -40 170, -35 170" stroke-width="5"/>
+    <path d="M  2 70 C  22 95,  36 120,  42 150 C  45 162,  40 170,  35 170" stroke-width="5"/>
+
+    <path d="M -4 65 C -45 85, -75 110, -90 135 C -95 144, -90 152, -82 152" stroke-width="4"/>
+    <path d="M  4 65 C  45 85,  75 110,  90 135 C  95 144,  90 152,  82 152" stroke-width="4"/>
+
+    <path d="M -6 60 C -60 70, -110 80, -135 95 C -142 100, -138 108, -130 108" stroke-width="3"/>
+    <path d="M  6 60 C  60 70,  110 80,  135 95 C  142 100,  138 108,  130 108" stroke-width="3"/>
+
+    <!-- Tiny root tips -->
     <g fill="url(#treeGrad)" stroke="none">
-      <ellipse cx="-12" cy="395" rx="3" ry="5"/>
-      <ellipse cx="12" cy="395" rx="3" ry="5"/>
-      <ellipse cx="-55" cy="378" rx="3" ry="4"/>
-      <ellipse cx="55" cy="378" rx="3" ry="4"/>
-      <ellipse cx="-65" cy="398" rx="3" ry="4"/>
-      <ellipse cx="65" cy="398" rx="3" ry="4"/>
-      <ellipse cx="-3" cy="395" rx="2" ry="4"/>
+      <ellipse cx="0"    cy="180"  rx="4" ry="6"/>
+      <ellipse cx="-35"  cy="172"  rx="3" ry="5"/>
+      <ellipse cx="35"   cy="172"  rx="3" ry="5"/>
+      <ellipse cx="-82"  cy="154"  rx="3" ry="5"/>
+      <ellipse cx="82"   cy="154"  rx="3" ry="5"/>
+      <ellipse cx="-130" cy="110"  rx="3" ry="4"/>
+      <ellipse cx="130"  cy="110"  rx="3" ry="4"/>
     </g>
   </g>
 </svg>

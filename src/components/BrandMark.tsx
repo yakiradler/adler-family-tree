@@ -1,21 +1,17 @@
 /**
- * InfiniTree brand glyph — vector copy of public/favicon.svg, inlined
- * so it can be styled with currentColor / sized fluidly without an
- * extra network round-trip. Use this anywhere the brand mark appears
- * in-app (Landing header, Auth header, install banners). The PWA
- * icon + favicon live as standalone files in /public.
+ * InfiniTree brand glyph (v2). Vector copy of public/favicon.svg,
+ * inlined so it can be sized fluidly without a network round-trip.
+ * Used anywhere the brand mark appears in-app (Landing header, Auth
+ * header, Dashboard top bar). The full-size PWA icon + tab favicon
+ * live as standalone files in /public.
  */
 type Props = {
   size?: number
   className?: string
-  /** When true, the leaves+roots fall back to the gradient's mid-tone
-   *  instead of using the multi-stop gradient. Useful on coloured tile
-   *  backgrounds where the full gradient washes out. */
-  flat?: boolean
 }
 
-export default function BrandMark({ size = 32, className, flat = false }: Props) {
-  const gradId = `infinitree-grad-${flat ? 'flat' : 'g'}`
+export default function BrandMark({ size = 32, className }: Props) {
+  const gradId = `infinitree-grad`
   return (
     <svg
       width={size}
@@ -27,54 +23,47 @@ export default function BrandMark({ size = 32, className, flat = false }: Props)
     >
       <defs>
         <linearGradient id={gradId} x1="0.5" y1="0" x2="0.5" y2="1">
-          {flat ? (
-            <>
-              <stop offset="0%" stopColor="#FFFFFF" />
-              <stop offset="100%" stopColor="#FFFFFF" />
-            </>
-          ) : (
-            <>
-              <stop offset="0%" stopColor="#3CCB89" />
-              <stop offset="55%" stopColor="#26B5A6" />
-              <stop offset="100%" stopColor="#1A8E96" />
-            </>
-          )}
+          <stop offset="0%"  stopColor="#4ED88E" />
+          <stop offset="40%" stopColor="#1FBEC4" />
+          <stop offset="100%" stopColor="#1A7AC9" />
         </linearGradient>
       </defs>
 
       <g
-        transform="translate(32 8)"
+        transform="translate(32 32)"
         fill="none"
         stroke={`url(#${gradId})`}
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        {/* Canopy */}
-        <g fill={`url(#${gradId})`} stroke="none">
-          <ellipse cx="0" cy="2" rx="3" ry="5" />
-          <ellipse cx="-7" cy="4" rx="3" ry="5" transform="rotate(-25 -7 4)" />
-          <ellipse cx="7" cy="4" rx="3" ry="5" transform="rotate(25 7 4)" />
-          <ellipse cx="-12" cy="9" rx="3" ry="5" transform="rotate(-45 -12 9)" />
-          <ellipse cx="12" cy="9" rx="3" ry="5" transform="rotate(45 12 9)" />
-          <ellipse cx="-15" cy="15" rx="3" ry="4" transform="rotate(-65 -15 15)" />
-          <ellipse cx="15" cy="15" rx="3" ry="4" transform="rotate(65 15 15)" />
-        </g>
+        {/* Canopy branches */}
+        <path d="M 0 -8 C -1 -14, -2 -20, 0 -24" strokeWidth="2.2" />
+        <path d="M -1 -12 C -8 -16, -14 -18, -16 -22" strokeWidth="1.8" />
+        <path d="M  1 -12 C  8 -16,  14 -18,  16 -22" strokeWidth="1.8" />
+        <path d="M -1 -10 C -5 -16, -7 -20, -7 -25" strokeWidth="1.6" />
+        <path d="M  1 -10 C  5 -16,  7 -20,  7 -25" strokeWidth="1.6" />
 
-        {/* Center stem into infinity */}
-        <path d="M0 14 L0 22" strokeWidth="2.5" />
+        {/* Leaf tips */}
+        <g fill={`url(#${gradId})`} stroke="none">
+          <ellipse cx="0"   cy="-26" rx="2.2" ry="3.5" />
+          <ellipse cx="-7"  cy="-26" rx="2"   ry="3"   transform="rotate(-20 -7 -26)" />
+          <ellipse cx="7"   cy="-26" rx="2"   ry="3"   transform="rotate(20 7 -26)" />
+          <ellipse cx="-15" cy="-22" rx="2"   ry="3"   transform="rotate(-50 -15 -22)" />
+          <ellipse cx="15"  cy="-22" rx="2"   ry="3"   transform="rotate(50 15 -22)" />
+        </g>
 
         {/* Infinity loop */}
         <path
-          d="M -3 26 C -12 26, -16 32, -16 36 C -16 41, -10 44, -3 40 C 0 38, -3 38, 3 40 C 10 44, 16 41, 16 36 C 16 32, 12 26, 3 26 C 0 28, 3 28, -3 26 Z"
-          strokeWidth="2.5"
+          d="M 0 -7 C -11 -7, -17 -1, -17 5 C -17 11, -11 14, -3 9 C 0 7, 0 7, 3 9 C 11 14, 17 11, 17 5 C 17 -1, 11 -7, 0 -7 Z"
+          strokeWidth="2.4"
         />
 
         {/* Roots */}
-        <path d="M0 42 L0 52" strokeWidth="1.8" />
-        <path d="M-2 44 C -6 48, -8 51, -10 53" strokeWidth="1.5" />
-        <path d="M2 44 C 6 48, 8 51, 10 53" strokeWidth="1.5" />
-        <path d="M-1 47 C -3 50, -4 52, -5 53" strokeWidth="1.2" />
-        <path d="M1 47 C 3 50, 4 52, 5 53" strokeWidth="1.2" />
+        <path d="M 0 15 C -1 19, -2 23, 0 26" strokeWidth="2" />
+        <path d="M -1 17 C -5 20, -8 22, -10 24" strokeWidth="1.5" />
+        <path d="M  1 17 C  5 20,  8 22,  10 24" strokeWidth="1.5" />
+        <path d="M -1 20 C -3 22, -4 24, -4 26" strokeWidth="1.2" />
+        <path d="M  1 20 C  3 22,  4 24,  4 26" strokeWidth="1.2" />
       </g>
     </svg>
   )
