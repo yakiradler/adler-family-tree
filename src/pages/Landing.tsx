@@ -68,37 +68,47 @@ export default function Landing() {
 
       {/* Hero */}
       <section className="relative z-10 px-5 sm:px-8 pt-6 sm:pt-10 pb-20 max-w-5xl mx-auto text-center">
-        {/* Glyph: large, prominent, with a gentle floating loop so the
-            hero feels alive without distracting from the content. The
-            initial mount animation scales+fades it in. */}
+        {/* Glyph: large and prominent, with a gentle floating loop so
+            the hero feels alive without distracting from the content.
+            The initial mount animation scales+fades it in. Sits on
+            negative margin-bottom so the wordmark visually hugs the
+            roots of the tree. */}
         <motion.div
           initial={{ opacity: 0, scale: 0.85, y: 24 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-          className="mx-auto w-[200px] sm:w-[260px] h-[200px] sm:h-[260px]"
+          className="mx-auto w-[380px] sm:w-[500px] h-[380px] sm:h-[500px] max-w-full"
         >
           <motion.img
             src="/icon-app.png"
             alt="InfiniTree"
-            width={520}
-            height={520}
-            className="w-full h-full object-contain select-none drop-shadow-[0_18px_36px_rgba(31,190,196,0.28)]"
+            width={1000}
+            height={1000}
+            className="w-full h-full object-contain select-none drop-shadow-[0_24px_48px_rgba(31,190,196,0.32)]"
             draggable={false}
-            animate={{ y: [0, -8, 0] }}
+            animate={{ y: [0, -10, 0] }}
             transition={{ duration: 5.2, repeat: Infinity, ease: 'easeInOut' }}
           />
         </motion.div>
 
         {/* Animated INFINITREE wordmark — letters stagger-fade in, then
-            a continuous gradient sweep gives the word a subtle shimmer. */}
-        <div className="mt-4 sm:mt-6 flex justify-center gap-[0.04em] sm:gap-[0.05em]" aria-label="InfiniTree">
+            a continuous gradient sweep gives the word a subtle shimmer.
+            `dir="ltr"` forces left-to-right flex order so the letters
+            don't reverse when the surrounding page renders RTL. The
+            negative top margin tucks the wordmark right under the
+            tree's roots so the two read as a single unit. */}
+        <div
+          dir="ltr"
+          className="-mt-6 sm:-mt-10 flex justify-center gap-[0.04em] sm:gap-[0.05em]"
+          aria-label="InfiniTree"
+        >
           {'INFINITREE'.split('').map((ch, i) => (
             <motion.span
               key={i}
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 + i * 0.05, duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
-              className="infinitree-wordmark-letter text-[40px] sm:text-[64px] font-black tracking-[0.04em] leading-none"
+              className="infinitree-wordmark-letter text-[44px] sm:text-[72px] font-black tracking-[0.04em] leading-none"
             >
               {ch}
             </motion.span>
