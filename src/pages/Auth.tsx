@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { markPendingOnboarding } from '../lib/pendingOnboarding'
 import { useLang } from '../i18n/useT'
+import BrandMark from '../components/BrandMark'
 
 type AuthMode = 'login' | 'signup'
 
@@ -152,14 +153,8 @@ export default function Auth({ demoMode = false, onDemoEnter }: Props) {
         <div className="text-center mb-8">
           <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.1, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="w-16 h-16 bg-gradient-to-br from-[#007AFF] to-[#32ADE6] rounded-3xl mx-auto mb-4 flex items-center justify-center shadow-lg shadow-blue-200">
-            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-              <circle cx="16" cy="10" r="4" fill="white" opacity="0.9" />
-              <circle cx="8" cy="22" r="3.5" fill="white" opacity="0.7" />
-              <circle cx="24" cy="22" r="3.5" fill="white" opacity="0.7" />
-              <line x1="16" y1="14" x2="8" y2="19" stroke="white" strokeWidth="1.5" strokeOpacity="0.6" />
-              <line x1="16" y1="14" x2="24" y2="19" stroke="white" strokeWidth="1.5" strokeOpacity="0.6" />
-            </svg>
+            className="w-16 h-16 bg-white rounded-3xl mx-auto mb-4 flex items-center justify-center shadow-lg shadow-emerald-200/60 ring-1 ring-emerald-100">
+            <BrandMark size={44} />
           </motion.div>
           <h1 className="text-sf-title2 text-[#1C1C1E]">{t.authTitle}</h1>
           <p className="text-sf-subhead text-[#8E8E93] mt-1">

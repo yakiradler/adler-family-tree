@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useLang, isRTL } from '../i18n/useT'
 import QuickAccessMenu from '../components/QuickAccessMenu'
+import BrandMark from '../components/BrandMark'
 import { useAuthState } from '../hooks/useAuthState'
 
 /**
@@ -44,14 +45,8 @@ export default function Landing() {
       */}
       <header className="relative z-20 h-[68px] px-5 sm:px-8">
         <div className="absolute top-1/2 -translate-y-1/2 left-5 sm:left-8 flex items-center gap-2">
-          <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#007AFF] to-[#32ADE6] flex items-center justify-center shadow-md shadow-blue-200/50">
-            <svg width="18" height="18" viewBox="0 0 32 32" fill="none">
-              <circle cx="16" cy="10" r="4" fill="white" opacity="0.9" />
-              <circle cx="8" cy="22" r="3.5" fill="white" opacity="0.7" />
-              <circle cx="24" cy="22" r="3.5" fill="white" opacity="0.7" />
-              <line x1="16" y1="14" x2="8" y2="19" stroke="white" strokeWidth="1.5" strokeOpacity="0.6" />
-              <line x1="16" y1="14" x2="24" y2="19" stroke="white" strokeWidth="1.5" strokeOpacity="0.6" />
-            </svg>
+          <div className="w-9 h-9 rounded-2xl bg-white flex items-center justify-center shadow-md shadow-emerald-200/40 ring-1 ring-emerald-100/60">
+            <BrandMark size={28} />
           </div>
           <span className="font-semibold text-[15px] text-[#1C1C1E]">{t.appName}</span>
         </div>
@@ -77,7 +72,7 @@ export default function Landing() {
           <h1 className="text-[36px] sm:text-[56px] leading-[1.05] font-bold tracking-tight text-[#1C1C1E]">
             {t.landingHeroTitle}
             <br />
-            <span className="bg-gradient-to-r from-[#007AFF] via-[#5E5CE6] to-[#FF2D92] bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-[#3CCB89] via-[#26B5A6] to-[#1A8E96] bg-clip-text text-transparent">
               {t.landingHeroTitleAccent}
             </span>
           </h1>
@@ -90,7 +85,7 @@ export default function Landing() {
               whileHover={{ y: -2 }}
               whileTap={{ scale: 0.97 }}
               onClick={() => navigate(primaryCtaPath)}
-              className="group relative overflow-hidden rounded-full px-7 py-3.5 bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white text-[15px] font-semibold shadow-lg shadow-blue-300/40"
+              className="group relative overflow-hidden rounded-full px-7 py-3.5 bg-gradient-to-r from-[#3CCB89] to-[#26B5A6] text-white text-[15px] font-semibold shadow-lg shadow-emerald-300/40"
             >
               <span className="relative z-10 inline-flex items-center gap-2">
                 {t.landingCTA}

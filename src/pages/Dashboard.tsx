@@ -9,6 +9,7 @@ import { getRingGradient, getFallbackGradient, PersonAvatarIcon } from '../compo
 import AIScanModal from '../components/ai/AIScanModal'
 import ComingSoonModal from '../components/ComingSoonModal'
 import BuildFromTextModal from '../components/BuildFromTextModal'
+import BrandMark from '../components/BrandMark'
 import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
 import type { Member, Relationship } from '../types'
 
@@ -279,8 +280,8 @@ export default function Dashboard({ demoMode }: Props) {
         {/* Top row: logo / date / actions */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#007AFF] to-[#5856D6] shadow-lg flex items-center justify-center">
-              <span className="text-xl">🌳</span>
+            <div className="w-10 h-10 rounded-2xl bg-white shadow-lg shadow-emerald-200/50 ring-1 ring-emerald-100 flex items-center justify-center">
+              <BrandMark size={32} />
             </div>
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-wider text-[#8E8E93] leading-none">

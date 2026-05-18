@@ -3,7 +3,7 @@ export type Lang = 'he' | 'en'
 export const translations = {
   he: {
     // App / Top Bar
-    appName: 'עץ משפחה',
+    appName: 'InfiniTree',
     viewTree: 'תצוגת עץ',
     viewSchematic: 'תצוגת תרשים',
     viewTimeline: 'ציר זמן',
@@ -650,7 +650,7 @@ export const translations = {
   },
 
   en: {
-    appName: 'Family Tree',
+    appName: 'InfiniTree',
     viewTree: 'Tree View',
     viewSchematic: 'Schematic View',
     viewTimeline: 'Timeline View',
