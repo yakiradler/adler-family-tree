@@ -1,6 +1,6 @@
 <div align="right" dir="rtl">
 
-# 🌳 משפחת אדלר — Family Tree CRM
+# 🌳 InfiniTree — Family Tree CRM
 
 מערכת ניהול עץ משפחה בסגנון Apple, מותאמת לעברית, עם RBAC מלא, ייחוס הלכתי (כהן/לוי), סריקת מסמכים ב-AI, ותצוגה אינטראקטיבית.
 

@@ -956,7 +956,7 @@ function ExportMenu({
     try {
       await exportTreeAsPNG({
         nodes, lines, spouseLines, canvasW, canvasH, offsetX,
-        title: 'Adler Family Tree',
+        title: 'InfiniTree',
       })
     } finally {
       setBusy(false)

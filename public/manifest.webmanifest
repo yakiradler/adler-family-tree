@@ -1,6 +1,6 @@
 {
-  "name": "Adler Family Tree",
-  "short_name": "Adler Tree",
+  "name": "InfiniTree",
+  "short_name": "InfiniTree",
   "description": "Apple-style family tree CRM — Hebrew/English, multi-tree, RBAC, halachic lineage.",
   "lang": "he",
   "dir": "rtl",

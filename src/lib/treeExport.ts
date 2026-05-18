@@ -171,7 +171,7 @@ export async function exportTreeAsPNG(opts: ExportTreeOptions): Promise<void> {
   const {
     nodes, lines, spouseLines,
     canvasW, canvasH, offsetX,
-    title = 'Adler Family Tree',
+    title = 'InfiniTree',
     filename,
   } = opts
 
@@ -268,7 +268,7 @@ export async function exportTreeAsPNG(opts: ExportTreeOptions): Promise<void> {
   ctx.font = '10px system-ui, -apple-system, "Segoe UI", sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'bottom'
-  ctx.fillText('adler-family-tree', W / 2, H - 14)
+  ctx.fillText('infinitree', W / 2, H - 14)
 
   // Trigger the download.
   await new Promise<void>((resolve) => {
