@@ -596,33 +596,28 @@ export default function Dashboard({ demoMode }: Props) {
           </div>
           <div className="grid grid-cols-3 gap-2.5">
             <AppTile
+              index={0}
               icon="🌳"
               label={lang === 'he' ? 'עץ משפחה' : 'Family Tree'}
               gradient="from-[#007AFF] to-[#32ADE6]"
               onClick={() => navigate('/tree')}
             />
             <AppTile
+              index={1}
               icon="🎂"
               label={lang === 'he' ? 'ימי הולדת' : 'Birthdays'}
               gradient="from-[#32ADE6] to-[#5AC8FA]"
               onClick={() => navigate('/birthdays')}
             />
             <AppTile
+              index={2}
               icon="✨"
               label={t.aiScanTitle}
               gradient="from-[#5E5CE6] to-[#BF5AF2]"
               onClick={() => setAiScanOpen(true)}
             />
-            {/* "Coming soon" tiles — flagged visually with a small
-                "בקרוב" badge in the corner. Tapping opens a friendly
-                modal that explains what the feature will do; the
-                actual backend hookup is a follow-up commit. */}
-            {/* Build-from-text — local parser now wired up (Option A
-                of the hybrid plan). The "בקרוב" ribbon is gone since
-                the feature works without a backend; the API-backed
-                upgrade (Option B) will replace the parser internally
-                without touching this tile. */}
             <AppTile
+              index={3}
               icon="📝"
               label={t.aiTreeFromTextLabel}
               gradient="from-[#FF9F0A] to-[#FF375F]"
@@ -630,6 +625,7 @@ export default function Dashboard({ demoMode }: Props) {
               tooltip={t.btfSubtitle}
             />
             <AppTile
+              index={4}
               icon="🖼"
               label={t.aiPhotoEnhanceLabel}
               gradient="from-[#34C759] to-[#30B454]"
@@ -637,12 +633,9 @@ export default function Dashboard({ demoMode }: Props) {
               comingSoon
               tooltip={t.aiComingSoonTip}
             />
-            {/* Manual Tutorial launcher. Renders a `data-tour`
-                attribute on the tile itself so the tour can highlight
-                it during step 6 — a tiny meta-moment where the tour
-                points at its own re-entry point. */}
             <div data-tour="dash-tutorial-tile">
               <AppTile
+                index={5}
                 icon="🎓"
                 label={lang === 'he' ? 'מצב למידה' : 'Tutorial'}
                 gradient="from-[#FFD60A] to-[#FF9F0A]"
@@ -652,6 +645,7 @@ export default function Dashboard({ demoMode }: Props) {
             </div>
             {isAdmin(profile) && (
               <AppTile
+                index={6}
                 icon="⚙️"
                 label={lang === 'he' ? 'ניהול' : 'Admin'}
                 gradient="from-[#5AC8FA] to-[#64D2FF]"
@@ -792,36 +786,78 @@ function AppTile({
 }) {
   return (
     <motion.button
-      initial={{ opacity: 0, y: 14, scale: 0.96 }}
+      // Two-stage entry: each tile fades + slides + scales up, with
+      // a stagger keyed to its position in the grid. The cubic-bezier
+      // mimics Apple's spring decay so the tiles feel like they
+      // settle in, not just appear.
+      initial={{ opacity: 0, y: 22, scale: 0.92 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ delay: 0.05 + index * 0.04, duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-      whileHover={{ y: -4, scale: 1.02 }}
-      whileTap={{ scale: 0.96 }}
+      transition={{
+        delay: 0.08 + index * 0.06,
+        duration: 0.55,
+        ease: [0.16, 1, 0.3, 1],
+      }}
+      whileHover={{ y: -6, scale: 1.04 }}
+      whileTap={{ scale: 0.94, y: 0 }}
       onClick={onClick}
       title={tooltip}
-      // Fixed height + centred content so every tile in the grid is
-      // the same size regardless of whether its label is one word or
-      // two lines. Before this constraint, "בנה עץ מטקסט" rendered
-      // visibly taller than its single-word neighbours and broke the
-      // visual grid the user flagged in a screenshot.
-      className="glass-strong rounded-3xl p-3 h-[118px] flex flex-col items-center justify-center gap-2 shadow-glass active:shadow-glass-sm transition relative"
+      // Fixed height locks the grid even when labels wrap to two
+      // lines. group + relative wires up the halo + glow tricks
+      // below.
+      className="group relative h-32 w-full rounded-3xl overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40"
     >
+      {/* Halo: a soft, oversized blur of the tile's accent gradient
+          sitting behind everything else. Scales up on hover so the
+          tile looks like it's lighting up the area around it. */}
+      <span
+        aria-hidden
+        className={`absolute -inset-6 rounded-[42px] bg-gradient-to-br ${gradient} opacity-0 group-hover:opacity-30 blur-2xl transition-opacity duration-500 pointer-events-none`}
+      />
+
+      {/* Tile surface — frosted glass over a faint diagonal tint of
+          the accent gradient so each tile carries its own colour
+          fingerprint instead of being a uniform white card. */}
+      <span
+        aria-hidden
+        className="absolute inset-0 rounded-3xl bg-white/85 backdrop-blur-xl border border-white/70 shadow-glass group-hover:shadow-xl transition-shadow duration-300"
+      />
+      <span
+        aria-hidden
+        className={`absolute inset-0 rounded-3xl bg-gradient-to-br ${gradient} opacity-[0.08] group-hover:opacity-[0.16] transition-opacity duration-300 pointer-events-none`}
+      />
+
+      {/* "בקרוב" ribbon — sits above the tile surface. */}
       {comingSoon && (
-        <span className="absolute top-1.5 end-1.5 rounded-full bg-[#FF9F0A] text-white text-[9px] font-bold px-1.5 py-0.5 shadow-sm">
-          {/* No translation needed — same word reads in both locales
-              when paired with the emoji.  */}
+        <span className="absolute top-2 end-2 z-10 rounded-full bg-[#FF9F0A] text-white text-[9px] font-bold px-1.5 py-0.5 shadow-sm">
           🚀
         </span>
       )}
-      <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md flex-none ${comingSoon ? 'opacity-90' : ''}`}>
-        <span className="text-xl">{icon}</span>
-      </div>
-      {/* Label is clamped to 2 lines so a longer name does NOT make
-          the tile grow vertically. line-clamp keeps the layout grid
-          uniform across locales. */}
-      <p className="text-[12px] font-semibold text-[#1C1C1E] text-center leading-tight line-clamp-2 px-1">
-        {label}
-      </p>
+
+      {/* Foreground — icon + label, stacked + centred. The icon
+          chip has its own subtle idle breathing so the grid never
+          feels static; phases are offset per tile via `index`. */}
+      <span className="relative z-[1] flex h-full flex-col items-center justify-center gap-2 px-2">
+        <motion.span
+          className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-lg ${comingSoon ? 'opacity-90' : ''}`}
+          animate={{
+            scale: [1, 1.03, 1],
+            y: [0, -1.5, 0],
+          }}
+          transition={{
+            duration: 4 + (index % 3) * 0.4,
+            delay: index * 0.18,
+            repeat: Infinity,
+            ease: 'easeInOut',
+          }}
+        >
+          <span className="text-2xl drop-shadow-sm">{icon}</span>
+        </motion.span>
+        {/* Label clamps to 2 lines so a longer name does NOT make the
+            tile grow vertically. */}
+        <p className="text-[12px] font-semibold text-[#1C1C1E] text-center leading-tight line-clamp-2 px-1">
+          {label}
+        </p>
+      </span>
     </motion.button>
   )
 }
