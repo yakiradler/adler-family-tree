@@ -1,6 +1,6 @@
 {
-  "name": "InfiniTree",
-  "short_name": "InfiniTree",
+  "name": "INFINITREE",
+  "short_name": "INFINITREE",
   "description": "Apple-style family tree CRM — Hebrew/English, multi-tree, RBAC, halachic lineage.",
   "lang": "he",
   "dir": "rtl",
@@ -9,7 +9,7 @@
   "display": "standalone",
   "orientation": "any",
   "theme_color": "#1FBEC4",
-  "background_color": "#FFFFFF",
+  "background_color": "#E6F7F8",
   "categories": ["lifestyle", "productivity", "social"],
   "icons": [
     {

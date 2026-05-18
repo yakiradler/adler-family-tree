@@ -276,7 +276,12 @@ export default function Dashboard({ demoMode }: Props) {
       {/* Demo banner hidden — the setup hint surfaces only on /login when relevant. */}
 
       {/* ─── HERO ─── */}
-      <div className="relative px-4 pt-5 pb-6 max-w-lg mx-auto">
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+        className="relative px-4 pt-5 pb-6 max-w-lg mx-auto"
+      >
         {/* Top row: logo / date / actions */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2.5">
@@ -356,7 +361,7 @@ export default function Dashboard({ demoMode }: Props) {
             </div>
           ))}
         </motion.div>
-      </div>
+      </motion.div>
 
       <div className="px-4 space-y-5 max-w-lg mx-auto">
         {/* ─── INCOMPLETE-PROFILE BANNER ─── */}
@@ -769,7 +774,7 @@ function MiniAvatar({ member }: { member: Member }) {
 }
 
 function AppTile({
-  icon, label, gradient, onClick, comingSoon, tooltip,
+  icon, label, gradient, onClick, comingSoon, tooltip, index = 0,
 }: {
   icon: string
   label: string
@@ -781,10 +786,16 @@ function AppTile({
   /** Native title attribute — quick hover hint without pulling in a
    *  custom tooltip component on a low-density grid. */
   tooltip?: string
+  /** Position in the grid — drives the staggered fade-in so tiles
+   *  ripple onto the dashboard instead of all appearing at once. */
+  index?: number
 }) {
   return (
     <motion.button
-      whileHover={{ y: -3 }}
+      initial={{ opacity: 0, y: 14, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ delay: 0.05 + index * 0.04, duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+      whileHover={{ y: -4, scale: 1.02 }}
       whileTap={{ scale: 0.96 }}
       onClick={onClick}
       title={tooltip}
