@@ -280,11 +280,11 @@ export default function Dashboard({ demoMode }: Props) {
         {/* Top row: logo / date / actions */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-white shadow-lg shadow-emerald-200/50 ring-1 ring-emerald-100 flex items-center justify-center">
-              <BrandMark size={32} />
+            <div className="w-11 h-11 rounded-2xl bg-white shadow-lg shadow-cyan-200/50 ring-1 ring-cyan-100 flex items-center justify-center overflow-hidden">
+              <BrandMark size={44} />
             </div>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#8E8E93] leading-none">
+              <p className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-[#1C1C1E] leading-none">
                 {t.appName}
               </p>
               <p className="text-sf-caption text-[#636366] mt-0.5">{dateStr}</p>

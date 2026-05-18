@@ -44,11 +44,15 @@ export default function Landing() {
         utilities are physical and do not mirror with `dir`.
       */}
       <header className="relative z-20 h-[68px] px-5 sm:px-8">
-        <div className="absolute top-1/2 -translate-y-1/2 left-5 sm:left-8 flex items-center gap-2">
-          <div className="w-9 h-9 rounded-2xl bg-white flex items-center justify-center shadow-md shadow-emerald-200/40 ring-1 ring-emerald-100/60">
-            <BrandMark size={28} />
+        <div className="absolute top-1/2 -translate-y-1/2 left-5 sm:left-8 flex items-center gap-2.5">
+          {/* Glyph tile — slimmer padding so the mark fills the tile
+              edge-to-edge instead of swimming in whitespace. */}
+          <div className="w-10 h-10 rounded-2xl bg-white flex items-center justify-center shadow-md shadow-cyan-200/40 ring-1 ring-cyan-100/60 overflow-hidden">
+            <BrandMark size={40} />
           </div>
-          <span className="font-semibold text-[15px] text-[#1C1C1E]">{t.appName}</span>
+          <span className="font-extrabold text-[15px] tracking-[0.04em] uppercase text-[#1C1C1E]">
+            {t.appName}
+          </span>
         </div>
         <div className="absolute top-1/2 -translate-y-1/2 right-5 sm:right-8 flex items-center gap-2">
           <QuickAccessMenu variant="glass" />
@@ -63,32 +67,57 @@ export default function Landing() {
       </header>
 
       {/* Hero */}
-      <section className="relative z-10 px-5 sm:px-8 pt-8 sm:pt-16 pb-20 max-w-5xl mx-auto text-center">
+      <section className="relative z-10 px-5 sm:px-8 pt-6 sm:pt-10 pb-20 max-w-5xl mx-auto text-center">
+        {/* Glyph: large, prominent, with a gentle floating loop so the
+            hero feels alive without distracting from the content. The
+            initial mount animation scales+fades it in. */}
         <motion.div
-          initial={{ opacity: 0, y: 28 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+          initial={{ opacity: 0, scale: 0.85, y: 24 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+          className="mx-auto w-[200px] sm:w-[260px] h-[200px] sm:h-[260px]"
         >
-          {/* Hero brand artwork — the authored logo (glyph + wordmark).
-              Sized to fluidly fill ~70% of the hero width on mobile and
-              cap at ~360px on desktop so it doesn't crowd the headline
-              beneath it. */}
-          <img
-            src="/logo-full.png"
+          <motion.img
+            src="/icon-app.png"
             alt="InfiniTree"
-            width={360}
-            height={460}
-            className="mx-auto mb-6 w-[220px] sm:w-[300px] h-auto select-none"
+            width={520}
+            height={520}
+            className="w-full h-full object-contain select-none drop-shadow-[0_18px_36px_rgba(31,190,196,0.28)]"
             draggable={false}
+            animate={{ y: [0, -8, 0] }}
+            transition={{ duration: 5.2, repeat: Infinity, ease: 'easeInOut' }}
           />
-          <h1 className="text-[36px] sm:text-[56px] leading-[1.05] font-bold tracking-tight text-[#1C1C1E]">
+        </motion.div>
+
+        {/* Animated INFINITREE wordmark — letters stagger-fade in, then
+            a continuous gradient sweep gives the word a subtle shimmer. */}
+        <div className="mt-4 sm:mt-6 flex justify-center gap-[0.04em] sm:gap-[0.05em]" aria-label="InfiniTree">
+          {'INFINITREE'.split('').map((ch, i) => (
+            <motion.span
+              key={i}
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 + i * 0.05, duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+              className="infinitree-wordmark-letter text-[40px] sm:text-[64px] font-black tracking-[0.04em] leading-none"
+            >
+              {ch}
+            </motion.span>
+          ))}
+        </div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1.05, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <h1 className="mt-5 sm:mt-8 text-[26px] sm:text-[40px] leading-[1.1] font-bold tracking-tight text-[#1C1C1E]">
             {t.landingHeroTitle}
             <br />
             <span className="bg-gradient-to-r from-[#4ED88E] via-[#1FBEC4] to-[#1A7AC9] bg-clip-text text-transparent">
               {t.landingHeroTitleAccent}
             </span>
           </h1>
-          <p className="mt-5 sm:mt-7 text-[15px] sm:text-[18px] leading-relaxed text-[#3A3A3C] max-w-2xl mx-auto">
+          <p className="mt-4 sm:mt-6 text-[15px] sm:text-[18px] leading-relaxed text-[#3A3A3C] max-w-2xl mx-auto">
             {t.landingHeroSubtitle}
           </p>
 

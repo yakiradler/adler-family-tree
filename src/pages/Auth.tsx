@@ -153,8 +153,8 @@ export default function Auth({ demoMode = false, onDemoEnter }: Props) {
         <div className="text-center mb-8">
           <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.1, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="w-16 h-16 bg-white rounded-3xl mx-auto mb-4 flex items-center justify-center shadow-lg shadow-emerald-200/60 ring-1 ring-emerald-100">
-            <BrandMark size={44} />
+            className="w-20 h-20 bg-white rounded-3xl mx-auto mb-4 flex items-center justify-center shadow-lg shadow-cyan-200/60 ring-1 ring-cyan-100 overflow-hidden">
+            <BrandMark size={80} />
           </motion.div>
           <h1 className="text-sf-title2 text-[#1C1C1E]">{t.authTitle}</h1>
           <p className="text-sf-subhead text-[#8E8E93] mt-1">
