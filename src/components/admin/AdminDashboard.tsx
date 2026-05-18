@@ -146,6 +146,13 @@ export default function AdminDashboard() {
           options: {
             shouldCreateUser: true,
             data: { full_name: inviteName.trim(), invited_role: inviteRole },
+            // Pin the magic-link target to this origin so the invite
+            // works regardless of what Site URL the Supabase dashboard
+            // is currently holding. Without this the magic link points
+            // to whatever Site URL was configured (often still
+            // localhost on fresh projects), so invites would land on a
+            // broken redirect.
+            emailRedirectTo: `${window.location.origin}/`,
           },
         })
         if (!error) inviteOutcome = 'magic-link'
@@ -707,7 +714,9 @@ function UserRow({
   const handleReset = async () => {
     if (demo) { alert(t.adminDemoAlert); return }
     if (!user.email) return
-    await supabase.auth.resetPasswordForEmail(user.email)
+    await supabase.auth.resetPasswordForEmail(user.email, {
+      redirectTo: `${window.location.origin}/`,
+    })
     alert(`${t.adminSendReset} ✓`)
   }
 

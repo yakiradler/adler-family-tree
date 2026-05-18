@@ -89,8 +89,19 @@ export default function Auth({ demoMode = false, onDemoEnter }: Props) {
         return
       }
       if (mode === 'signup') {
+        // Pin the email-confirmation link to whatever origin the user
+        // is signing up from. Without this, Supabase uses the project's
+        // Site URL — which defaults to http://localhost:3000 on fresh
+        // projects, so a real visitor would get a confirmation link
+        // that goes nowhere. Sending `emailRedirectTo` explicitly makes
+        // the email always work, regardless of dashboard config drift.
         const { data, error } = await supabase.auth.signUp({
-          email, password, options: { data: { full_name: fullName } },
+          email,
+          password,
+          options: {
+            data: { full_name: fullName },
+            emailRedirectTo: `${window.location.origin}/`,
+          },
         })
         if (error) throw error
         // Supabase returns a session immediately when email-confirmation
