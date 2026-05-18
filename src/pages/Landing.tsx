@@ -69,6 +69,18 @@ export default function Landing() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
         >
+          {/* Hero brand artwork — the authored logo (glyph + wordmark).
+              Sized to fluidly fill ~70% of the hero width on mobile and
+              cap at ~360px on desktop so it doesn't crowd the headline
+              beneath it. */}
+          <img
+            src="/logo-full.png"
+            alt="InfiniTree"
+            width={360}
+            height={460}
+            className="mx-auto mb-6 w-[220px] sm:w-[300px] h-auto select-none"
+            draggable={false}
+          />
           <h1 className="text-[36px] sm:text-[56px] leading-[1.05] font-bold tracking-tight text-[#1C1C1E]">
             {t.landingHeroTitle}
             <br />
