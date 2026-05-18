@@ -80,7 +80,7 @@ export default function Landing() {
           className="mx-auto w-[380px] sm:w-[500px] h-[380px] sm:h-[500px] max-w-full"
         >
           <motion.img
-            src="/icon-app.png"
+            src="/icon-app-glyph.png"
             alt="InfiniTree"
             width={1000}
             height={1000}

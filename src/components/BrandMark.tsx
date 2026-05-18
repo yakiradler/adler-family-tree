@@ -20,10 +20,14 @@ type Props = {
 }
 
 export default function BrandMark({ size = 32, className, static: noAnim = false }: Props) {
+  // In-app surfaces always use the transparent-bg glyph so the mark
+  // sits on whatever container/page background it lands on, with no
+  // redundant tile around it. The OS home-screen icon (icon-app.png)
+  // is a separate asset that keeps the gradient tile baked in.
   if (noAnim) {
     return (
       <img
-        src="/icon-app.png"
+        src="/icon-app-glyph.png"
         width={size}
         height={size}
         alt="InfiniTree"
@@ -36,7 +40,7 @@ export default function BrandMark({ size = 32, className, static: noAnim = false
   }
   return (
     <motion.img
-      src="/icon-app.png"
+      src="/icon-app-glyph.png"
       width={size}
       height={size}
       alt="InfiniTree"
