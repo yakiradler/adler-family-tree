@@ -702,27 +702,47 @@ function ChoiceCard({
   desc: string
   icon: string
 }) {
+  // Cards must read as TAPPABLE at a glance — a real video showed
+  // someone staring at step 1 of the wizard for 5+ seconds without
+  // realising they had to pick one of the two options. The previous
+  // styling used `border-transparent` + a faint grey fill, which
+  // looked like a passive info tile, not an interactive control.
+  //
+  // Now the card always carries a visible border + a soft shadow, an
+  // empty radio dot on the right that fills when selected, and a
+  // spring-y tap response. Hovering also lifts the card so the user
+  // can tell their pointer is over something clickable on desktop.
   return (
-    <button
+    <motion.button
       type="button"
       onClick={onClick}
-      className={`w-full p-4 rounded-2xl border-2 transition-all text-start flex items-start gap-3 ${
+      whileHover={{ y: -2 }}
+      whileTap={{ scale: 0.98 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+      className={`w-full p-4 rounded-2xl border-2 text-start flex items-center gap-3 shadow-sm transition-colors ${
         selected
-          ? 'border-[var(--accent,#007AFF)] bg-[var(--accent-soft,rgba(0,122,255,0.08))]'
-          : 'border-transparent bg-[#F9F9FB] hover:bg-[#F2F2F7]'
+          ? 'border-[var(--accent,#007AFF)] bg-[var(--accent-soft,rgba(0,122,255,0.10))] shadow-md'
+          : 'border-[#E5E5EA] bg-white hover:bg-[#F9F9FB] hover:border-[#C7C7CC]'
       }`}
     >
-      <span className="text-2xl flex-shrink-0">{icon}</span>
+      <span className="text-3xl flex-shrink-0">{icon}</span>
       <div className="flex-1 min-w-0">
         <p className="text-sf-subhead font-semibold text-[#1C1C1E]">{title}</p>
         <p className="text-[11px] text-[#636366] mt-0.5">{desc}</p>
       </div>
-      {selected && (
-        <div className="w-5 h-5 rounded-full bg-[var(--accent,#007AFF)] text-white flex items-center justify-center text-[10px] flex-shrink-0">
-          ✓
-        </div>
-      )}
-    </button>
+      {/* Radio-style indicator — empty when idle, filled with a check
+          when chosen. Always present so the affordance ("pick one")
+          is legible even before any card is selected. */}
+      <div
+        className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
+          selected
+            ? 'bg-[var(--accent,#007AFF)] text-white'
+            : 'bg-white border-2 border-[#C7C7CC]'
+        }`}
+      >
+        {selected ? <span className="text-[11px] leading-none">✓</span> : null}
+      </div>
+    </motion.button>
   )
 }
 
