@@ -157,10 +157,16 @@ export default function TreePage({ demoMode }: Props) {
       {/* Demo banner hidden for clean UX */}
 
       {/* Floating top bar — hidden in fullscreen mode AND while
-          the focused-centric overlay is on. */}
+          the focused-centric overlay is on.
+          Switched from `absolute` to `fixed` so the back-arrow stays
+          docked at the top of the viewport even when the user pans
+          the tree canvas. Added the `safe-top` shim so on mobile
+          PWAs the bar doesn't get tucked under the OS status bar —
+          a real user reported "I can't see the white top bar with
+          the back button" on the standalone-installed app. */}
       {!hideChrome && (
-      <div className="absolute top-0 left-0 right-0 z-30 px-3 pt-3 no-print" style={{ top: demoMode ? 20 : 0 }}>
-        <div className="glass rounded-2xl px-3 py-2 flex items-center gap-3 shadow-glass-sm max-w-[600px] mx-auto">
+      <div className="fixed top-0 left-0 right-0 z-40 px-3 pt-3 safe-top no-print" style={demoMode ? { paddingTop: 'calc(env(safe-area-inset-top, 0px) + 20px)' } : undefined}>
+        <div className="glass-strong rounded-2xl px-3 py-2 flex items-center gap-3 shadow-glass-sm max-w-[600px] mx-auto">
           <Tooltip content={t.tipBackHome} placement="bottom" align="start">
             <motion.button whileTap={{ scale: 0.9 }} onClick={() => navigate('/home')}
               aria-label={t.tipBackHome}
@@ -247,7 +253,7 @@ export default function TreePage({ demoMode }: Props) {
                 The button itself moves with the visibility state so
                 its label is unambiguous. */}
             {!hideChrome && (
-            <div className={`absolute z-30 no-print top-[72px] ${isRTL(lang) ? 'left-3' : 'right-3'}`} data-tour="tree-hamburger">
+            <div className={`fixed z-30 no-print ${isRTL(lang) ? 'left-3' : 'right-3'}`} style={{ top: 'calc(env(safe-area-inset-top, 0px) + 88px)' }} data-tour="tree-hamburger">
             <Tooltip content={t.tipTreeControlsToggle} placement="bottom" align="end">
             <motion.button
               type="button"

@@ -23,8 +23,15 @@ import type { LayoutNode } from './treeLayout'
  *     they never overlap.
  */
 
-const MM_WIDTH = 180
-const MM_MAX_HEIGHT = 130
+// Default dimensions for a "real" populated tree. Small trees (the
+// new-user 5-person skeleton, for instance) get a smaller minimap so
+// it doesn't visually outweigh the actual canvas content — see the
+// `dims()` helper inside the component which scales these down on
+// low node counts.
+const MM_WIDTH_DEFAULT = 180
+const MM_MAX_HEIGHT_DEFAULT = 130
+const MM_WIDTH_COMPACT = 110
+const MM_MAX_HEIGHT_COMPACT = 80
 
 export interface TreeMiniMapProps {
   nodes: LayoutNode[]
@@ -67,6 +74,12 @@ export default function TreeMiniMap({
   // ratios so the minimap rectangle matches whichever dimension is the
   // binding constraint (and we letterbox the other axis with empty
   // space on top of the gradient — cheap, hard to misread).
+  //
+  // Compact-on-small-trees: when the tree is sparse (≤10 nodes) the
+  // default 180-wide minimap dwarfs the actual canvas. Drop down to
+  // 110 wide / 80 tall in that regime so the corner stays subtle.
+  const MM_WIDTH = nodes.length <= 10 ? MM_WIDTH_COMPACT : MM_WIDTH_DEFAULT
+  const MM_MAX_HEIGHT = nodes.length <= 10 ? MM_MAX_HEIGHT_COMPACT : MM_MAX_HEIGHT_DEFAULT
   const { mmW, mmH, mmScale } = useMemo(() => {
     if (canvasW <= 0 || canvasH <= 0) {
       return { mmW: MM_WIDTH, mmH: 90, mmScale: 1 }
@@ -79,7 +92,7 @@ export default function TreeMiniMap({
       mmH: Math.max(40, Math.round(canvasH * s)),
       mmScale: s,
     }
-  }, [canvasW, canvasH])
+  }, [canvasW, canvasH, MM_WIDTH, MM_MAX_HEIGHT])
 
   // Viewport rectangle in minimap coords. (-tx/scale, -ty/scale) is the
   // top-left of the visible canvas window in canvas coords; size is
