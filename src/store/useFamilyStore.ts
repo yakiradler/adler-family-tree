@@ -5,37 +5,37 @@ import type {
   AccessRequest, UserRole, FamilyTree, MemberNote,
 } from '../types'
 
-// Surface Supabase write failures to the UI. Until now every mutation
-// swallowed errors silently in a try/catch, which is why an
-// RLS-blocked update could appear to "save" (optimistic local state +
-// green toast) but vanish on refresh once fetchMembers/fetchRelationships
-// pulled the unchanged server state back. The PersistenceIndicator
-// listens for this event and shows an amber "saved locally — server
-// sync failed" pill so the user knows their change didn't reach the db.
+// Surface Supabase failures to the UI. The "נשמר מקומית — סנכרון
+// לשרת נכשל" toast only makes sense for WRITES (the user did an
+// action, we kept it locally, but it didn't propagate). For READS —
+// fetchMembers / fetchEditRequests / fetchAccessRequests — there's
+// nothing to "save locally"; an RLS-blocked fetch just means the
+// app couldn't load some data, which is a different UX concern.
 //
-// Two guardrails so this toast doesn't become noise:
-//   1. In pure demo mode (no env vars) every call fails by definition —
-//      that's the *expected* state, so we silence the dispatch entirely.
-//      The console.warn stays for debugging.
-//   2. With real env vars but a persistent failure (e.g. RLS misconfig)
-//      a user reported the toast popping on EVERY action — typing in a
-//      text field triggers updateMember per keystroke, so the screen
-//      was constantly showing the warning. We throttle the dispatch to
-//      at most one toast per ~20s so the first failure is still
-//      visible but the rest stay silent until something changes.
+// A real user reported the toast popping up on every page navigation:
+// landing the dashboard fired fetchEditRequests, RLS blocked it for
+// non-admins, the toast appeared, they navigated to /tree, same
+// failure surfaced again. The page-by-page toast was misleading
+// ("nothing was 'saved locally' — it was a read") AND noisy.
+//
+// Split the helper:
+//   • `kind: 'read'`  → console.warn only. No UI surface.
+//   • `kind: 'write'` → throttled toast (≤ 1 per 20s) on real configs;
+//                       silent in demo mode (local-only is expected).
 const REMOTE_FAIL_THROTTLE_MS = 20_000
 let lastRemoteFailureAt = 0
 
-function reportSupabaseFailure(op: string, err: unknown) {
+function reportSupabaseFailure(op: string, err: unknown, kind: 'read' | 'write' = 'write') {
   if (typeof window === 'undefined') return
   const message =
     err instanceof Error ? err.message
     : typeof err === 'object' && err && 'message' in err ? String((err as { message: unknown }).message)
     : 'unknown'
   // eslint-disable-next-line no-console
-  console.warn(`[supabase ${op}]`, err)
+  console.warn(`[supabase ${kind} ${op}]`, err)
 
-  if (!isSupabaseConfigured) return  // demo mode — local-only is expected
+  if (kind === 'read') return                   // read failure — log only
+  if (!isSupabaseConfigured) return             // demo mode — local-only is expected
 
   const now = Date.now()
   if (now - lastRemoteFailureAt < REMOTE_FAIL_THROTTLE_MS) return
@@ -219,7 +219,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       // forever even when the backend was returning errors (RLS
       // blocked, table missing). We now log + keep whatever optimistic
       // state was there before so the UI doesn't silently empty out.
-      reportSupabaseFailure('fetchEditRequests', error)
+      reportSupabaseFailure('fetchEditRequests', error, 'read')
       return
     }
 
@@ -341,7 +341,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       .select(`*, profiles:requester_id(full_name)`)
       .order('created_at', { ascending: false })
     if (error) {
-      reportSupabaseFailure('fetchAccessRequests', error)
+      reportSupabaseFailure('fetchAccessRequests', error, 'read')
       return  // keep optimistic state intact
     }
     const mapped: AccessRequest[] = (data ?? []).map((r: Record<string, unknown>) => ({
