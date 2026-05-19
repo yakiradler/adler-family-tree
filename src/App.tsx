@@ -14,7 +14,7 @@ import PersistenceIndicator from './components/PersistenceIndicator'
 import InstallPrompt from './components/InstallPrompt'
 import VersionUpdateModal from './components/VersionUpdateModal'
 import { ADLER_MEMBERS, ADLER_RELATIONSHIPS } from './data/adlerFamily'
-import { isPendingOnboarding } from './lib/pendingOnboarding'
+import { isPendingOnboarding, clearPendingOnboarding } from './lib/pendingOnboarding'
 import type { Profile } from './types'
 import type { Session } from '@supabase/supabase-js'
 
@@ -298,6 +298,21 @@ export default function App() {
       window.removeEventListener('storage', sync)
     }
   }, [])
+
+  // Admins / masters never need to walk through onboarding — they
+  // were promoted by DB action, not by self-service signup, and the
+  // wizard's purpose (collecting role + tree-join intent for admin
+  // review) doesn't apply to someone who's already past that step.
+  // Subscribing to the store here picks up the role transition the
+  // moment Supabase hydrates the profile, so a privileged user who
+  // got swept into /onboarding by a stale signup flag is bounced out
+  // automatically.
+  const profile = useFamilyStore((s) => s.profile)
+  useEffect(() => {
+    if (profile && (profile.role === 'admin' || profile.role === 'master')) {
+      if (isPendingOnboarding()) clearPendingOnboarding()
+    }
+  }, [profile])
 
   if (authLoading) {
     return (

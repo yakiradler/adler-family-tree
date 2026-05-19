@@ -158,6 +158,7 @@ export default function OnboardingWizard() {
   const submit = async () => {
     if (!profile) return
     setBusy(true)
+    setError(null)
     try {
       const fullName = `${a.firstName.trim()} ${a.lastName.trim()}`.trim()
       // 1. Persist profile-level fields + mark onboarding complete.
@@ -228,10 +229,26 @@ export default function OnboardingWizard() {
       }
       // The user is done with the gate — clear the localStorage flag
       // so App.tsx's route guard stops sending them to /onboarding the
-      // next time they navigate anywhere. We do this last, only after
-      // both the profile patch and the tree/access-request side-effects
-      // committed, so a failure mid-flight leaves them where they were
-      // and the gate keeps catching them on retry.
+      // next time they navigate anywhere.
+      clearPendingOnboarding()
+      setStep(5)
+    } catch (err) {
+      // Previously the `finally` block ran without ever surfacing
+      // failures, so an RLS-blocked submit would leave the user
+      // staring at the same form with the spinner gone but no
+      // feedback — they thought the app was frozen. Now we surface
+      // the message AND clear the gate so they're not trapped: their
+      // profile changes can sync later (optimistic updates already
+      // committed locally), and the admin can fill in the gaps.
+      const message = err instanceof Error ? err.message : String(err)
+      setError(
+        lang === 'he'
+          ? `שמירה לשרת נכשלה — נשמר מקומית. הפרטים יסונכרנו כשהחיבור יחזור. (${message})`
+          : `Couldn't reach the server — saved locally. Details will sync when the connection returns. (${message})`,
+      )
+      // Don't strand the user. They've already done the work; let
+      // them through to the app even if the round-trip to the DB
+      // didn't land.
       clearPendingOnboarding()
       setStep(5)
     } finally {
@@ -254,15 +271,9 @@ export default function OnboardingWizard() {
         transition={{ type: 'spring', stiffness: 320, damping: 28 }}
         className="w-full max-w-md bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 overflow-hidden"
       >
-        {/* Progress strip */}
+        {/* Progress strip + skip shortcut */}
         {step <= TOTAL_STEPS && (
           <div className="px-6 pt-5">
-            {/* The skip-to-home shortcut was removed: every new user must
-                complete onboarding so we know whether to land them on
-                their own brand-new tree (step 1 = "new") or on an
-                existing tree they have an invite to. Without that choice
-                we'd default everyone onto the demo's Adler-family tree,
-                which is what triggered the bug report. */}
             <div className="flex items-center gap-1.5">
               {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((s) => (
                 <div
@@ -273,9 +284,29 @@ export default function OnboardingWizard() {
                 />
               ))}
             </div>
-            <p className="text-[11px] text-[#8E8E93] mt-2">
-              {t.onbStep} {step} {t.onbOf} {TOTAL_STEPS}
-            </p>
+            <div className="flex items-center justify-between mt-2">
+              <p className="text-[11px] text-[#8E8E93]">
+                {t.onbStep} {step} {t.onbOf} {TOTAL_STEPS}
+              </p>
+              {/* Skip-for-now: previously removed because the wizard
+                  was the only place that captured the "new tree vs.
+                  invite" choice. A real bug report showed users
+                  getting trapped here when a server write failed (or
+                  when they simply wanted to look around first), so
+                  the escape hatch is back — clearing the flag drops
+                  them straight onto the dashboard. They can always
+                  re-open the wizard from the dashboard banner. */}
+              <button
+                type="button"
+                onClick={() => {
+                  clearPendingOnboarding()
+                  navigate('/home')
+                }}
+                className="text-[11px] font-semibold text-[#8E8E93] hover:text-[#1C1C1E] transition-colors"
+              >
+                {lang === 'he' ? 'דלג בינתיים' : 'Skip for now'}
+              </button>
+            </div>
           </div>
         )}
 
