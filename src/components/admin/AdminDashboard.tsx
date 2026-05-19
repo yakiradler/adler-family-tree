@@ -71,6 +71,18 @@ export default function AdminDashboard() {
   // Supabase project), show a banner pointing the admin to the setup
   // doc rather than letting them think the app is broken.
   const [backendError, setBackendError] = useState<string | null>(null)
+  // Tracks whether the CURRENT user is genuinely admin in the DB
+  // (not just admin in the local store). When `false`, every
+  // mutation will be silently RLS-blocked even though the UI looks
+  // ready — surfacing this lets us tell the user what to fix instead
+  // of leaving them confused after their action snaps back. `email`
+  // is captured so we can pre-fill the diagnostic SQL exactly.
+  const [dbAdminStatus, setDbAdminStatus] = useState<{
+    ok: boolean
+    role: string | null
+    active: boolean | null
+    email: string | null
+  } | null>(null)
   const [editTarget, setEditTarget] = useState<Member | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [inviteEmail, setInviteEmail] = useState('')
@@ -267,7 +279,34 @@ export default function AdminDashboard() {
       } else {
         setBackendError(null)
       }
-      setUsers((data ?? []) as AdminUser[])
+      const rows = (data ?? []) as AdminUser[]
+      setUsers(rows)
+
+      // Verify the current user's DB-side admin status against the
+      // policy: is_admin(uid) requires role='admin' AND active=true.
+      // Without this check the local store can say "admin" while the
+      // DB row says otherwise (e.g. promote-SQL was never run), and
+      // every mutation will silently fail RLS until the user fixes
+      // the drift. We also grab their email so the banner below can
+      // hand them ready-to-paste diagnostic SQL.
+      if (profile) {
+        const meRow = rows.find(u => u.id === profile.id)
+        const { data: authData } = await supabase.auth.getUser()
+        const email = authData.user?.email ?? null
+        if (!meRow) {
+          setDbAdminStatus({ ok: false, role: null, active: null, email })
+        } else {
+          const role = (meRow as unknown as { role?: string }).role ?? null
+          const active = (meRow as unknown as { active?: boolean }).active
+          const activeBool = active === undefined ? true : !!active
+          setDbAdminStatus({
+            ok: role === 'admin' && activeBool,
+            role,
+            active: activeBool,
+            email,
+          })
+        }
+      }
       setUsersLoading(false)
     })()
   }, [profile])
@@ -345,6 +384,69 @@ export default function AdminDashboard() {
               >
                 {lang === 'he' ? '← פתח את מדריך החיבור' : 'Open the setup guide →'}
               </a>
+            </div>
+          </motion.div>
+        )}
+
+        {/*
+          Admin-drift banner. Fires when the LOCAL store says the
+          user is admin but the DB-side row says otherwise (wrong
+          role, or active=false) — which is what triggers the silent
+          RLS block we saw on "remove user". The banner gives the
+          user the exact SQL to fix it with their email pre-filled,
+          and a one-click jump to the project's SQL Editor.
+        */}
+        {SUPABASE_CONFIGURED && dbAdminStatus && !dbAdminStatus.ok && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl border border-[#FF3B30]/40 bg-[#FF3B30]/10 p-3"
+          >
+            <div className="flex items-start gap-2">
+              <span className="text-lg leading-none">🚫</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sf-subhead font-bold text-[#1C1C1E]">
+                  {lang === 'he'
+                    ? 'אינך admin בפועל ב-Supabase'
+                    : "You're not actually admin in Supabase"}
+                </p>
+                <p className="text-[11px] text-[#3A3A3C] leading-snug mt-0.5">
+                  {lang === 'he'
+                    ? `המערכת המקומית מציגה אותך כ-admin, אבל ב-DB: role='${dbAdminStatus.role ?? 'לא קיים'}', active=${dbAdminStatus.active ?? 'לא קיים'}. RLS חוסם את כל הפעולות עד שתתקן את זה.`
+                    : `The local store shows you as admin but the DB row reads role='${dbAdminStatus.role ?? 'missing'}', active=${dbAdminStatus.active ?? 'missing'}. RLS will block every mutation until you fix this.`}
+                </p>
+                {/* Pre-filled SQL — one-shot fix. */}
+                <pre className="mt-2 bg-[#1C1C1E] text-[#34C759] text-[11px] leading-snug rounded-xl p-2.5 overflow-x-auto font-mono">
+{`update public.profiles
+set role = 'admin', active = true
+where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
+                </pre>
+                <div className="flex flex-wrap items-center gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sql = `update public.profiles\nset role = 'admin', active = true\nwhere email = '${dbAdminStatus.email ?? ''}';`
+                      navigator.clipboard?.writeText(sql).catch(() => {})
+                    }}
+                    className="text-[11px] font-bold bg-white/80 border border-[#FF3B30]/30 text-[#FF3B30] rounded-lg px-2.5 py-1 hover:bg-white"
+                  >
+                    {lang === 'he' ? '📋 העתק SQL' : '📋 Copy SQL'}
+                  </button>
+                  <a
+                    href="https://supabase.com/dashboard/project/_/sql/new"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-bold text-[#FF3B30] underline"
+                  >
+                    {lang === 'he' ? '← פתח SQL Editor' : 'Open SQL Editor →'}
+                  </a>
+                  <span className="text-[10px] text-[#8E8E93]">
+                    {lang === 'he'
+                      ? 'אחרי שתריץ — התנתק והתחבר מחדש'
+                      : 'After running — sign out and back in'}
+                  </span>
+                </div>
+              </div>
             </div>
           </motion.div>
         )}
