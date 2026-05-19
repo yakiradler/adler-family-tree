@@ -79,10 +79,33 @@ export default function AdminDashboard() {
   const [inviting, setInviting] = useState(false)
 
   // ─── CRM actions (work in demo via local state; in live via Supabase) ──
+  //
+  // Important: Supabase RLS is annoying with mutations. When a policy
+  // blocks an UPDATE or DELETE, the request often comes back with
+  // `error == null` BUT 0 rows affected — there's just nothing the
+  // current user is allowed to touch. Without `.select()`, our code
+  // can't tell "no rows because nothing matched" from "no rows because
+  // RLS rejected it". Every mutation below therefore selects back the
+  // changed rows; an empty array is treated as a silent block and
+  // surfaced as a "did not persist — likely RLS" error so the user
+  // doesn't refresh and find their action undone.
+  const reportRlsBlock = (verb: 'update' | 'delete') => {
+    alert(
+      lang === 'he'
+        ? `הפעולה לא נשמרה בשרת — ייתכן שאין לך הרשאת admin ב-Supabase.\nרוץ ב-SQL Editor:\nupdate public.profiles set role='admin' where email='<your-email>';`
+        : `Action did not persist — you likely lack admin rights in Supabase.\nRun in SQL Editor:\nupdate public.profiles set role='admin' where email='<your-email>';`,
+    )
+    void verb
+  }
+
   const changeUserRole = async (u: AdminUser, role: UserRole) => {
+    const prev = users
     setUsers(us => us.map(x => x.id === u.id ? { ...x, role } : x))
-    if (SUPABASE_CONFIGURED) {
-      await supabase.from('profiles').update({ role }).eq('id', u.id)
+    if (!SUPABASE_CONFIGURED) return
+    const { data, error } = await supabase.from('profiles').update({ role }).eq('id', u.id).select()
+    if (error || !data || data.length === 0) {
+      setUsers(prev)
+      reportRlsBlock('update')
     }
   }
   const changeMasterPerm = async (u: AdminUser, key: PermissionKey, value: boolean) => {
@@ -93,9 +116,13 @@ export default function AdminDashboard() {
   const toggleUserActive = async (u: AdminUser) => {
     const cur = (u as unknown as { active?: boolean }).active !== false
     const next = !cur
+    const prev = users
     setUsers(us => us.map(x => x.id === u.id ? ({ ...x, active: next } as AdminUser) : x))
-    if (SUPABASE_CONFIGURED) {
-      await supabase.from('profiles').update({ active: next }).eq('id', u.id)
+    if (!SUPABASE_CONFIGURED) return
+    const { data, error } = await supabase.from('profiles').update({ active: next }).eq('id', u.id).select()
+    if (error || !data || data.length === 0) {
+      setUsers(prev)
+      reportRlsBlock('update')
     }
   }
   const removeUser = async (u: AdminUser) => {
@@ -116,10 +143,13 @@ export default function AdminDashboard() {
       } catch { /* quota — accept the loss, demo is single-session anyway */ }
       return
     }
-    // Live mode: hit supabase. Surface the error if RLS blocks (the
-    // previous version swallowed the failure and the user reappeared
-    // on next refresh with no warning).
-    const { error } = await supabase.from('profiles').delete().eq('id', u.id)
+    // Live mode: hit supabase + verify the row was actually removed.
+    // Previously this only checked `error`, but RLS can return success
+    // with 0 rows affected (= "you weren't allowed to touch any of
+    // those") — the user thought the delete worked, refreshed, and
+    // the profile reappeared. Selecting back the deleted rows lets us
+    // catch that silent block.
+    const { data, error } = await supabase.from('profiles').delete().eq('id', u.id).select()
     if (error) {
       setUsers(prev)
       alert(
@@ -127,6 +157,12 @@ export default function AdminDashboard() {
           ? `לא ניתן למחוק את המשתמש: ${error.message}\nייתכן שאתה צריך הרשאת אדמין מלאה ב-Supabase.`
           : `Couldn't delete user: ${error.message}\nYou may need full Supabase admin rights.`,
       )
+      return
+    }
+    if (!data || data.length === 0) {
+      // RLS silent-block. Roll back so the UI matches the server.
+      setUsers(prev)
+      reportRlsBlock('delete')
     }
   }
   const inviteUser = async () => {
