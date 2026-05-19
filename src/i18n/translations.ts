@@ -320,6 +320,7 @@ export const translations = {
 
     // ── Friendly tooltip copy — readable for kids + adults ──
     tipTreeControlsToggle: 'תפריט אפשרויות התצוגה — מיקוד דינמי, סינון מתקדם, ומספר דורות',
+    tipTreeTutorial: 'מדריך',
     tipFocusedCentric: 'מצב מיקוד: מציג רק את האדם שבחרת ומשפחתו הקרובה',
     tipAdvancedFilter: 'סינון מתקדם: כהן/לוי, גרושים, נפטרים, חיפוש ועוד',
     tipDensityToggle: 'ממוקדת מציגה 3 דורות בלבד · מלאה מציגה את כל העץ',
@@ -965,6 +966,7 @@ export const translations = {
 
     // ── Tooltip copy — friendly for kids + adults ──
     tipTreeControlsToggle: 'View options menu — focus mode, advanced filter, and generation count',
+    tipTreeTutorial: 'Tutorial',
     tipFocusedCentric: 'Focus mode: shows only the selected person and their close family',
     tipAdvancedFilter: 'Advanced filter: Kohen/Levi, divorced, deceased, search and more',
     tipDensityToggle: 'Compact shows 3 generations only · Full shows the whole tree',

@@ -15,9 +15,15 @@ import { motion, AnimatePresence } from 'framer-motion'
  * Trigger behaviour (deliberately strict):
  *   • Mouse-enter / keyboard-focus  → open after `openDelay` ms.
  *   • Mouse-leave / blur            → close.
- *   • Click / tap                   → does NOT trigger the tooltip,
+ *   • Short tap                     → does NOT trigger the tooltip,
  *                                     and an active click on the
  *                                     wrapped element closes it.
+ *   • Long-press (touch hold ≥600ms)→ opens the tooltip on mobile.
+ *                                     Auto-dismisses after 2.5s OR on
+ *                                     the next tap anywhere. This is
+ *                                     the mobile equivalent of hover
+ *                                     and is the only way for touch
+ *                                     users to discover the labels.
  *
  * The previous version popped on every tap, which the user
  * explicitly called out as "really not good" — tooltips are for
@@ -59,6 +65,13 @@ export default function Tooltip({
   const wrapRef = useRef<HTMLSpanElement>(null)
   const bubbleRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<number | null>(null)
+  // Tracks whether the current open was triggered by a long-press
+  // (touch). Used to auto-dismiss the tooltip and to skip the
+  // ignore-next-focus latch when it's a legit long-press, not a
+  // synthetic post-tap focus event.
+  const longPressTimerRef = useRef<number | null>(null)
+  const longPressFiredRef = useRef(false)
+  const autoDismissRef = useRef<number | null>(null)
   // When the user taps the wrapped element, the browser fires
   // pointerdown → click → focus on the underlying button. The
   // focus alone would otherwise schedule the tooltip to open ~350 ms
@@ -74,12 +87,25 @@ export default function Tooltip({
       timerRef.current = null
     }
   }
+  const cancelLongPress = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+  }
+  const cancelAutoDismiss = () => {
+    if (autoDismissRef.current !== null) {
+      window.clearTimeout(autoDismissRef.current)
+      autoDismissRef.current = null
+    }
+  }
   const scheduleOpen = () => {
     cancelTimer()
     timerRef.current = window.setTimeout(() => setOpen(true), openDelay)
   }
   const close = () => {
     cancelTimer()
+    cancelAutoDismiss()
     setOpen(false)
   }
   const handleFocus = () => {
@@ -89,14 +115,50 @@ export default function Tooltip({
     }
     scheduleOpen()
   }
-  const handlePointerDown = () => {
-    // Touch/click cancels any pending hover-open AND prevents the
-    // synthetic focus that follows from reopening the tooltip.
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType === 'touch') {
+      // Long-press path: start a 600ms timer; if the finger stays
+      // down that long without moving, surface the tooltip the same
+      // way a hover would. Don't latch ignore-focus here so the
+      // tooltip can stay visible after the press.
+      longPressFiredRef.current = false
+      cancelLongPress()
+      longPressTimerRef.current = window.setTimeout(() => {
+        longPressFiredRef.current = true
+        setOpen(true)
+        // Auto-dismiss after a short reading window so the tooltip
+        // doesn't permanently cover the UI on touch devices that
+        // don't fire pointerleave.
+        cancelAutoDismiss()
+        autoDismissRef.current = window.setTimeout(() => setOpen(false), 2500)
+      }, 600)
+      return
+    }
+    // Mouse/keyboard tap → close + latch ignore-focus.
     ignoreNextFocus.current = true
     close()
   }
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (e.pointerType === 'touch') {
+      cancelLongPress()
+      // A short tap (timer not yet fired) should NOT show the
+      // tooltip — fall through to the normal close path.
+      if (!longPressFiredRef.current) {
+        ignoreNextFocus.current = true
+        close()
+      }
+      longPressFiredRef.current = false
+    }
+  }
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (e.pointerType === 'touch') cancelLongPress()
+  }
 
-  useEffect(() => () => cancelTimer(), [])
+  useEffect(() => () => {
+    cancelTimer()
+    cancelLongPress()
+    cancelAutoDismiss()
+  }, [])
 
   // Recompute position whenever the tooltip opens (and on scroll /
   // resize while open). We measure the bubble itself so the geometry
@@ -188,7 +250,12 @@ export default function Tooltip({
       // Tap on the wrapped child closes any pending / open tooltip
       // AND arms the ignore-next-focus latch so the synthetic focus
       // that fires immediately after a tap won't re-open the bubble.
+      // A LONG-press (touch only) is treated differently: it opens
+      // the tooltip on the 600 ms mark, mirroring desktop hover.
       onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      onPointerMove={handlePointerMove}
     >
       {children}
       {portalEl && createPortal(

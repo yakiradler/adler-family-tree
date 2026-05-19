@@ -41,6 +41,12 @@ export interface Profile {
   requested_role?: UserRole | null
   /** Granular per-feature flags managed by admin for `master` users. */
   master_permissions?: MasterPermissions
+  /** Account is active by default. Admin can flip this to revoke read access. */
+  active?: boolean
+  /** ISO timestamp of soft-deletion (admin "remove user"). When set
+   *  and within the past 30 days, App.tsx refuses to load the
+   *  session and signs the user out with a "suspended" notice. */
+  deleted_at?: string | null
 }
 
 /**

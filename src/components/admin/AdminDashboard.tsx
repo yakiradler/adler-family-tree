@@ -138,15 +138,23 @@ export default function AdminDashboard() {
     }
   }
   const removeUser = async (u: AdminUser) => {
-    if (!window.confirm(t.adminConfirmRemoveUser)) return
-    // Optimistic local removal so the row disappears immediately.
+    // Soft-delete with 30-day restore window. We don't touch
+    // auth.users (that needs the service-role key) — instead we
+    // mark profile.deleted_at = now(). The auth gate in App.tsx
+    // refuses the session for any user with a deleted_at in the
+    // past 30 days, AND the handle_new_user trigger preserves the
+    // deleted_at on re-login (migration 006). So the user is
+    // effectively locked out until the admin restores them via
+    // the "שחזר" button OR 30 days elapse.
+    const confirmMsg = lang === 'he'
+      ? `${t.adminConfirmRemoveUser}\n\nהמשתמש יושעה למשך 30 יום. תוכל לשחזר אותו בכל רגע על ידי לחיצה על "שחזר".`
+      : `${t.adminConfirmRemoveUser}\n\nThe user will be suspended for 30 days. You can restore them at any time using the "Restore" button.`
+    if (!window.confirm(confirmMsg)) return
+    const nowIso = new Date().toISOString()
+    // Optimistic local update so the row updates immediately.
     const prev = users
-    setUsers(us => us.filter(x => x.id !== u.id))
+    setUsers(us => us.map(x => x.id === u.id ? { ...x, deleted_at: nowIso } : x))
     if (!SUPABASE_CONFIGURED) {
-      // Demo mode: persist the local removal in localStorage so a
-      // page refresh doesn't bring the deleted user back. The
-      // useEffect below reads from this allow-list before showing
-      // the demo profile.
       try {
         const raw = window.localStorage.getItem('ft-admin-removed-users') ?? '[]'
         const list = JSON.parse(raw) as string[]
@@ -155,26 +163,40 @@ export default function AdminDashboard() {
       } catch { /* quota — accept the loss, demo is single-session anyway */ }
       return
     }
-    // Live mode: hit supabase + verify the row was actually removed.
-    // Previously this only checked `error`, but RLS can return success
-    // with 0 rows affected (= "you weren't allowed to touch any of
-    // those") — the user thought the delete worked, refreshed, and
-    // the profile reappeared. Selecting back the deleted rows lets us
-    // catch that silent block.
-    const { data, error } = await supabase.from('profiles').delete().eq('id', u.id).select()
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ deleted_at: nowIso })
+      .eq('id', u.id)
+      .select()
     if (error) {
       setUsers(prev)
       alert(
         lang === 'he'
-          ? `לא ניתן למחוק את המשתמש: ${error.message}\nייתכן שאתה צריך הרשאת אדמין מלאה ב-Supabase.`
-          : `Couldn't delete user: ${error.message}\nYou may need full Supabase admin rights.`,
+          ? `לא ניתן להשעות את המשתמש: ${error.message}`
+          : `Couldn't suspend user: ${error.message}`,
       )
       return
     }
     if (!data || data.length === 0) {
-      // RLS silent-block. Roll back so the UI matches the server.
       setUsers(prev)
-      reportRlsBlock('delete')
+      reportRlsBlock('update')
+    }
+  }
+
+  // Restore a soft-deleted user. Clears deleted_at; the next session
+  // for that user will load normally instead of being kicked.
+  const restoreUser = async (u: AdminUser) => {
+    const prev = users
+    setUsers(us => us.map(x => x.id === u.id ? { ...x, deleted_at: null } : x))
+    if (!SUPABASE_CONFIGURED) return
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ deleted_at: null })
+      .eq('id', u.id)
+      .select()
+    if (error || !data || data.length === 0) {
+      setUsers(prev)
+      reportRlsBlock('update')
     }
   }
   const inviteUser = async () => {
@@ -607,9 +629,11 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
                       t={t}
                       rtl={rtl}
                       demo={!SUPABASE_CONFIGURED}
+                      lang={lang}
                       onRoleChange={changeUserRole}
                       onToggleActive={toggleUserActive}
                       onRemove={removeUser}
+                      onRestore={restoreUser}
                       onMasterPermChange={changeMasterPerm}
                     />
                   ))}
@@ -830,15 +854,17 @@ function ProgressRow({ label, count, total, color }: { label: string; count: num
 }
 
 function UserRow({
-  user, t, rtl, demo, onRoleChange, onToggleActive, onRemove, onMasterPermChange,
+  user, t, rtl, demo, lang, onRoleChange, onToggleActive, onRemove, onRestore, onMasterPermChange,
 }: {
   user: AdminUser
   t: Translations
   rtl: boolean
   demo: boolean
+  lang: 'he' | 'en'
   onRoleChange: (u: AdminUser, role: UserRole) => void
   onToggleActive: (u: AdminUser) => void
   onRemove: (u: AdminUser) => void
+  onRestore: (u: AdminUser) => void
   onMasterPermChange: (u: AdminUser, key: PermissionKey, value: boolean) => void
 }) {
   const [showPerms, setShowPerms] = useState(false)
@@ -928,13 +954,30 @@ function UserRow({
           color="blue"
           icon="🛡"
         />
-        <ActionChip
-          label={t.adminRemoveUser}
-          onClick={() => onRemove(user)}
-          color="red"
-          icon="🗑"
-        />
+        {user.deleted_at ? (
+          <ActionChip
+            label={lang === 'he' ? 'שחזר' : 'Restore'}
+            onClick={() => onRestore(user)}
+            color="cyan"
+            icon="♻"
+          />
+        ) : (
+          <ActionChip
+            label={t.adminRemoveUser}
+            onClick={() => onRemove(user)}
+            color="red"
+            icon="🗑"
+          />
+        )}
       </div>
+
+      {user.deleted_at && (
+        <div className="mt-2 rounded-2xl bg-[#FFD60A]/15 px-3 py-2 text-[11px] text-[#A06E00] font-medium">
+          {lang === 'he'
+            ? `מושעה מאז ${new Date(user.deleted_at).toLocaleDateString('he-IL', { year: 'numeric', month: 'short', day: 'numeric' })} — יוסר אוטומטית אחרי 30 יום`
+            : `Suspended since ${new Date(user.deleted_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })} — auto-removed after 30 days`}
+        </div>
+      )}
 
       {/* Master permissions panel — only meaningful for masters,
           but admins implicitly have everything; shown if user toggles. */}

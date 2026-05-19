@@ -103,20 +103,16 @@ export default function TreeSwitcher({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.97 }}
             transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-            // Switched from `position: absolute` (centred under the
-            // chip — which sat off to one side of the top bar and
-            // therefore looked off-centre too) to `position: fixed`
-            // anchored to the VIEWPORT centre. That's what the user
-            // expects: the popover lands in the middle of the screen
-            // regardless of where the chip happens to live.
-            // Width still clamped to fit the smallest phone.
-            className="z-[60] w-[min(280px,calc(100vw-24px))] rounded-2xl bg-white/95 backdrop-blur-2xl border border-white/60 shadow-glass-lg p-2"
-            style={{
-              position: 'fixed',
-              top: 64,
-              left: '50%',
-              transform: 'translateX(-50%)',
-            }}
+            // Button-anchored absolute positioning (matches the pattern
+            // QuickAccessMenu uses). The previous fixed/centred approach
+            // looked off-centre on mobile and could clip off-screen
+            // because `left: 50%` ignores where the button actually is.
+            // Now: popover docks under the trigger via the parent
+            // `relative` wrapper; on RTL it docks against the right
+            // edge so the dropdown opens INWARD toward the canvas
+            // instead of toward the screen edge. max-width keeps it
+            // from overflowing a 360px viewport.
+            className="absolute z-[60] mt-2 end-0 w-[min(280px,calc(100vw-24px))] rounded-2xl bg-white/95 backdrop-blur-2xl border border-white/60 shadow-glass-lg p-2"
           >
             <p className="px-2 pt-1 pb-2 text-[10px] font-bold uppercase tracking-wider text-[#8E8E93]">
               {t.treeSwitcherTitle}

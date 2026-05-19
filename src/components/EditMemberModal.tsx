@@ -457,6 +457,13 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
                   type="file"
                   accept="image/*"
                   multiple
+                  // `capture="environment"` makes iOS Safari + Android
+                  // Chrome offer the rear-camera option alongside
+                  // "Choose from Library" — letting mobile users
+                  // shoot a fresh photo for the gallery without
+                  // detouring through the camera app first. Ignored
+                  // on desktop browsers.
+                  capture="environment"
                   className="hidden"
                   onChange={onGalleryAdd}
                 />

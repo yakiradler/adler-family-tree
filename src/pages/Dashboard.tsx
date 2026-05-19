@@ -11,6 +11,8 @@ import ComingSoonModal from '../components/ComingSoonModal'
 import BuildFromTextModal from '../components/BuildFromTextModal'
 import BrandMark from '../components/BrandMark'
 import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
+import JoinTreeModal from '../components/JoinTreeModal'
+import { shouldAutoShowTutorial, recordTutorialShown } from '../lib/tutorialState'
 import type { Member, Relationship } from '../types'
 
 interface Props { demoMode: boolean }
@@ -122,17 +124,19 @@ export default function Dashboard({ demoMode }: Props) {
   // pops up again.
   const TUTORIAL_KEY = 'ft-tutorial-seen'
   const [tutorialOpen, setTutorialOpen] = useState(false)
+  // Join-tree-by-code modal — reachable from both the QuickAccessMenu
+  // and the new "🔑" tile in the Apps grid below.
+  const [joinTreeOpen, setJoinTreeOpen] = useState(false)
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    if (window.localStorage.getItem(TUTORIAL_KEY) === '1') return
+    if (!shouldAutoShowTutorial(TUTORIAL_KEY)) return
     // small delay so the page paints first
-    const id = window.setTimeout(() => setTutorialOpen(true), 800)
+    const id = window.setTimeout(() => {
+      setTutorialOpen(true)
+      recordTutorialShown(TUTORIAL_KEY)
+    }, 800)
     return () => window.clearTimeout(id)
   }, [])
-  const closeTutorial = () => {
-    try { window.localStorage.setItem(TUTORIAL_KEY, '1') } catch { /* ignore */ }
-    setTutorialOpen(false)
-  }
+  const closeTutorial = () => setTutorialOpen(false)
 
   // Tour steps — described in Hebrew first (user's primary locale)
   // with English fallbacks. Selectors target `data-tour` attributes
@@ -674,9 +678,21 @@ export default function Dashboard({ demoMode }: Props) {
                 tooltip={lang === 'he' ? 'מדריך אינטראקטיבי על המערכת' : 'Interactive guide to the app'}
               />
             </div>
+            {/* Join-by-code tile. Mirrors the QuickAccessMenu item
+                added earlier — surfaced here too so a user who's
+                navigated past the landing menu can still attach
+                themselves to a family tree they've been invited to. */}
+            <AppTile
+              index={6}
+              icon="🔑"
+              label={t.quickAccessJoinTree}
+              gradient="from-[#FF9F0A] to-[#FFD60A]"
+              onClick={() => setJoinTreeOpen(true)}
+              tooltip={t.quickAccessJoinTreeHint}
+            />
             {isAdmin(profile) && (
               <AppTile
-                index={6}
+                index={7}
                 icon="⚙️"
                 label={lang === 'he' ? 'ניהול' : 'Admin'}
                 gradient="from-[#5AC8FA] to-[#64D2FF]"
@@ -729,6 +745,11 @@ export default function Dashboard({ demoMode }: Props) {
 
       {/* Interactive tutorial. Launches automatically on first visit
           (localStorage flag) and on-demand from the Apps grid above. */}
+      <JoinTreeModal
+        open={joinTreeOpen}
+        onClose={() => setJoinTreeOpen(false)}
+      />
+
       <TutorialOverlay
         open={tutorialOpen}
         steps={tutorialSteps}

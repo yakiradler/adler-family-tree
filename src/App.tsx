@@ -181,6 +181,27 @@ export default function App() {
     // via a custom event so the UI can flash a "save failed" toast —
     // we used to swallow them silently, which is why a refresh would
     // wipe a user's edits without any warning.
+    // base64 data URIs from FileReader photo uploads blow past the
+    // 5-10MB localStorage quota almost immediately on phones — a few
+    // gallery photos and the quota toast starts firing every save.
+    // Strip them BY DESIGN: the canonical store is Supabase / the
+    // in-memory store; localStorage is just a fast hydration cache,
+    // not a photo archive. http(s):// URLs (Supabase-hosted) are
+    // tiny and preserved.
+    const stripDataUriPhotos = <T extends { photos?: unknown; photo_url?: unknown }>(m: T): T => {
+      const cleaned: T = { ...m }
+      if (typeof m.photo_url === 'string' && m.photo_url.startsWith('data:')) {
+        ;(cleaned as { photo_url?: unknown }).photo_url = undefined
+      }
+      if (Array.isArray(m.photos)) {
+        const filtered = (m.photos as unknown[]).filter(
+          (p) => typeof p !== 'string' || !p.startsWith('data:'),
+        )
+        ;(cleaned as { photos?: unknown }).photos = filtered
+      }
+      return cleaned
+    }
+
     const write = () => {
       const s = useFamilyStore.getState()
       try {
@@ -189,7 +210,7 @@ export default function App() {
           JSON.stringify({
             v: 3,
             ts: Date.now(),
-            members: s.members,
+            members: s.members.map(stripDataUriPhotos),
             relationships: s.relationships,
             trees: s.trees,
             notes: s.notes,
@@ -277,6 +298,25 @@ export default function App() {
     if (!session || !SUPABASE_CONFIGURED) return
     const load = async () => {
       const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).single()
+      // Account-suspension gate. The admin "remove user" flow sets
+      // profiles.deleted_at to now() instead of hard-deleting the
+      // row, which gives a 30-day restore window. If the user tries
+      // to log in within that window we force a sign-out + flash
+      // the suspension notice. The trigger in migration 006 auto-
+      // clears deleted_at after 30 days so they can sign in again.
+      const deletedAt = (data as { deleted_at?: string | null } | null)?.deleted_at
+      if (deletedAt) {
+        const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000
+        const ageMs = Date.now() - new Date(deletedAt).getTime()
+        if (ageMs < thirtyDaysMs) {
+          try { await supabase.auth.signOut() } catch { /* ignore */ }
+          window.alert(
+            'החשבון שלך הושעה על ידי המנהל. אם זו טעות, פנה למנהל לשחזור.\n\n' +
+            'Your account has been suspended by an admin. Contact them to restore it.',
+          )
+          return
+        }
+      }
       setProfile(data ?? {
         id: session.user.id,
         full_name: session.user.user_metadata?.full_name ?? session.user.email ?? 'User',

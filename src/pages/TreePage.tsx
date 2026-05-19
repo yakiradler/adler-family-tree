@@ -16,6 +16,7 @@ import { useBrowserZoom } from '../hooks/useBrowserZoom'
 import { useHorizontalSwipe } from '../hooks/useHorizontalSwipe'
 import Tooltip from '../components/Tooltip'
 import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
+import { shouldAutoShowTutorial, recordTutorialShown } from '../lib/tutorialState'
 
 interface Props { demoMode: boolean }
 
@@ -67,16 +68,15 @@ export default function TreePage({ demoMode }: Props) {
   const TREE_TUTORIAL_KEY = 'ft-tree-tutorial-seen'
   const [treeTutorialOpen, setTreeTutorialOpen] = useState(false)
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    if (window.localStorage.getItem(TREE_TUTORIAL_KEY) === '1') return
     if (viewMode !== 'tree') return
-    const id = window.setTimeout(() => setTreeTutorialOpen(true), 700)
+    if (!shouldAutoShowTutorial(TREE_TUTORIAL_KEY)) return
+    const id = window.setTimeout(() => {
+      setTreeTutorialOpen(true)
+      recordTutorialShown(TREE_TUTORIAL_KEY)
+    }, 700)
     return () => window.clearTimeout(id)
   }, [viewMode])
-  const closeTreeTutorial = () => {
-    try { window.localStorage.setItem(TREE_TUTORIAL_KEY, '1') } catch { /* ignore */ }
-    setTreeTutorialOpen(false)
-  }
+  const closeTreeTutorial = () => setTreeTutorialOpen(false)
   // Tutorial step generator. Some of the new steps require the
   // hamburger to be EXPANDED (so the filter / focus / density chips
   // are visible). We achieve that via the `onEnter` callback which
@@ -183,7 +183,11 @@ export default function TreePage({ demoMode }: Props) {
                   show only "תצוגת עץ" + the user's name. The user
                   asked for the family name to appear (e.g.
                   "משפחת אדלר") so it reads like a real heading. */}
-              <span className="truncate">{familyDisplayName ?? t.viewTree}</span>
+              {/* Allow the family name to render in full — truncation
+                  hurt more than it helped (users saw "משפחת...").
+                  break-words lets the heading wrap on truly narrow
+                  screens instead of being cut off. */}
+              <span className="break-words">{familyDisplayName ?? t.viewTree}</span>
             </h1>
             <p className="text-[11px] text-[#8E8E93] mt-0.5 truncate">
               {members.length} {t.dashMembers}
@@ -196,19 +200,10 @@ export default function TreePage({ demoMode }: Props) {
           <div data-tour="tree-switcher">
             <TreeSwitcher />
           </div>
-          {/* Replay-the-tutorial button — a tiny "?" pill so a user
-              who's lost in the tree can summon the guided walkthrough
-              again without going back to the home screen. */}
-          <Tooltip content={lang === 'he' ? 'הצג מדריך אינטראקטיבי' : 'Show interactive tutorial'} placement="bottom">
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={() => setTreeTutorialOpen(true)}
-              aria-label={lang === 'he' ? 'מדריך' : 'Tutorial'}
-              className="w-8 h-8 rounded-xl bg-white/70 flex items-center justify-center border border-white/60 hover:bg-white/90 transition text-[#007AFF] font-bold text-[12px]"
-            >
-              ?
-            </motion.button>
-          </Tooltip>
+          {/* The "?" tutorial button used to live here but it
+              squeezed the family-name into ellipsis on narrow
+              phones. Replay is now reachable from the floating
+              hamburger panel below (see the "Tutorial" pill). */}
           <Tooltip content={t.tipSearch} placement="bottom">
             <motion.button
               data-tour="tree-search"
@@ -298,6 +293,29 @@ export default function TreePage({ demoMode }: Props) {
                 relationships={relationships}
                 matchedCount={matchedCount}
               />
+            )}
+
+            {/* Tutorial replay pill — only visible when the hamburger
+                is expanded. Previously a "?" pill in the top chrome
+                bar, but it was eating the family-name's space. Now
+                lives next to the hamburger so the top bar stays
+                clean and the user finds it together with the other
+                advanced controls. */}
+            {treeControlsExpanded && !hideChrome && (
+              <div className={`fixed z-30 no-print ${isRTL(lang) ? 'left-3' : 'right-3'}`} style={{ top: 'calc(env(safe-area-inset-top, 0px) + 140px)' }}>
+                <Tooltip content={t.tipTreeTutorial} placement="bottom" align="end">
+                  <motion.button
+                    type="button"
+                    whileTap={{ scale: 0.94 }}
+                    onClick={() => setTreeTutorialOpen(true)}
+                    aria-label={t.tipTreeTutorial}
+                    className="px-3 h-10 rounded-full bg-white/95 border border-white/70 shadow-glass text-[12px] font-semibold text-[#007AFF] flex items-center gap-1.5 hover:bg-white transition"
+                  >
+                    <span aria-hidden>?</span>
+                    {t.tipTreeTutorial}
+                  </motion.button>
+                </Tooltip>
+              </div>
             )}
           </>
         )}

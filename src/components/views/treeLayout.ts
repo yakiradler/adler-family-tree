@@ -10,7 +10,10 @@ export const NODE_W = AVATAR + 72
 export const NODE_H = AVATAR + 62
 // Gaps are generous enough that NO two cards can ever visually touch, even
 // when avatars have protruding gender/birth-order badges on the corners.
-export const H_GAP = 40
+// H_GAP=18 (was 40) keeps siblings tight so a nuclear-family of 3 kids
+// reads as one visual unit instead of strung across the canvas. The
+// MIN_SIDE_GAP=12 floor still rules out actual overlap.
+export const H_GAP = 18
 export const V_GAP = 96
 export const COUPLE_GAP = 22
 // Minimum breathing space required on every side of a card. Any layout that
