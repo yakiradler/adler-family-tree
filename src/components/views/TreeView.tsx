@@ -339,18 +339,23 @@ export default function TreeView({
 
     const w = wrapRef.current.clientWidth
     const h = wrapRef.current.clientHeight
-    const fitW = (w - 20) / canvasW
-    const fitH = (h - 120) / canvasH
+    // Side margins were 20/120; the user said the canvas was clipping
+    // off the side of the viewport on mobile so a parent disappeared
+    // off-screen. Bumped to 48/160 to leave a clear, visible margin
+    // around the population so auto-fit can't ever crop a card.
+    const fitW = (w - 48) / canvasW
+    const fitH = (h - 160) / canvasH
     let s = Math.max(0.28, Math.min(0.85, Math.min(fitW, fitH)))
     // Small trees previously fit at ~40% because Math.min picks the
     // narrow dimension and the 0.85 cap leaves cards tiny on the
     // canvas. For small populations (≤10 nodes) bias toward filling
     // the viewport — never beyond fitW/fitH so cards still fit, but
-    // at least ~75% so they look readable instead of floating in a
-    // sea of empty space.
+    // at least ~70% so they look readable instead of floating in a
+    // sea of empty space. The 0.78 cap keeps clear margin on either
+    // side so the canvas can't visually collide with the chrome.
     if (nodes.length <= 10) {
-      const small = Math.min(fitW, fitH, 1.1)
-      s = Math.max(s, Math.min(small, 0.85))
+      const small = Math.min(fitW, fitH)
+      s = Math.max(s, Math.min(small, 0.78))
     }
     // ty=100 (was 70) leaves room under the fixed top-chrome bar on
     // mobile — at 70 the topmost generation tucked under the back

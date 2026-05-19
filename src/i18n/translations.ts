@@ -211,7 +211,7 @@ export const translations = {
     joinTreeModalTitle: 'הצטרפות לעץ קיים',
     joinTreeModalDesc: 'הזן את קוד ההזמנה שקיבלת ממנהל המשפחה. לאחר אישור הבקשה תקבל גישה לעץ.',
     joinTreeModalSubmit: 'שלח בקשה',
-    joinTreeModalSuccess: 'הבקשה נשלחה. תקבל הודעה אחרי שהמנהל יאשר אותך.',
+    joinTreeModalSuccess: 'הצטרפת לעץ בהצלחה! מעביר אותך לתצוגת העץ...',
     joinTreeModalCancel: 'ביטול',
 
     lineageAuto: 'אוטומטי',
@@ -859,7 +859,7 @@ export const translations = {
     joinTreeModalTitle: 'Join an existing tree',
     joinTreeModalDesc: 'Enter the invite code your family admin gave you. You’ll get access once they approve your request.',
     joinTreeModalSubmit: 'Send request',
-    joinTreeModalSuccess: 'Request sent. You’ll be notified once the admin approves.',
+    joinTreeModalSuccess: 'You joined the tree! Taking you to the tree view...',
     joinTreeModalCancel: 'Cancel',
 
     lineageAuto: 'Auto',

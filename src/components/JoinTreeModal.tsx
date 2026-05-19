@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useFamilyStore } from '../store/useFamilyStore'
@@ -23,7 +24,8 @@ export default function JoinTreeModal({
   onClose: () => void
 }) {
   const { t } = useLang()
-  const { submitAccessRequest } = useFamilyStore()
+  const { setActiveTreeId, fetchMembers, fetchRelationships } = useFamilyStore()
+  const navigate = useNavigate()
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -50,26 +52,44 @@ export default function JoinTreeModal({
     }
     setBusy(true)
     try {
-      // Same shape of validation as the wizard step 1.
+      // A valid invite code IS the authorization — no need to file
+      // an access request and wait for an admin. Validate the code,
+      // decrement uses_left (if capped), then drop the user straight
+      // into the target tree. Mirrors how share-links work in
+      // Notion / Figma: holding the link is the grant.
       const { data } = await supabase
         .from('tree_invites')
-        .select('id, expires_at, uses_left')
+        .select('id, tree_id, expires_at, uses_left')
         .eq('code', trimmed)
         .maybeSingle()
       const valid =
         !!data &&
         (data.expires_at == null || new Date(data.expires_at) > new Date()) &&
         (data.uses_left == null || data.uses_left > 0)
-      if (!valid) {
+      if (!valid || !data) {
         setError(t.onbInviteInvalid)
         return
       }
-      await submitAccessRequest({
-        requested_role: 'user',
-        invite_code: trimmed,
-        answers: { source: 'quick-access-menu' },
-      })
+      // Burn one use on capped codes. Uncapped codes (`uses_left` null)
+      // are share-links that never expire by count.
+      if (data.uses_left != null) {
+        await supabase
+          .from('tree_invites')
+          .update({ uses_left: Math.max(0, data.uses_left - 1) })
+          .eq('id', data.id)
+      }
+      // Switch the UI to the target tree and refresh data so the
+      // user's next paint shows the tree they joined, not the empty
+      // skeleton they came from.
+      if (data.tree_id) setActiveTreeId(data.tree_id)
+      await Promise.all([fetchMembers(), fetchRelationships()])
       setSuccess(true)
+      // Auto-close after a beat and navigate so the user lands on
+      // their new tree without an extra click.
+      window.setTimeout(() => {
+        onClose()
+        navigate('/tree')
+      }, 900)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {

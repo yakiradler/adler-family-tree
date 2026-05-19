@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
@@ -43,6 +43,14 @@ export default function MemberPanel({ onClose }: Props) {
   const [copyToTreeOpen, setCopyToTreeOpen] = useState(false)
   const [copying, setCopying] = useState(false)
   const [copyDone, setCopyDone] = useState(false)
+  // Hidden file input for the "+ העלה תמונה" tile inside the photos
+  // tab. Lets the user drop a photo straight from the profile card
+  // without detouring through Edit → photos. capture="environment"
+  // (added on the input element below) lets mobile users take a
+  // fresh photo with the rear camera in one tap.
+  const photoInputRef = useRef<HTMLInputElement | null>(null)
+  // Defined inline inside the JSX where `member` is in scope —
+  // see the photos-tab block for the implementation.
   // "Coming soon" feature placeholders — wired to a friendly modal
   // that explains what each will do once the backend lands.
   const [aiTreeFromTextOpen, setAiTreeFromTextOpen] = useState(false)
@@ -478,10 +486,73 @@ export default function MemberPanel({ onClose }: Props) {
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.18 }}
               >
+                {/* Hidden file input; the visible tile + empty-state
+                    button below trigger it. accept+capture both make
+                    sense on mobile (offers Take Photo + Library). */}
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files ?? [])
+                    if (files.length === 0) return
+                    Promise.all(
+                      files.map(
+                        (f) =>
+                          new Promise<string>((resolve, reject) => {
+                            const r = new FileReader()
+                            r.onerror = reject
+                            r.onload = () => resolve(r.result as string)
+                            r.readAsDataURL(f)
+                          }),
+                      ),
+                    ).then((urls) => {
+                      const next = [...(member.photos ?? []), ...urls]
+                      updateMember(member.id, { photos: next })
+                    }).catch(() => { /* read failures are rare */ })
+                    e.target.value = ''
+                  }}
+                />
                 {photos.length === 0 ? (
-                  <EmptyTab icon="📷" text={t.panelNoPhotos} />
+                  <div className="space-y-3">
+                    <EmptyTab icon="📷" text={t.panelNoPhotos} />
+                    {editAllowed && (
+                      <button
+                        type="button"
+                        onClick={() => photoInputRef.current?.click()}
+                        className="w-full py-2.5 rounded-2xl bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white text-sf-subhead font-semibold active:scale-[0.98] transition flex items-center justify-center gap-2"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                          <path d="M7 2v10M2 7h10" stroke="white" strokeWidth="2" strokeLinecap="round" />
+                        </svg>
+                        {lang === 'he' ? 'הוסף תמונה' : 'Add photo'}
+                      </button>
+                    )}
+                  </div>
                 ) : (
                   <div className="grid grid-cols-3 gap-1.5">
+                    {/* Upload tile FIRST so it's always reachable
+                        without scrolling through a large gallery. */}
+                    {editAllowed && (
+                      <motion.button
+                        type="button"
+                        whileHover={{ scale: 1.03 }}
+                        whileTap={{ scale: 0.97 }}
+                        onClick={() => photoInputRef.current?.click()}
+                        aria-label={lang === 'he' ? 'הוסף תמונה' : 'Add photo'}
+                        className="aspect-square rounded-xl bg-[#F2F2F7] flex flex-col items-center justify-center gap-1 text-[#007AFF] active:bg-[#E5E5EA] transition"
+                      >
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                          <path d="M10 4v12M4 10h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                        </svg>
+                        <span className="text-[10px] font-semibold">
+                          {lang === 'he' ? 'הוסף' : 'Add'}
+                        </span>
+                      </motion.button>
+                    )}
                     {photos.map((url, i) => (
                       <motion.div
                         key={i}

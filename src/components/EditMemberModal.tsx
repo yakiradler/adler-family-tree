@@ -299,7 +299,9 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
                         onClick={() => patch('gender', form.gender === g ? '' : g)}
                         className={`flex-1 py-2 rounded-xl text-sf-subhead font-medium transition-colors ${
                           form.gender === g
-                            ? g === 'male' ? 'bg-[#007AFF] text-white shadow-sm' : 'bg-[#5AC8FA] text-white shadow-sm'
+                            ? g === 'male'
+                              ? 'bg-[#007AFF] text-white shadow-sm'
+                              : 'bg-[#FF2D55] text-white shadow-sm' // pink for female, matches AddMemberModal
                             : 'bg-[#F2F2F7] text-[#636366]'
                         }`}
                       >

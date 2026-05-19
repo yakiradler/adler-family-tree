@@ -167,19 +167,29 @@ export default function OnboardingWizard() {
   // already optimistic, so we await them sequentially to ensure
   // each call sees the previous id when wiring up the links.
   const seedSkeletonFamily = async (treeId: string, createdBy: string) => {
-    const blankMember = (gender?: 'male' | 'female') => ({
-      first_name: '',
+    // Placeholder labels ("אבא"/"אמא"/"אח"/"אחות") instead of blank
+    // names — empty-card cards looked broken in the screenshot the
+    // user sent, and the placeholders give an obvious "tap me to
+    // fill in" affordance. We deliberately pick generic siblings
+    // ("אח"/"אח"/"אחות") rather than gendering all three the same.
+    const isHe = lang === 'he'
+    const labels = isHe
+      ? { father: 'אבא', mother: 'אמא', son: 'אח', daughter: 'אחות' }
+      : { father: 'Dad', mother: 'Mom', son: 'Brother', daughter: 'Sister' }
+    const make = (first: string, gender?: 'male' | 'female') => ({
+      first_name: first,
       last_name: '',
       gender,
       tree_id: treeId,
       created_by: createdBy,
     })
-    const father = await addMember(blankMember('male'))
-    const mother = await addMember(blankMember('female'))
+    const father = await addMember(make(labels.father, 'male'))
+    const mother = await addMember(make(labels.mother, 'female'))
     if (!father || !mother) return
-    const c1 = await addMember(blankMember())
-    const c2 = await addMember(blankMember())
-    const c3 = await addMember(blankMember())
+    // Two brothers + one sister keeps the visual gender mix balanced.
+    const c1 = await addMember(make(labels.son, 'male'))
+    const c2 = await addMember(make(labels.son, 'male'))
+    const c3 = await addMember(make(labels.daughter, 'female'))
     await addRelationship({
       member_a_id: father.id, member_b_id: mother.id, type: 'spouse', status: 'current',
     })

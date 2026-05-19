@@ -444,8 +444,15 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
                   />
                 </div>
 
-                {/* List */}
-                <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1">
+                {/* List — `min-h-0` is essential: without it the flex
+                    item defaults to `min-height: auto` (= content size),
+                    which suppresses overflow-y-auto and pushes the
+                    pinned "Create new" section past the bottom of the
+                    viewport when an admin is adding a second parent
+                    (long search-results list). Real-user bug: "אין איך
+                    לגלול או ללחוץ הוסף" — the Add button was below the
+                    fold. */}
+                <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-1">
                   {pickerResults.length === 0 && !creatingNew ? (
                     <div className="text-center py-8 text-[#8E8E93] text-sf-caption">
                       {t.relCreateNew}
@@ -522,7 +529,7 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
                             onClick={() => setNewGender(newGender === g ? '' : g)}
                             className={`flex-1 py-1.5 rounded-xl text-[12px] font-semibold transition-all ${
                               newGender === g
-                                ? g === 'male' ? 'bg-[#007AFF] text-white' : 'bg-[#5AC8FA] text-white'
+                                ? g === 'male' ? 'bg-[#007AFF] text-white' : 'bg-[#FF2D55] text-white'
                                 : 'bg-[#F2F2F7] text-[#636366]'
                             }`}
                           >
