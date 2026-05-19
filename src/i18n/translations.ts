@@ -37,6 +37,7 @@ export const translations = {
     authSubmitSignup: 'צור חשבון',
     authTagline: 'סיפור המשפחה שלך, שמור בצורה יפה.',
     authCheckEmail: 'בדוק את המייל לאישור החשבון.',
+    authEmailAlreadyRegistered: 'המייל הזה כבר רשום. עבור ל"התחברות".',
 
     // Tree View
     treeEmptyTitle: 'התחל את עץ המשפחה שלך',
@@ -205,6 +206,13 @@ export const translations = {
     quickAccessSignupHint: 'יצירת חשבון חדש',
     quickAccessAdmin: 'התחברות מנהל',
     quickAccessAdminHint: 'גישה ללוח הניהול',
+    quickAccessJoinTree: 'הצטרף לעץ עם קוד',
+    quickAccessJoinTreeHint: 'יש לך קוד הזמנה? הזן אותו כאן',
+    joinTreeModalTitle: 'הצטרפות לעץ קיים',
+    joinTreeModalDesc: 'הזן את קוד ההזמנה שקיבלת ממנהל המשפחה. לאחר אישור הבקשה תקבל גישה לעץ.',
+    joinTreeModalSubmit: 'שלח בקשה',
+    joinTreeModalSuccess: 'הבקשה נשלחה. תקבל הודעה אחרי שהמנהל יאשר אותך.',
+    joinTreeModalCancel: 'ביטול',
 
     lineageAuto: 'אוטומטי',
     lineageNone: 'לא מוגדר',
@@ -681,6 +689,7 @@ export const translations = {
     authSubmitSignup: 'Create Account',
     authTagline: "Your family's story, beautifully preserved.",
     authCheckEmail: 'Check your email to confirm your account.',
+    authEmailAlreadyRegistered: 'This email is already registered. Try logging in instead.',
 
     treeEmptyTitle: 'Start Your Family Tree',
     treeEmptyDesc: 'Add your first family member to begin building your tree.',
@@ -844,6 +853,13 @@ export const translations = {
     quickAccessSignupHint: 'Create a new account',
     quickAccessAdmin: 'Admin login',
     quickAccessAdminHint: 'Access the admin dashboard',
+    quickAccessJoinTree: 'Join tree with code',
+    quickAccessJoinTreeHint: 'Have an invite code? Enter it here',
+    joinTreeModalTitle: 'Join an existing tree',
+    joinTreeModalDesc: 'Enter the invite code your family admin gave you. You’ll get access once they approve your request.',
+    joinTreeModalSubmit: 'Send request',
+    joinTreeModalSuccess: 'Request sent. You’ll be notified once the admin approves.',
+    joinTreeModalCancel: 'Cancel',
 
     lineageAuto: 'Auto',
     lineageNone: 'Not set',

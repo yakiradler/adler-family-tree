@@ -73,7 +73,7 @@ const TOTAL_STEPS = 4
 export default function OnboardingWizard() {
   const {
     profile, completeOnboarding, submitAccessRequest,
-    addTree, addMember, setActiveTreeId,
+    addTree, addMember, setActiveTreeId, trees,
   } = useFamilyStore()
   const { t, lang } = useLang()
   const navigate = useNavigate()
@@ -154,6 +154,37 @@ export default function OnboardingWizard() {
   }
 
   const back = () => setStep((s) => Math.max(1, (s - 1)) as Step)
+
+  // Skip path: ensure the user lands on a personal tree (not the seeded
+  // Adler family). If they've already got one they own from a previous
+  // skip/attempt, just switch to it; otherwise create an empty
+  // placeholder named after them. We don't mark `onboarded_at` — the
+  // banner re-opens the wizard later when they're ready to fill in
+  // their real details.
+  const skipOnboarding = async () => {
+    try {
+      if (profile) {
+        const existing = trees.find((t) => t.created_by === profile.id)
+        if (existing) {
+          setActiveTreeId(existing.id)
+        } else {
+          const personalName =
+            profile.full_name?.trim()
+              ? (lang === 'he' ? `העץ של ${profile.full_name.trim()}` : `${profile.full_name.trim()}'s tree`)
+              : (lang === 'he' ? 'העץ שלי' : 'My tree')
+          const newTree = await addTree({
+            name: personalName,
+            color: '#34C759',
+            created_by: profile.id,
+          })
+          if (newTree) setActiveTreeId(newTree.id)
+        }
+      }
+    } finally {
+      clearPendingOnboarding()
+      navigate('/home')
+    }
+  }
 
   const submit = async () => {
     if (!profile) return
@@ -295,13 +326,15 @@ export default function OnboardingWizard() {
                   when they simply wanted to look around first), so
                   the escape hatch is back — clearing the flag drops
                   them straight onto the dashboard. They can always
-                  re-open the wizard from the dashboard banner. */}
+                  re-open the wizard from the dashboard banner.
+
+                  Now also auto-provisions an empty personal tree so
+                  the user doesn't accidentally land on the seeded
+                  Adler family. Idempotent — if they've already got a
+                  tree they own, we just switch to it. */}
               <button
                 type="button"
-                onClick={() => {
-                  clearPendingOnboarding()
-                  navigate('/home')
-                }}
+                onClick={skipOnboarding}
                 className="text-[11px] font-semibold text-[#8E8E93] hover:text-[#1C1C1E] transition-colors"
               >
                 {lang === 'he' ? 'דלג בינתיים' : 'Skip for now'}

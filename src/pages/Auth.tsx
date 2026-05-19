@@ -116,6 +116,14 @@ export default function Auth({ demoMode = false, onDemoEnter }: Props) {
           navigate('/onboarding')
           return
         }
+        // Supabase anti-enumeration: when the email is ALREADY registered,
+        // signUp returns success with `data.user.identities = []` and no
+        // session. Without this branch the user saw "check your email"
+        // forever, since no email is actually sent in that case.
+        if (data.user && (data.user.identities?.length ?? 0) === 0) {
+          setError(t.authEmailAlreadyRegistered)
+          return
+        }
         // Email-confirmation path: mark the intent anyway so the post-
         // confirmation login also lands inside the wizard. Login-only
         // sessions (no signup attempt) never touch this code, so the

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLang } from '../i18n/useT'
 import { useAuthState } from '../hooks/useAuthState'
+import JoinTreeModal from './JoinTreeModal'
 
 /**
  * Quick-access dropdown surfaced in highly visible places (Landing header,
@@ -28,6 +29,7 @@ export default function QuickAccessMenu({
   const navigate = useNavigate()
   const { isAuth, target } = useAuthState()
   const [open, setOpen] = useState(false)
+  const [joinModalOpen, setJoinModalOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
 
   // Click-outside + Escape close.
@@ -52,13 +54,19 @@ export default function QuickAccessMenu({
     navigate(path)
   }
 
+  // "Join tree by code" opens a modal instead of navigating, so we
+  // model menu items with either a `path` or an `onClick`. Only one
+  // is consulted per item; the menu calls whichever is provided.
   const items: Array<{
     key: string
     icon: string
     label: string
     hint: string
-    path: string
+    path?: string
+    onClick?: () => void
     accent: string
+    /** When set, hide the item unless the predicate is true. */
+    showWhen?: boolean
   }> = [
     {
       key: 'personal',
@@ -77,6 +85,24 @@ export default function QuickAccessMenu({
       hint: t.quickAccessSignupHint,
       path: '/login?signup=1',
       accent: 'from-[#34C759] to-[#30D158]',
+      // Hide signup CTA from already-authenticated users — they don't
+      // need to "sign up" again, and the prompt is just clutter.
+      showWhen: !isAuth,
+    },
+    {
+      key: 'join-tree',
+      icon: '🔑',
+      label: t.quickAccessJoinTree,
+      hint: t.quickAccessJoinTreeHint,
+      onClick: () => {
+        setOpen(false)
+        setJoinModalOpen(true)
+      },
+      accent: 'from-[#FF9F0A] to-[#FFD60A]',
+      // Joining requires an authenticated session — the access_request
+      // row needs to bind to a real user.id, and the API rejects
+      // anonymous submissions.
+      showWhen: isAuth,
     },
     {
       key: 'admin',
@@ -88,7 +114,7 @@ export default function QuickAccessMenu({
       path: isAuth ? '/admin' : '/login',
       accent: 'from-[#5E5CE6] to-[#BF5AF2]',
     },
-  ]
+  ].filter((it) => it.showWhen !== false)
 
   const triggerCls =
     variant === 'solid'
@@ -129,7 +155,7 @@ export default function QuickAccessMenu({
               <button
                 key={it.key}
                 type="button"
-                onClick={() => go(it.path)}
+                onClick={() => (it.onClick ? it.onClick() : it.path && go(it.path))}
                 className="w-full flex items-start gap-3 px-2.5 py-2 rounded-xl text-start hover:bg-[#F2F2F7] active:bg-[#E5E5EA] transition"
                 role="menuitem"
               >
@@ -148,6 +174,8 @@ export default function QuickAccessMenu({
           </motion.div>
         )}
       </AnimatePresence>
+
+      <JoinTreeModal open={joinModalOpen} onClose={() => setJoinModalOpen(false)} />
     </div>
   )
 }
