@@ -73,7 +73,7 @@ const TOTAL_STEPS = 4
 export default function OnboardingWizard() {
   const {
     profile, completeOnboarding, submitAccessRequest,
-    addTree, addMember, setActiveTreeId, trees,
+    addTree, addMember, addRelationship, setActiveTreeId, trees,
   } = useFamilyStore()
   const { t, lang } = useLang()
   const navigate = useNavigate()
@@ -155,6 +155,45 @@ export default function OnboardingWizard() {
 
   const back = () => setStep((s) => Math.max(1, (s - 1)) as Step)
 
+  // Pre-populate a fresh tree with the canonical "nuclear family"
+  // skeleton — father, mother, three kids — all with empty
+  // names/dates so the user can tap each placeholder card and fill
+  // it in. The skeleton is faster to extend than to construct from
+  // scratch, especially for a non-technical user who otherwise lands
+  // on a blank canvas with no obvious next step.
+  //
+  // Relationships: parents are spouses; each parent has a
+  // parent-child link to each child. addMember + addRelationship are
+  // already optimistic, so we await them sequentially to ensure
+  // each call sees the previous id when wiring up the links.
+  const seedSkeletonFamily = async (treeId: string, createdBy: string) => {
+    const blankMember = (gender?: 'male' | 'female') => ({
+      first_name: '',
+      last_name: '',
+      gender,
+      tree_id: treeId,
+      created_by: createdBy,
+    })
+    const father = await addMember(blankMember('male'))
+    const mother = await addMember(blankMember('female'))
+    if (!father || !mother) return
+    const c1 = await addMember(blankMember())
+    const c2 = await addMember(blankMember())
+    const c3 = await addMember(blankMember())
+    await addRelationship({
+      member_a_id: father.id, member_b_id: mother.id, type: 'spouse', status: 'current',
+    })
+    for (const child of [c1, c2, c3]) {
+      if (!child) continue
+      await addRelationship({
+        member_a_id: father.id, member_b_id: child.id, type: 'parent-child', parent_type: 'bio',
+      })
+      await addRelationship({
+        member_a_id: mother.id, member_b_id: child.id, type: 'parent-child', parent_type: 'bio',
+      })
+    }
+  }
+
   // Skip path: ensure the user lands on a personal tree (not the seeded
   // Adler family). If they've already got one they own from a previous
   // skip/attempt, just switch to it; otherwise create an empty
@@ -177,7 +216,13 @@ export default function OnboardingWizard() {
             color: '#34C759',
             created_by: profile.id,
           })
-          if (newTree) setActiveTreeId(newTree.id)
+          if (newTree) {
+            // Seed a basic father+mother+3-children skeleton so the
+            // new user has an obvious starting point instead of a
+            // blank canvas.
+            await seedSkeletonFamily(newTree.id, profile.id)
+            setActiveTreeId(newTree.id)
+          }
         }
       }
     } finally {
@@ -213,11 +258,21 @@ export default function OnboardingWizard() {
           created_by: profile.id,
         })
         if (newTree) {
-          // Seed the new tree with the user as the very first member.
-          // We pre-populate from the wizard answers so they don't have
-          // to re-enter their details. created_by ties the record to
-          // this user for RBAC.
-          await addMember({
+          // Seed the new tree with a basic nuclear-family skeleton:
+          // two parents (blank) and three children. The user becomes
+          // the FIRST child, pre-filled with the wizard answers so
+          // they don't have to retype. The other 4 slots stay empty
+          // for the user to tap-and-fill — easier than starting from
+          // a blank canvas.
+          const father = await addMember({
+            first_name: '', last_name: '', gender: 'male',
+            tree_id: newTree.id, created_by: profile.id,
+          })
+          const mother = await addMember({
+            first_name: '', last_name: '', gender: 'female',
+            tree_id: newTree.id, created_by: profile.id,
+          })
+          const me = await addMember({
             first_name: a.firstName.trim(),
             last_name: a.lastName.trim(),
             maiden_name: a.maidenName.trim() || undefined,
@@ -229,8 +284,30 @@ export default function OnboardingWizard() {
             tree_id: newTree.id,
             created_by: profile.id,
           })
-          // Switch the view to the new tree so /home and /tree show the
-          // user's own (initially one-person) tree, not the demo seed.
+          const sib1 = await addMember({
+            first_name: '', last_name: '',
+            tree_id: newTree.id, created_by: profile.id,
+          })
+          const sib2 = await addMember({
+            first_name: '', last_name: '',
+            tree_id: newTree.id, created_by: profile.id,
+          })
+          if (father && mother) {
+            await addRelationship({
+              member_a_id: father.id, member_b_id: mother.id, type: 'spouse', status: 'current',
+            })
+            for (const kid of [me, sib1, sib2]) {
+              if (!kid) continue
+              await addRelationship({
+                member_a_id: father.id, member_b_id: kid.id, type: 'parent-child', parent_type: 'bio',
+              })
+              await addRelationship({
+                member_a_id: mother.id, member_b_id: kid.id, type: 'parent-child', parent_type: 'bio',
+              })
+            }
+          }
+          // Switch the view to the new tree so /home and /tree show
+          // the user's own skeleton tree, not the demo seed.
           setActiveTreeId(newTree.id)
         }
       } else {

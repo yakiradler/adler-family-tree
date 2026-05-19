@@ -194,9 +194,28 @@ export default function Dashboard({ demoMode }: Props) {
         ]
   ), [lang])
 
-  const upcoming = useMemo(() => getUpcomingBirthdays(members), [members])
-  const generations = useMemo(() => computeGenerations(members, relationships), [members, relationships])
-  const founders = useMemo(() => computeBranchFounders(members, relationships), [members, relationships])
+  // Visibility gate (same rule as treeSummaries below): non-admin
+  // users only see members in trees they own. Admins + demo see all.
+  // Everything that exposes a member list — birthdays, stats,
+  // generation count, branch founders — must respect this filter or
+  // the new user gets a peek at the Adler population through the
+  // back door.
+  const visibleMembers = useMemo(() => {
+    if (demoMode || isAdmin(profile)) return members
+    const ownedTreeIds = new Set(
+      trees.filter((t) => t.created_by === profile?.id).map((t) => t.id),
+    )
+    return members.filter((m) => m.tree_id != null && ownedTreeIds.has(m.tree_id))
+  }, [members, trees, profile, demoMode])
+  const visibleRelationships = useMemo(() => {
+    if (demoMode || isAdmin(profile)) return relationships
+    const ids = new Set(visibleMembers.map((m) => m.id))
+    return relationships.filter((r) => ids.has(r.member_a_id) && ids.has(r.member_b_id))
+  }, [relationships, visibleMembers, profile, demoMode])
+
+  const upcoming = useMemo(() => getUpcomingBirthdays(visibleMembers), [visibleMembers])
+  const generations = useMemo(() => computeGenerations(visibleMembers, visibleRelationships), [visibleMembers, visibleRelationships])
+  const founders = useMemo(() => computeBranchFounders(visibleMembers, visibleRelationships), [visibleMembers, visibleRelationships])
 
   // ── Tree summaries (replaces the per-person founders rail) ──────────
   // The "branches" section used to show individual people; the user
@@ -233,8 +252,17 @@ export default function Dashboard({ demoMode }: Props) {
       isMain: boolean
     }[] = []
 
+    // Access gate: a non-admin user must only ever see trees they
+    // explicitly own. The "main" tree (members without tree_id) is
+    // the shared / seeded pool — exposing it to fresh signups was the
+    // bug ("any new user lands on the Adler family"). Admins still
+    // see everything so they can run the system; demo mode keeps the
+    // old behavior so the marketing demo isn't broken.
+    const userIsAdmin = isAdmin(profile)
+    const canSeeMainTree = demoMode || userIsAdmin
+
     const mainPool = members.filter((m) => !m.tree_id)
-    if (mainPool.length > 0) {
+    if (mainPool.length > 0 && canSeeMainTree) {
       const ln = dominantSurname(mainPool)
       summaries.push({
         id: null,
@@ -247,7 +275,10 @@ export default function Dashboard({ demoMode }: Props) {
       })
     }
 
-    trees.forEach((tr, i) => {
+    const visibleTrees = userIsAdmin || demoMode
+      ? trees
+      : trees.filter((t) => t.created_by === profile?.id)
+    visibleTrees.forEach((tr, i) => {
       const pool = members.filter((m) => m.tree_id === tr.id)
       summaries.push({
         id: tr.id,
@@ -259,7 +290,7 @@ export default function Dashboard({ demoMode }: Props) {
     })
 
     return summaries
-  }, [members, trees, lang])
+  }, [members, trees, lang, profile, demoMode])
 
   const today = new Date()
   const dateStr = today.toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-US', {
@@ -348,7 +379,7 @@ export default function Dashboard({ demoMode }: Props) {
           className="mt-6 grid grid-cols-3 gap-2"
         >
           {[
-            { value: members.length, label: t.dashMembers, color: '#007AFF', bg: 'from-[#007AFF]/10 to-[#32ADE6]/10' },
+            { value: visibleMembers.length, label: t.dashMembers, color: '#007AFF', bg: 'from-[#007AFF]/10 to-[#32ADE6]/10' },
             { value: generations, label: t.dashGenerations, color: '#32ADE6', bg: 'from-[#32ADE6]/10 to-[#5AC8FA]/10' },
             { value: founders.length, label: t.dashBranches, color: '#5AC8FA', bg: 'from-[#5AC8FA]/10 to-[#64D2FF]/10' },
           ].map((s, i) => (

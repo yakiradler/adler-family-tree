@@ -114,8 +114,14 @@ export default function App() {
   // doesn't tear down the subscription and briefly run with stale data
   // (an earlier suspect cause of "marked as hidden, refresh, came back").
   useEffect(() => {
-    const STORAGE_KEY = 'ft-state-v3'
-    const LEGACY_KEYS = ['ft-demo-state-v2', 'ft-demo-state-v1']
+    // Per-user storage key so signing out of one account and into
+    // another doesn't leak the previous user's local data (including
+    // the seeded Adler family) into the new session. The demo bucket
+    // is a single shared key because demo has no real identity.
+    const STORAGE_KEY = demoMode
+      ? 'ft-state-v3'
+      : `ft-state-v3-${session?.user?.id ?? 'anon'}`
+    const LEGACY_KEYS = demoMode ? ['ft-demo-state-v2', 'ft-demo-state-v1'] : []
 
     // Migrate / hydrate.
     let restored = false
@@ -154,16 +160,18 @@ export default function App() {
       restored = true
     }
 
-    // First run (or recovered-from-empty) → seed the Adler family.
-    // We seed in BOTH demo and Supabase modes: in production the
-    // backing Supabase project is empty, so without a seed the user
-    // would land on a blank tree. Supabase mode then enriches /
-    // overwrites this only on first sync, never on refresh
-    // (see useFamilyStore.fetchMembers).
+    // First run for a new session: in DEMO mode we still seed the
+    // Adler family so first-time visitors immediately see a populated
+    // demo. In Supabase auth mode the store starts EMPTY — the seed
+    // is a privacy leak (every authenticated user would otherwise
+    // inherit the demo family as their own), and fetchMembers will
+    // load only what RLS allows for this user.
     if (!restored) {
       useFamilyStore.setState({
-        members: ADLER_MEMBERS,
-        relationships: ADLER_RELATIONSHIPS,
+        members: demoMode ? ADLER_MEMBERS : [],
+        relationships: demoMode ? ADLER_RELATIONSHIPS : [],
+        trees: [],
+        notes: [],
       })
     }
 
@@ -247,7 +255,12 @@ export default function App() {
       unsubscribe()
       window.removeEventListener('beforeunload', onUnload)
     }
-  }, [demoMode])
+    // Re-run on user-id change so a sign-out/sign-in into a different
+    // account re-keys localStorage and hydrates THAT user's data
+    // instead of inheriting the previous user's local snapshot. Adding
+    // STORAGE_KEY itself to the deps would loop — the effect writes
+    // localStorage on every mutation, which would re-fire the effect.
+  }, [demoMode, session?.user?.id])
 
   // Supabase auth
   useEffect(() => {
