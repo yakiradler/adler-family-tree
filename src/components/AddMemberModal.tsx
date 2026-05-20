@@ -48,16 +48,22 @@ export default function AddMemberModal({ open, onClose }: Props) {
             onClick={onClose}
             className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[95]"
           />
-          <motion.div
-            initial={{ opacity: 0, scale: 0.92, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.92, y: 20 }}
-            transition={{ type: 'spring', stiffness: 450, damping: 35 }}
-            // z-[100] sits above the bottom Navigation island (z-50) and
-            // any other floating chrome.  Was z-50 before, which let the
-            // dark layout-picker bar render on top of the form on iOS.
-            className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-[100] max-w-sm mx-auto max-h-[90vh] overflow-y-auto"
-          >
+          {/* Centering wrapper.  We previously used `top-1/2
+              -translate-y-1/2` on the motion.div itself, but Framer
+              Motion's `animate={{ y: 0 }}` writes the `transform`
+              property directly and clobbers the Tailwind translate —
+              the modal landed pinned to top:50%/no shift, so its
+              bottom half sat below the viewport and the user couldn't
+              scroll to the footer fields.  Wrapping in a flexbox
+              centerer keeps positioning and animation independent. */}
+          <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 pointer-events-none">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 20 }}
+              transition={{ type: 'spring', stiffness: 450, damping: 35 }}
+              className="w-full max-w-sm max-h-[90vh] overflow-y-auto pointer-events-auto"
+            >
             <div className="glass-strong rounded-3xl p-5 shadow-glass-lg">
               <div className="flex items-center justify-between mb-5">
                 <h3 className="text-sf-title3 text-[#1C1C1E]">{t.addMemberTitle}</h3>
@@ -193,7 +199,8 @@ export default function AddMemberModal({ open, onClose }: Props) {
                 </motion.button>
               </form>
             </div>
-          </motion.div>
+            </motion.div>
+          </div>
         </>
       )}
     </AnimatePresence>
