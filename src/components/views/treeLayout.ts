@@ -531,26 +531,10 @@ export function buildLayout(
     placeSpousesAround(id, midX, spousesToPlace)
   }
 
-  // `startX += subtreeWidth(rootId)` undercounts when a placed spouse
-  // ends up to the right of the children-derived subtree edge (the
-  // placeSpousesAround call centers the couple on the children's
-  // midpoint, so a wide children block + narrow children-centerline
-  // pushes the spouse beyond the nominal subtreeWidth).  When that
-  // happens, the next root's startX lands INSIDE the previous root's
-  // spouse — they share an x and one card hides behind the other.
-  // We instead measure the actual right edge of every member that got
-  // placed by this root's assign() pass and use that to advance.
   let startX = 0
   for (const rootId of layoutRoots) {
-    const placedBefore = new Set(placed)
     assign(rootId, startX)
-    let actualRight = startX + NODE_W
-    for (const id of placed) {
-      if (placedBefore.has(id)) continue
-      const x = xPos.get(id)
-      if (x !== undefined && x + NODE_W > actualRight) actualRight = x + NODE_W
-    }
-    startX = actualRight + H_GAP * 2
+    startX += subtreeWidth(rootId) + H_GAP * 2
   }
   members.forEach(m => {
     if (!placed.has(m.id)) { xPos.set(m.id, startX); startX += NODE_W + H_GAP }
@@ -589,12 +573,28 @@ export function buildLayout(
     yAccum += NODE_H + (genOverflow.get(g) ?? 0) + V_GAP
   }
 
-  // No post-layout sweep.  The engine's placement is the source of
-  // truth.  The remaining edge case — two cards landing at identical
-  // x because subtreeWidth under-counts a placed spouse's overflow —
-  // is mitigated by the actual-rightmost startX bookkeeping above
-  // (which advances the next root past whatever the previous root
-  // actually placed, not just the nominal subtreeWidth).
+  // Defensive collision guard.  If any pair of members ended up at the
+  // same (rounded x, generation) slot — usually because of an edge case
+  // in the root-spouse selection above or a corrupted relationship row
+  // — push the later occupants to the right so each card has its own
+  // click target.  Better a slightly-misaligned card than a click that
+  // hits the wrong member because they're stacked.
+  const slotOccupants = new Map<string, number>()
+  for (const m of members) {
+    if (!xPos.has(m.id)) continue
+    const x0 = xPos.get(m.id)!
+    const g = genMap.get(m.id) ?? 0
+    const key = `${Math.round(x0)}|${g}`
+    const occupied = slotOccupants.get(key) ?? 0
+    if (occupied > 0) {
+      xPos.set(m.id, x0 + occupied * (NODE_W + H_GAP))
+      if (typeof console !== 'undefined') {
+        // eslint-disable-next-line no-console
+        console.warn(`[treeLayout] slot collision at ${key} for member ${m.id}; nudged by ${occupied} slot(s)`)
+      }
+    }
+    slotOccupants.set(key, occupied + 1)
+  }
 
   const finalNodes: LayoutNode[] = members.map(m => {
     const g = genMap.get(m.id) ?? 0
