@@ -573,16 +573,34 @@ export function buildLayout(
     yAccum += NODE_H + (genOverflow.get(g) ?? 0) + V_GAP
   }
 
-  // No post-layout sweep — the engine's placement is the source of
-  // truth. Previous attempts at a "fix-up" sweep (chain-based,
-  // group-based, "yank far spouses") all caused more damage than
-  // they fixed: they re-packed each generation into a tight line,
-  // mixed up members, or stretched parent→child connectors when an
-  // orphan spouse was pulled across the canvas. The original bugs
-  // (אדלר couples overlapping, שיינדל stranded) are real but they
-  // live in the DATA — a member that exists optimistic-only because
-  // RLS blocked the INSERT — and need to be addressed there, not
-  // patched at render time.
+  // Conservative overlap guard.  The engine occasionally places two
+  // root subtrees with collapsed widths (joining-couple cases) at
+  // identical or near-identical x, which makes one card hide behind
+  // the other and steals the click target.  We walk each generation
+  // in x-order and, ONLY when two cards' left edges would land within
+  // NODE_W of each other, nudge the second one rightward by the
+  // minimum needed to clear.  Every other card keeps its original
+  // engine-computed x — no chains, no group repacking, no spouse
+  // yanking across the canvas.
+  const MIN_HORIZONTAL_GAP = 8
+  const byGen = new Map<number, string[]>()
+  for (const m of members) {
+    if (!xPos.has(m.id)) continue
+    const g = genMap.get(m.id) ?? 0
+    if (!byGen.has(g)) byGen.set(g, [])
+    byGen.get(g)!.push(m.id)
+  }
+  for (const ids of byGen.values()) {
+    ids.sort((a, b) => xPos.get(a)! - xPos.get(b)!)
+    for (let i = 1; i < ids.length; i++) {
+      const prevX = xPos.get(ids[i - 1])!
+      const curX = xPos.get(ids[i])!
+      const minAllowedX = prevX + NODE_W + MIN_HORIZONTAL_GAP
+      if (curX < minAllowedX) {
+        xPos.set(ids[i], minAllowedX)
+      }
+    }
+  }
 
   const finalNodes: LayoutNode[] = members.map(m => {
     const g = genMap.get(m.id) ?? 0
