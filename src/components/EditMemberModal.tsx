@@ -152,7 +152,7 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/35 backdrop-blur-sm z-[70]"
+            className="fixed inset-0 bg-black/35 backdrop-blur-sm z-[95]"
           />
           <motion.div
             initial={{ opacity: 0, y: 40, scale: 0.96 }}
@@ -160,7 +160,11 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
             exit={{ opacity: 0, y: 40, scale: 0.96 }}
             transition={{ type: 'spring', stiffness: 420, damping: 34 }}
             dir={rtl ? 'rtl' : 'ltr'}
-            className="fixed inset-x-3 top-[5vh] bottom-[5vh] z-[80] max-w-md mx-auto flex flex-col glass-strong rounded-3xl shadow-glass-lg overflow-hidden bg-white"
+            // z-[100] sits above the floating Navigation island (z-50)
+            // and the layout/tutorial pills (z-30). Previously this was
+            // z-80, but a stacking-context quirk on iOS let the black
+            // Navigation island render visually above the modal anyway.
+            className="fixed inset-x-3 top-[5vh] bottom-[5vh] z-[100] max-w-md mx-auto flex flex-col glass-strong rounded-3xl shadow-glass-lg overflow-hidden bg-white"
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
@@ -181,8 +185,12 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
               </button>
             </div>
 
-            {/* Body */}
-            <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
+            {/* Body — `min-h-0` is critical: without it the flex child
+                refuses to shrink, the `overflow-y-auto` never engages,
+                and long forms (full member edit) get clipped at the
+                modal's bottom edge with no way to scroll to the rest of
+                the fields. */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 py-5 space-y-5">
               {/* Profile photo uploader */}
               <div className="flex flex-col items-center gap-3">
                 <button

@@ -109,6 +109,7 @@ interface FamilyState {
   addTree: (tree: Omit<FamilyTree, 'id'>) => Promise<FamilyTree | null>
   updateTree: (id: string, patch: Partial<FamilyTree>) => Promise<void>
   deleteTree: (id: string) => Promise<void>
+  fetchTrees: () => Promise<void>
 
   // ── Tree layout mode (lifted from TreeView) ────────────────────────
   // Used to live as local state in TreeView, but the bottom-nav
@@ -502,6 +503,26 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   updateTree: async (id, patch) => {
     set((s) => ({ trees: s.trees.map((t) => (t.id === id ? { ...t, ...patch } : t)) }))
     try { await supabase.from('family_trees').update(patch).eq('id', id) } catch { /* ignore */ }
+  },
+  fetchTrees: async () => {
+    // Trees the current user has access to.  RLS on family_trees
+    // (migration 009) limits visible rows to those the user owns or
+    // has a tree_access entry for.  Admins see everything via the
+    // is_admin bypass.  We replace the in-memory list wholesale so a
+    // joined-via-code tree shows up immediately.
+    try {
+      const { data, error } = await supabase
+        .from('family_trees')
+        .select('*')
+        .order('created_at', { ascending: true })
+      if (error) {
+        reportSupabaseFailure('fetchTrees', error, 'read')
+        return
+      }
+      if (Array.isArray(data)) set({ trees: data as FamilyTree[] })
+    } catch (err) {
+      reportSupabaseFailure('fetchTrees', err, 'read')
+    }
   },
   deleteTree: async (id) => {
     set((s) => ({

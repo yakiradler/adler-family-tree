@@ -288,9 +288,14 @@ export default function Dashboard({ demoMode }: Props) {
       })
     }
 
-    const visibleTrees = userIsAdmin || demoMode
-      ? trees
-      : trees.filter((t) => t.created_by === profile?.id)
+    // The server already restricts `trees` to ones the current user
+    // has access to (owner via family_trees.created_by OR membership via
+    // tree_access), so we don't need to filter again here — that filter
+    // used to hide trees a user joined via an invite code (created_by
+    // pointed at the inviter, not them), which made the rail look empty
+    // for anyone but the tree's creator.  Admin + demo keep seeing all
+    // trees in the store.
+    const visibleTrees = trees
     visibleTrees.forEach((tr, i) => {
       const pool = members.filter((m) => m.tree_id === tr.id)
       summaries.push({

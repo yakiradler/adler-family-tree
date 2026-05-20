@@ -125,13 +125,14 @@ export default function TreeView({
   const {
     members: allMembers, relationships,
     selectedMemberId, setSelectedMemberId,
-    activeTreeId,
+    activeTreeId, trees,
     layoutMode,
     treeControlsExpanded,
     treeFullscreen, setTreeFullscreen,
     openTreePopover, setOpenTreePopover,
     isFocusedMode, setIsFocusedMode,
   } = useFamilyStore()
+  const activeTree = activeTreeId == null ? null : trees.find((tr) => tr.id === activeTreeId) ?? null
   // Narrow the population to the currently active tree. `null` means
   // the default/main tree which is everyone without a tree_id; an
   // explicit id picks that named tree.
@@ -483,7 +484,7 @@ export default function TreeView({
     setScale(newScale)
   }
 
-  if (members.length === 0) return <EmptyState t={t} />
+  if (members.length === 0) return <EmptyState t={t} treeName={activeTree?.name ?? null} />
 
   const theme = LAYOUT_THEMES[layoutMode]
 
@@ -924,7 +925,13 @@ export default function TreeView({
 // Navigation.tsx so mobile users don't carry two competing controls in
 // the same vertical band.
 
-function EmptyState({ t }: { t: Translations }) {
+function EmptyState({ t, treeName }: { t: Translations; treeName: string | null }) {
+  // When the user lands on an empty tree we name it in the heading so
+  // they know which container they're filling.  Falls back to the
+  // generic copy when no active tree is selected (main pool).
+  const title = treeName
+    ? t.treeEmptyTitleWithName.replace('{name}', treeName)
+    : t.treeEmptyTitle
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
       className="flex flex-col items-center justify-center gap-4 text-center px-8 pt-20">
@@ -937,7 +944,7 @@ function EmptyState({ t }: { t: Translations }) {
         </svg>
       </div>
       <div>
-        <h3 className="text-sf-title3 text-[#1C1C1E] mb-1">{t.treeEmptyTitle}</h3>
+        <h3 className="text-sf-title3 text-[#1C1C1E] mb-1">{title}</h3>
         <p className="text-sf-subhead text-[#8E8E93]">{t.treeEmptyDesc}</p>
       </div>
     </motion.div>

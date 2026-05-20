@@ -316,26 +316,32 @@ export function buildLayout(
 
   // Layout roots.
   //
-  // Previously this loop dropped a root from layoutRoots whenever its
-  // primary spouse was NOT also a root, which left that root without an
-  // x-position (assign() never ran on it) so it collapsed to (0, 0)
-  // and visually merged with whichever cluster also landed there.
-  // Real-world symptom: adding שיינדל (no parents → root) as spouse
-  // of grandfather יחזקאל made the OTHER grandfather (יעקב אהרון) on
-  // the right side "vanish" — they were stacked under each other.
-  //
-  // The correct dedupe: include every rootId in layoutRoots; only the
-  // SECOND member of a root-root spouse pair gets skipped, because the
-  // FIRST one will place them both via the spouse-placement code at
-  // line ~370 (`placedSpouses` in subtreeWidth).
+  // For each root-root spouse pair we promote ONE partner to layoutRoots
+  // and demote the other to "placed as a spouse" so they render side by
+  // side via subtreeWidth's couple placement.  Which partner is primary
+  // matters: assign() recurses through `familyChildrenOf(primary)`, so
+  // if the partner WITHOUT children is picked as primary, the actual
+  // descendants of the couple never get placed and fall through to the
+  // (0,0) safety net at line ~533 — which is what produced the
+  // "clicking שיינדל opens יעקב" bug after the previous fix.  We pick
+  // the partner with more descendants as primary; ties keep iteration
+  // order, which is deterministic given the members array order.
   const processedAsSpouse = new Set<string>()
   const layoutRoots: string[] = []
+  const childCount = (id: string) => (familyChildrenOf.get(id) ?? []).length
   for (const id of rootIds) {
     if (processedAsSpouse.has(id)) continue
-    layoutRoots.push(id)
-    for (const sp of spousesOf.get(id) ?? []) {
-      if (rootIds.has(sp)) processedAsSpouse.add(sp)
+    const partners = (spousesOf.get(id) ?? []).filter(
+      (sp) => rootIds.has(sp) && !processedAsSpouse.has(sp),
+    )
+    let primary = id
+    for (const sp of partners) {
+      if (childCount(sp) > childCount(primary)) primary = sp
     }
+    layoutRoots.push(primary)
+    for (const sp of partners) if (sp !== primary) processedAsSpouse.add(sp)
+    if (primary !== id) processedAsSpouse.add(id)
+    processedAsSpouse.add(primary)
   }
 
   // A "leaf" for layout purposes = no descendants AND no spouse. We
@@ -565,6 +571,29 @@ export function buildLayout(
     genY.set(g, yAccum)
     // Next generation must clear this gen's card height + any cluster dy.
     yAccum += NODE_H + (genOverflow.get(g) ?? 0) + V_GAP
+  }
+
+  // Defensive collision guard.  If any pair of members ended up at the
+  // same (rounded x, generation) slot — usually because of an edge case
+  // in the root-spouse selection above or a corrupted relationship row
+  // — push the later occupants to the right so each card has its own
+  // click target.  Better a slightly-misaligned card than a click that
+  // hits the wrong member because they're stacked.
+  const slotOccupants = new Map<string, number>()
+  for (const m of members) {
+    if (!xPos.has(m.id)) continue
+    const x0 = xPos.get(m.id)!
+    const g = genMap.get(m.id) ?? 0
+    const key = `${Math.round(x0)}|${g}`
+    const occupied = slotOccupants.get(key) ?? 0
+    if (occupied > 0) {
+      xPos.set(m.id, x0 + occupied * (NODE_W + H_GAP))
+      if (typeof console !== 'undefined') {
+        // eslint-disable-next-line no-console
+        console.warn(`[treeLayout] slot collision at ${key} for member ${m.id}; nudged by ${occupied} slot(s)`)
+      }
+    }
+    slotOccupants.set(key, occupied + 1)
   }
 
   const finalNodes: LayoutNode[] = members.map(m => {

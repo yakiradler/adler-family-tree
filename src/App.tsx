@@ -40,7 +40,7 @@ export default function App() {
   // the marketing landing entirely whenever Supabase wasn't configured.
   const [demoEntered, setDemoEntered] = useState(false)
 
-  const { setProfile, fetchMembers, fetchRelationships, fetchEditRequests } = useFamilyStore()
+  const { setProfile, fetchMembers, fetchRelationships, fetchEditRequests, fetchTrees } = useFamilyStore()
   const { lang } = useLang()
   const dir = isRTL(lang) ? 'rtl' : 'ltr'
 
@@ -328,7 +328,7 @@ export default function App() {
         full_name: session.user.user_metadata?.full_name ?? session.user.email ?? 'User',
         role: 'user',
       })
-      fetchMembers(); fetchRelationships(); fetchEditRequests()
+      fetchMembers(); fetchRelationships(); fetchEditRequests(); fetchTrees()
     }
     load()
   }, [session])

@@ -302,17 +302,21 @@ export default function TreePage({ demoMode }: Props) {
                 clean and the user finds it together with the other
                 advanced controls. */}
             {treeControlsExpanded && !hideChrome && (
-              <div className={`fixed z-30 no-print ${isRTL(lang) ? 'left-3' : 'right-3'}`} style={{ top: 'calc(env(safe-area-inset-top, 0px) + 140px)' }}>
+              // Minimal "?" icon — sits below the rest of the hamburger
+              // pills so the user finds it last in the vertical stack.
+              // The previous pill carried a text label that competed with
+              // the family-name header for space on small screens; user
+              // requested icon-only at the bottom of the drawer.
+              <div className={`fixed z-30 no-print ${isRTL(lang) ? 'left-3' : 'right-3'}`} style={{ top: 'calc(env(safe-area-inset-top, 0px) + 232px)' }}>
                 <Tooltip content={t.tipTreeTutorial} placement="bottom" align="end">
                   <motion.button
                     type="button"
                     whileTap={{ scale: 0.94 }}
                     onClick={() => setTreeTutorialOpen(true)}
                     aria-label={t.tipTreeTutorial}
-                    className="px-3 h-10 rounded-full bg-white/95 border border-white/70 shadow-glass text-[12px] font-semibold text-[#007AFF] flex items-center gap-1.5 hover:bg-white transition"
+                    className="w-9 h-9 rounded-full bg-white/95 border border-white/70 shadow-glass text-[#007AFF] flex items-center justify-center hover:bg-white transition"
                   >
-                    <span aria-hidden>?</span>
-                    {t.tipTreeTutorial}
+                    <span className="text-base font-bold" aria-hidden>?</span>
                   </motion.button>
                 </Tooltip>
               </div>

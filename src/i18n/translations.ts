@@ -41,6 +41,7 @@ export const translations = {
 
     // Tree View
     treeEmptyTitle: 'התחל את עץ המשפחה שלך',
+    treeEmptyTitleWithName: 'העץ "{name}" עדיין ריק',
     treeEmptyDesc: 'הוסף את חבר המשפחה הראשון שלך כדי להתחיל לבנות את העץ.',
     layoutPicker: 'פריסה',
     layoutClassic: 'רגיל',
@@ -709,6 +710,7 @@ export const translations = {
     authEmailAlreadyRegistered: 'This email is already registered. Try logging in instead.',
 
     treeEmptyTitle: 'Start Your Family Tree',
+    treeEmptyTitleWithName: 'The "{name}" tree is empty',
     treeEmptyDesc: 'Add your first family member to begin building your tree.',
     layoutPicker: 'Layout',
     layoutClassic: 'Classic',
