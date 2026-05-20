@@ -78,6 +78,23 @@ export default function JoinTreeModal({
           .update({ uses_left: Math.max(0, data.uses_left - 1) })
           .eq('id', data.id)
       }
+      // Grant DB-level access to the target tree.  Without this row
+      // the new RLS in migration 008 would refuse to return members /
+      // relationships for the tree — the UI would join "into" an
+      // empty space.  We insert before fetching so the next reads
+      // already see the rows.
+      if (data.tree_id) {
+        const { data: auth } = await supabase.auth.getUser()
+        const uid = auth.user?.id
+        if (uid) {
+          await supabase
+            .from('tree_access')
+            .upsert(
+              { user_id: uid, tree_id: data.tree_id, role: 'member' },
+              { onConflict: 'user_id,tree_id' },
+            )
+        }
+      }
       // Switch the UI to the target tree and refresh data so the
       // user's next paint shows the tree they joined, not the empty
       // skeleton they came from.

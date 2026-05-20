@@ -261,27 +261,142 @@ create policy "trees_update_owner" on public.family_trees for update
 create policy "trees_delete_owner" on public.family_trees for delete
   using (created_by = auth.uid() or public.is_admin(auth.uid()));
 
+-- ─── TREE_ACCESS (per-tree membership) ────────────────────
+-- Explicit ACL for "which users can see which trees". Without this
+-- table the old members_select_all policy let any authenticated user
+-- read every member row in the DB, which leaked the Adler tree to
+-- anyone who signed up. See migration 008 for the full reasoning.
+create table if not exists public.tree_access (
+  user_id    uuid not null references auth.users(id) on delete cascade,
+  tree_id    uuid not null references public.family_trees(id) on delete cascade,
+  role       text not null default 'member'
+              check (role in ('owner', 'editor', 'member', 'viewer')),
+  granted_by uuid references auth.users(id) on delete set null,
+  granted_at timestamptz not null default now(),
+  primary key (user_id, tree_id)
+);
+create index if not exists tree_access_tree_idx on public.tree_access(tree_id);
+create index if not exists tree_access_user_idx on public.tree_access(user_id);
+
+create or replace function public.has_tree_access(uid uuid, tree uuid)
+returns boolean
+language sql
+security definer
+stable
+as $$
+  select
+    tree is null
+    or public.is_admin(uid)
+    or exists (
+      select 1 from public.tree_access
+      where user_id = uid and tree_id = tree
+    );
+$$;
+
+create or replace function public.member_visible_to(uid uuid, m_id uuid)
+returns boolean
+language sql
+security definer
+stable
+as $$
+  select exists (
+    select 1 from public.members m
+     where m.id = m_id
+       and (
+         public.is_admin(uid)
+         or (m.tree_id is not null and public.has_tree_access(uid, m.tree_id))
+         or (m.tree_id is null and m.created_by = uid)
+       )
+  );
+$$;
+
+create or replace function public.handle_new_family_tree()
+returns trigger language plpgsql security definer as $$
+begin
+  if new.created_by is not null then
+    insert into public.tree_access (user_id, tree_id, role, granted_by)
+    values (new.created_by, new.id, 'owner', new.created_by)
+    on conflict (user_id, tree_id) do nothing;
+  end if;
+  return new;
+end$$;
+
+drop trigger if exists on_family_tree_created on public.family_trees;
+create trigger on_family_tree_created
+  after insert on public.family_trees
+  for each row execute procedure public.handle_new_family_tree();
+
+alter table public.tree_access enable row level security;
+drop policy if exists "ta_select_own"   on public.tree_access;
+drop policy if exists "ta_select_admin" on public.tree_access;
+drop policy if exists "ta_insert_admin" on public.tree_access;
+drop policy if exists "ta_insert_self"  on public.tree_access;
+drop policy if exists "ta_delete_admin" on public.tree_access;
+create policy "ta_select_own"   on public.tree_access for select using (user_id = auth.uid());
+create policy "ta_select_admin" on public.tree_access for select using (public.is_admin(auth.uid()));
+create policy "ta_insert_admin" on public.tree_access for insert with check (public.is_admin(auth.uid()));
+create policy "ta_insert_self"  on public.tree_access for insert
+  with check (auth.role() = 'authenticated' and user_id = auth.uid());
+create policy "ta_delete_admin" on public.tree_access for delete using (public.is_admin(auth.uid()));
+
 -- ─── MEMBERS ─────────────────────────────────────────────
 alter table public.members enable row level security;
-drop policy if exists "members_select_all"   on public.members;
-drop policy if exists "members_insert_auth"  on public.members;
-drop policy if exists "members_update_auth"  on public.members;
-drop policy if exists "members_delete_admin" on public.members;
-create policy "members_select_all"   on public.members for select using (auth.role() = 'authenticated');
-create policy "members_insert_auth"  on public.members for insert with check (auth.role() = 'authenticated');
-create policy "members_update_auth"  on public.members for update using (auth.role() = 'authenticated');
+drop policy if exists "members_select_all"     on public.members;
+drop policy if exists "members_select_visible" on public.members;
+drop policy if exists "members_insert_auth"    on public.members;
+drop policy if exists "members_insert_scoped"  on public.members;
+drop policy if exists "members_update_auth"    on public.members;
+drop policy if exists "members_update_scoped"  on public.members;
+drop policy if exists "members_delete_admin"   on public.members;
+create policy "members_select_visible" on public.members for select using (
+  public.is_admin(auth.uid())
+  or (tree_id is not null and public.has_tree_access(auth.uid(), tree_id))
+  or (tree_id is null and created_by = auth.uid())
+);
+create policy "members_insert_scoped" on public.members for insert with check (
+  auth.role() = 'authenticated' and (
+    public.is_admin(auth.uid())
+    or (tree_id is not null and public.has_tree_access(auth.uid(), tree_id))
+    or (tree_id is null and (created_by = auth.uid() or created_by is null))
+  )
+);
+create policy "members_update_scoped" on public.members for update using (
+  public.is_admin(auth.uid())
+  or (tree_id is not null and public.has_tree_access(auth.uid(), tree_id))
+  or (tree_id is null and created_by = auth.uid())
+);
 create policy "members_delete_admin" on public.members for delete using (public.is_admin(auth.uid()));
 
 -- ─── RELATIONSHIPS ────────────────────────────────────────
 alter table public.relationships enable row level security;
-drop policy if exists "rels_select_all"  on public.relationships;
-drop policy if exists "rels_insert_auth" on public.relationships;
-drop policy if exists "rels_update_auth" on public.relationships;
-drop policy if exists "rels_delete_auth" on public.relationships;
-create policy "rels_select_all"   on public.relationships for select using (auth.role() = 'authenticated');
-create policy "rels_insert_auth"  on public.relationships for insert with check (auth.role() = 'authenticated');
-create policy "rels_update_auth"  on public.relationships for update using (auth.role() = 'authenticated');
-create policy "rels_delete_auth"  on public.relationships for delete using (auth.role() = 'authenticated');
+drop policy if exists "rels_select_all"     on public.relationships;
+drop policy if exists "rels_select_visible" on public.relationships;
+drop policy if exists "rels_insert_auth"    on public.relationships;
+drop policy if exists "rels_insert_scoped"  on public.relationships;
+drop policy if exists "rels_update_auth"    on public.relationships;
+drop policy if exists "rels_update_scoped"  on public.relationships;
+drop policy if exists "rels_delete_auth"    on public.relationships;
+drop policy if exists "rels_delete_scoped"  on public.relationships;
+create policy "rels_select_visible" on public.relationships for select using (
+  public.member_visible_to(auth.uid(), member_a_id)
+  and public.member_visible_to(auth.uid(), member_b_id)
+);
+create policy "rels_insert_scoped" on public.relationships for insert with check (
+  auth.role() = 'authenticated'
+  and public.member_visible_to(auth.uid(), member_a_id)
+  and public.member_visible_to(auth.uid(), member_b_id)
+);
+create policy "rels_update_scoped" on public.relationships for update using (
+  public.member_visible_to(auth.uid(), member_a_id)
+  and public.member_visible_to(auth.uid(), member_b_id)
+);
+create policy "rels_delete_scoped" on public.relationships for delete using (
+  public.is_admin(auth.uid())
+  or (
+    public.member_visible_to(auth.uid(), member_a_id)
+    and public.member_visible_to(auth.uid(), member_b_id)
+  )
+);
 
 -- ─── EDIT REQUESTS ────────────────────────────────────────
 alter table public.edit_requests enable row level security;
