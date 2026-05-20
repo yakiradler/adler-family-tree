@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import { canApproveEditRequests, isAdmin } from '../lib/permissions'
 import type {
   Member, Relationship, EditRequest, ViewMode, Profile,
   AccessRequest, UserRole, FamilyTree, MemberNote,
@@ -185,16 +186,16 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     // return the empty / scoped set the user is actually entitled to.
     const me = get().profile
     const current = get().members
-    const isAdmin = me?.role === 'admin'
+    const meIsAdmin = me?.role === 'admin'
     const ownsAny = me ? current.some((m) => m.created_by === me.id) : false
-    if (current.length > 0 && (ownsAny || isAdmin)) {
+    if (current.length > 0 && (ownsAny || meIsAdmin)) {
       // Admins legitimately see members they didn't create (every tree
       // in the system), so absence-of-owned-rows is not a leakage
       // signal for them.  Same early-exit either way.
       set({ isLoading: false })
       return
     }
-    if (current.length > 0 && !ownsAny && !isAdmin && me) {
+    if (current.length > 0 && !ownsAny && !meIsAdmin && me) {
       // Non-admin with no owned rows: this is residual leakage from
       // the pre-RLS era.  Drop and re-fetch so the next render
       // reflects exactly what RLS authorises.
@@ -405,15 +406,38 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   approveEditRequest: async (requestId) => {
     const req = get().editRequests.find((r) => r.id === requestId)
     if (!req) return
-    await supabase.from('members').update(req.change_data).eq('id', req.target_member_id)
-    await supabase.from('edit_requests').update({ status: 'approved' }).eq('id', requestId)
-    set((s) => ({ editRequests: s.editRequests.filter((r) => r.id !== requestId) }))
-    await get().fetchMembers()
+    // RBAC gate: app-level check that the caller is permitted to approve.
+    // Supabase RLS is the source of truth, but per AGENTS.md the app
+    // must also gate so a misconfigured RLS doesn't silently expose the
+    // action.
+    if (!canApproveEditRequests(get().profile)) return
+    // Optimistic: drop the request locally + apply the member patch so
+    // the admin sees their approval land immediately, even in demo mode
+    // (no Supabase) or when RLS later rejects the write.
+    set((s) => ({
+      editRequests: s.editRequests.filter((r) => r.id !== requestId),
+      members: s.members.map((m) =>
+        m.id === req.target_member_id
+          ? ({ ...m, ...(req.change_data as Partial<Member>) })
+          : m,
+      ),
+    }))
+    try {
+      const { error: mErr } = await supabase.from('members').update(req.change_data).eq('id', req.target_member_id)
+      if (mErr) reportSupabaseFailure('approveEditRequest:member', mErr)
+      const { error: rErr } = await supabase.from('edit_requests').update({ status: 'approved' }).eq('id', requestId)
+      if (rErr) reportSupabaseFailure('approveEditRequest:request', rErr)
+    } catch (err) { reportSupabaseFailure('approveEditRequest', err) }
   },
 
   rejectEditRequest: async (requestId) => {
-    await supabase.from('edit_requests').update({ status: 'rejected' }).eq('id', requestId)
+    if (!canApproveEditRequests(get().profile)) return
+    // Optimistic drop first; Supabase status update is best-effort.
     set((s) => ({ editRequests: s.editRequests.filter((r) => r.id !== requestId) }))
+    try {
+      const { error } = await supabase.from('edit_requests').update({ status: 'rejected' }).eq('id', requestId)
+      if (error) reportSupabaseFailure('rejectEditRequest', error)
+    } catch (err) { reportSupabaseFailure('rejectEditRequest', err) }
   },
 
   // ── Onboarding + RBAC ────────────────────────────────────────────────
@@ -488,21 +512,31 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   },
 
   decideAccessRequest: async (id, decision, grantedRole) => {
+    // App-level admin gate. RLS still authoritative server-side; this
+    // mirrors that policy locally so the action is rejected before any
+    // optimistic state change in demo mode.
+    if (!isAdmin(get().profile)) return
     const req = get().accessRequests.find(r => r.id === id)
-    const patch: Record<string, unknown> = {
-      status: decision,
-      decided_at: new Date().toISOString(),
-    }
-    await supabase.from('access_requests').update(patch).eq('id', id)
-    if (decision === 'approved' && req) {
-      const role = grantedRole ?? req.requested_role
-      await supabase.from('profiles').update({ role }).eq('id', req.requester_id)
-    }
+    const decidedAt = new Date().toISOString()
+    // Optimistic update first so the admin sees the decision land
+    // instantly even when Supabase is offline or RLS-blocked.
     set((s) => ({
       accessRequests: s.accessRequests.map(r =>
-        r.id === id ? { ...r, status: decision, decided_at: patch.decided_at as string } : r,
+        r.id === id ? { ...r, status: decision, decided_at: decidedAt } : r,
       ),
     }))
+    try {
+      const { error: aErr } = await supabase
+        .from('access_requests')
+        .update({ status: decision, decided_at: decidedAt })
+        .eq('id', id)
+      if (aErr) reportSupabaseFailure('decideAccessRequest:request', aErr)
+      if (decision === 'approved' && req) {
+        const role = grantedRole ?? req.requested_role
+        const { error: pErr } = await supabase.from('profiles').update({ role }).eq('id', req.requester_id)
+        if (pErr) reportSupabaseFailure('decideAccessRequest:profile', pErr)
+      }
+    } catch (err) { reportSupabaseFailure('decideAccessRequest', err) }
   },
 
   completeOnboarding: async (patch) => {
@@ -512,14 +546,24 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       ...patch,
       onboarded_at: new Date().toISOString(),
     }
-    await supabase.from('profiles').update(finalPatch).eq('id', me.id)
+    // Local first so the dashboard banner disappears immediately even
+    // when Supabase is offline / RLS hasn't propagated.
     set({ profile: { ...me, ...finalPatch } })
+    try {
+      const { error } = await supabase.from('profiles').update(finalPatch).eq('id', me.id)
+      if (error) reportSupabaseFailure('completeOnboarding', error)
+    } catch (err) { reportSupabaseFailure('completeOnboarding', err) }
   },
 
   updateProfileById: async (id, patch) => {
-    await supabase.from('profiles').update(patch).eq('id', id)
+    // Update local mirror first so the UI reflects the change without
+    // waiting for the network round-trip.
     const me = get().profile
     if (me?.id === id) set({ profile: { ...me, ...patch } })
+    try {
+      const { error } = await supabase.from('profiles').update(patch).eq('id', id)
+      if (error) reportSupabaseFailure('updateProfileById', error)
+    } catch (err) { reportSupabaseFailure('updateProfileById', err) }
   },
 
   // ── Tree viewport implementation ──────────────────────────────────
