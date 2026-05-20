@@ -573,15 +573,20 @@ export function buildLayout(
     yAccum += NODE_H + (genOverflow.get(g) ?? 0) + V_GAP
   }
 
-  // Defensive collision sweep.  Within each generation, build an
-  // ordered chain that keeps spouses immediately adjacent to their
-  // partner — otherwise a naive sort-by-x interleaves couples when a
-  // bridging marriage (e.g. Adler: יצחק married שולמית, daughter of
-  // יעקב) collapses the two grandparent couples' x-ranges and forces
-  // them to share placements.  After building the chain, walk it
-  // left-to-right and push any card whose left edge falls inside the
-  // previous card's footprint.  This guarantees zero pixel overlap
-  // AND that a couple never gets a stranger card slipped between them.
+  // Group-based collision sweep.  Within each generation, identify
+  // "couple groups" (a member plus its same-gen spouses) and place
+  // them as a single unit, side-by-side with neighboring groups.
+  // This handles both directions: a spouse stranded far right of her
+  // partner gets PULLED to the partner's side, and a stranger trying
+  // to overlap the couple gets PUSHED past their combined footprint.
+  //
+  // We previously did a one-directional left-to-right sweep that
+  // could only push right; שיינדל ended up at x≈4500 (no children →
+  // safety-net placed her at the right edge) while her husband
+  // יחזקאל sat at x≈-1200.  The sweep couldn't reel her back, and the
+  // user saw a 5000-px gap with יעקב + חיה sitting between them.
+  // The group-based layout below ignores the (broken) initial x for
+  // spouses entirely and re-emits the entire row in couple order.
   const byGen = new Map<number, string[]>()
   for (const m of members) {
     if (!xPos.has(m.id)) continue
@@ -591,37 +596,46 @@ export function buildLayout(
   }
   const MIN_HORIZONTAL_GAP = 8
   for (const [, ids] of byGen) {
-    // Sort by current x to find the leftmost member to anchor the chain.
-    const sortedByX = [...ids].sort((a, b) => xPos.get(a)! - xPos.get(b)!)
-    const visited = new Set<string>()
-    const ordered: string[] = []
-    for (const id of sortedByX) {
-      if (visited.has(id)) continue
-      ordered.push(id)
-      visited.add(id)
-      // Pull all same-gen spouses in immediately after, so a "married
-      // outsider" can't slip between the primary and the spouse during
-      // the overlap pass below.
-      for (const sp of spousesOf.get(id) ?? []) {
-        if (!visited.has(sp) && ids.includes(sp)) {
-          ordered.push(sp)
-          visited.add(sp)
-        }
-      }
+    const idSet = new Set(ids)
+    // Build groups: each group is [primary, ...spouses-in-same-gen].
+    const groupOf = new Map<string, string[]>()  // primary id → group ids
+    const memberToGroup = new Map<string, string>() // any id → primary id
+    for (const id of ids) {
+      if (memberToGroup.has(id)) continue
+      const spouses = (spousesOf.get(id) ?? []).filter(
+        (sp) => idSet.has(sp) && !memberToGroup.has(sp),
+      )
+      const group = [id, ...spouses]
+      groupOf.set(id, group)
+      for (const m of group) memberToGroup.set(m, id)
     }
-    for (let i = 1; i < ordered.length; i++) {
-      const prevId = ordered[i - 1]
-      const curId = ordered[i]
-      const prevX = xPos.get(prevId)!
-      const curX = xPos.get(curId)!
-      const minAllowedX = prevX + NODE_W + MIN_HORIZONTAL_GAP
-      if (curX < minAllowedX) {
-        xPos.set(curId, minAllowedX)
+    // Sort groups by the leftmost initial x of their primary, so the
+    // overall left-to-right structure of the tree is preserved.
+    const primaries = [...groupOf.keys()].sort(
+      (a, b) => xPos.get(a)! - xPos.get(b)!,
+    )
+    // Lay groups out in order.  cursorX advances by each group's full
+    // width.  Within a group the primary keeps its current x as the
+    // anchor (unless cursor demands a bigger value); each spouse is
+    // placed immediately to the primary's right.
+    let cursorX = -Infinity
+    for (const primary of primaries) {
+      const group = groupOf.get(primary)!
+      const desiredAnchor = xPos.get(primary)!
+      const anchorX = Math.max(desiredAnchor, cursorX + MIN_HORIZONTAL_GAP)
+      xPos.set(primary, anchorX)
+      let nextX = anchorX + NODE_W + MIN_HORIZONTAL_GAP
+      for (let i = 1; i < group.length; i++) {
+        const spId = group[i]
+        const oldX = xPos.get(spId)!
+        xPos.set(spId, nextX)
         if (typeof console !== 'undefined') {
           // eslint-disable-next-line no-console
-          console.warn(`[treeLayout] overlap fix: ${curId} pushed from ${Math.round(curX)} to ${Math.round(minAllowedX)} (after ${prevId})`)
+          console.warn(`[treeLayout] couple snap: ${spId} moved from ${Math.round(oldX)} to ${Math.round(nextX)} (spouse of ${primary})`)
         }
+        nextX += NODE_W + MIN_HORIZONTAL_GAP
       }
+      cursorX = nextX
     }
   }
 
