@@ -573,20 +573,56 @@ export function buildLayout(
     yAccum += NODE_H + (genOverflow.get(g) ?? 0) + V_GAP
   }
 
-  // Group-based collision sweep.  Within each generation, identify
-  // "couple groups" (a member plus its same-gen spouses) and place
-  // them as a single unit, side-by-side with neighboring groups.
-  // This handles both directions: a spouse stranded far right of her
-  // partner gets PULLED to the partner's side, and a stranger trying
-  // to overlap the couple gets PUSHED past their combined footprint.
+  // Minimal post-layout sweep — fix ONLY two specific defects without
+  // disturbing the spatial structure the engine computed:
   //
-  // We previously did a one-directional left-to-right sweep that
-  // could only push right; שיינדל ended up at x≈4500 (no children →
-  // safety-net placed her at the right edge) while her husband
-  // יחזקאל sat at x≈-1200.  The sweep couldn't reel her back, and the
-  // user saw a 5000-px gap with יעקב + חיה sitting between them.
-  // The group-based layout below ignores the (broken) initial x for
-  // spouses entirely and re-emits the entire row in couple order.
+  //   1. A spouse that landed unreasonably far from their partner
+  //      (e.g. שיינדל at x=14000 because she had no children → fell
+  //      through the safety net at the right edge of the canvas).
+  //      For each same-gen spouse pair we check the gap; if it's
+  //      wider than 4× NODE_W we yank the stranded spouse to sit
+  //      immediately right of their partner.  Below 4× we leave it
+  //      alone — wider-but-not-absurd gaps are usually legitimate
+  //      (joining couples between two grandparent subtrees).
+  //
+  //   2. Any same-gen pair whose footprints visually overlap.  Only
+  //      the second card (in array order) is nudged right, by the
+  //      minimum amount needed to clear the first.  This preserves
+  //      every other card's original x.
+  //
+  // The previous "group-based" sweep re-packed every generation into
+  // a tight cursor-driven line, which collapsed the family-subtree
+  // structure into one long row.  This minimal version stays out of
+  // the engine's way unless something is genuinely broken.
+  const MIN_HORIZONTAL_GAP = 8
+  const FAR_SPOUSE_THRESHOLD = NODE_W * 4
+
+  // (1) Yank stranded same-gen spouses next to their partner.
+  for (const m of members) {
+    if (!xPos.has(m.id)) continue
+    const myGen = genMap.get(m.id) ?? 0
+    for (const sp of spousesOf.get(m.id) ?? []) {
+      if (!xPos.has(sp)) continue
+      const spGen = genMap.get(sp) ?? 0
+      if (spGen !== myGen) continue
+      const myX = xPos.get(m.id)!
+      const spX = xPos.get(sp)!
+      // Iterate each ordered pair once: only act when the spouse sits
+      // strictly to the right beyond the threshold (so we don't
+      // double-snap).
+      if (spX - myX > FAR_SPOUSE_THRESHOLD) {
+        const targetX = myX + NODE_W + MIN_HORIZONTAL_GAP
+        xPos.set(sp, targetX)
+        if (typeof console !== 'undefined') {
+          // eslint-disable-next-line no-console
+          console.warn(`[treeLayout] couple snap: ${sp} pulled from ${Math.round(spX)} to ${Math.round(targetX)} (spouse of ${m.id})`)
+        }
+      }
+    }
+  }
+
+  // (2) Per-gen pairwise overlap nudge — preserves order, only acts
+  // when two cards would visibly share pixels.
   const byGen = new Map<number, string[]>()
   for (const m of members) {
     if (!xPos.has(m.id)) continue
@@ -594,48 +630,15 @@ export function buildLayout(
     if (!byGen.has(g)) byGen.set(g, [])
     byGen.get(g)!.push(m.id)
   }
-  const MIN_HORIZONTAL_GAP = 8
-  for (const [, ids] of byGen) {
-    const idSet = new Set(ids)
-    // Build groups: each group is [primary, ...spouses-in-same-gen].
-    const groupOf = new Map<string, string[]>()  // primary id → group ids
-    const memberToGroup = new Map<string, string>() // any id → primary id
-    for (const id of ids) {
-      if (memberToGroup.has(id)) continue
-      const spouses = (spousesOf.get(id) ?? []).filter(
-        (sp) => idSet.has(sp) && !memberToGroup.has(sp),
-      )
-      const group = [id, ...spouses]
-      groupOf.set(id, group)
-      for (const m of group) memberToGroup.set(m, id)
-    }
-    // Sort groups by the leftmost initial x of their primary, so the
-    // overall left-to-right structure of the tree is preserved.
-    const primaries = [...groupOf.keys()].sort(
-      (a, b) => xPos.get(a)! - xPos.get(b)!,
-    )
-    // Lay groups out in order.  cursorX advances by each group's full
-    // width.  Within a group the primary keeps its current x as the
-    // anchor (unless cursor demands a bigger value); each spouse is
-    // placed immediately to the primary's right.
-    let cursorX = -Infinity
-    for (const primary of primaries) {
-      const group = groupOf.get(primary)!
-      const desiredAnchor = xPos.get(primary)!
-      const anchorX = Math.max(desiredAnchor, cursorX + MIN_HORIZONTAL_GAP)
-      xPos.set(primary, anchorX)
-      let nextX = anchorX + NODE_W + MIN_HORIZONTAL_GAP
-      for (let i = 1; i < group.length; i++) {
-        const spId = group[i]
-        const oldX = xPos.get(spId)!
-        xPos.set(spId, nextX)
-        if (typeof console !== 'undefined') {
-          // eslint-disable-next-line no-console
-          console.warn(`[treeLayout] couple snap: ${spId} moved from ${Math.round(oldX)} to ${Math.round(nextX)} (spouse of ${primary})`)
-        }
-        nextX += NODE_W + MIN_HORIZONTAL_GAP
+  for (const ids of byGen.values()) {
+    ids.sort((a, b) => xPos.get(a)! - xPos.get(b)!)
+    for (let i = 1; i < ids.length; i++) {
+      const prevX = xPos.get(ids[i - 1])!
+      const curX = xPos.get(ids[i])!
+      const minAllowedX = prevX + NODE_W + MIN_HORIZONTAL_GAP
+      if (curX < minAllowedX) {
+        xPos.set(ids[i], minAllowedX)
       }
-      cursorX = nextX
     }
   }
 
