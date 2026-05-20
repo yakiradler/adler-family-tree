@@ -185,15 +185,19 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     // return the empty / scoped set the user is actually entitled to.
     const me = get().profile
     const current = get().members
+    const isAdmin = me?.role === 'admin'
     const ownsAny = me ? current.some((m) => m.created_by === me.id) : false
-    if (current.length > 0 && ownsAny) {
+    if (current.length > 0 && (ownsAny || isAdmin)) {
+      // Admins legitimately see members they didn't create (every tree
+      // in the system), so absence-of-owned-rows is not a leakage
+      // signal for them.  Same early-exit either way.
       set({ isLoading: false })
       return
     }
-    if (current.length > 0 && !ownsAny && me) {
-      // Local rows exist but none are mine — they're leakage. Drop
-      // them before the server fetch so the next render reflects
-      // exactly what RLS authorises.
+    if (current.length > 0 && !ownsAny && !isAdmin && me) {
+      // Non-admin with no owned rows: this is residual leakage from
+      // the pre-RLS era.  Drop and re-fetch so the next render
+      // reflects exactly what RLS authorises.
       set({ members: [], relationships: [] })
     }
     set({ isLoading: true })
