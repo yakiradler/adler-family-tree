@@ -304,10 +304,11 @@ export default function TreePage({ demoMode }: Props) {
             {treeControlsExpanded && !hideChrome && (
               // Minimal "?" icon — sits below the rest of the hamburger
               // pills so the user finds it last in the vertical stack.
-              // The previous pill carried a text label that competed with
-              // the family-name header for space on small screens; user
-              // requested icon-only at the bottom of the drawer.
-              <div className={`fixed z-30 no-print ${isRTL(lang) ? 'left-3' : 'right-3'}`} style={{ top: 'calc(env(safe-area-inset-top, 0px) + 232px)' }}>
+              // top:280 lands AFTER the density chip (which is at 228 +
+              // ~52px button height including its outline shadow), with
+              // a small gap so the icon doesn't overlap the chip on
+              // mobile. The previous offset (232) overlapped by 4px.
+              <div className={`fixed z-30 no-print ${isRTL(lang) ? 'left-3' : 'right-3'}`} style={{ top: 'calc(env(safe-area-inset-top, 0px) + 280px)' }}>
                 <Tooltip content={t.tipTreeTutorial} placement="bottom" align="end">
                   <motion.button
                     type="button"

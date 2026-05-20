@@ -573,18 +573,20 @@ export function buildLayout(
     yAccum += NODE_H + (genOverflow.get(g) ?? 0) + V_GAP
   }
 
-  // Defensive collision guard.  If any pair of members ended up at the
-  // same (rounded x, generation) slot — usually because of an edge case
-  // in the root-spouse selection above or a corrupted relationship row
-  // — push the later occupants to the right so each card has its own
-  // click target.  Better a slightly-misaligned card than a click that
-  // hits the wrong member because they're stacked.
+  // Defensive collision guard.  If any pair of members ended up
+  // close enough that their click-targets visually overlap, push the
+  // later occupants to the right so each card has its own hit area.
+  // Bucket size = NODE_W / 2 (instead of 1px) catches near-overlaps
+  // that the previous round-to-pixel bucketing missed — those were
+  // the residual "click שיינדל but יעקב opens" cases on the live site.
+  const HALF_NODE = NODE_W / 2
   const slotOccupants = new Map<string, number>()
   for (const m of members) {
     if (!xPos.has(m.id)) continue
     const x0 = xPos.get(m.id)!
     const g = genMap.get(m.id) ?? 0
-    const key = `${Math.round(x0)}|${g}`
+    const bucket = Math.floor(x0 / HALF_NODE)
+    const key = `${bucket}|${g}`
     const occupied = slotOccupants.get(key) ?? 0
     if (occupied > 0) {
       xPos.set(m.id, x0 + occupied * (NODE_W + H_GAP))

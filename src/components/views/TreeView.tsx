@@ -603,6 +603,7 @@ export default function TreeView({
               lineage={lineageById.get(member.id)}
               secondaryPartners={secondaryPartners}
               onSecondarySelect={(id) => setSelectedMemberId(id)}
+              dataMemberId={member.id}
             />
           </motion.div>
         ))}

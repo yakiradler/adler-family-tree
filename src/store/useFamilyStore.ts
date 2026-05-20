@@ -303,9 +303,29 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     const localId = `rel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     const optimistic: Relationship = { ...rel, id: localId }
     set((s) => ({ relationships: [...s.relationships, optimistic] }))
+    // The relationships RLS calls member_visible_to(uid, member_x) which
+    // queries the members table.  When seedSkeletonFamily fires several
+    // members + relationships in immediate succession, the relationship
+    // INSERT can race ahead of the read-snapshot the visibility helper
+    // sees, returning false even though the members are committed.  We
+    // retry once after a short delay before surfacing the failure — in
+    // practice this rescues the seed flow without changing the RLS.
+    const tryInsert = async () => {
+      return supabase.from('relationships').insert(rel).select().single()
+    }
     try {
-      const { data, error } = await supabase.from('relationships').insert(rel).select().single()
-      if (error) reportSupabaseFailure('addRelationship', error)
+      let { data, error } = await tryInsert()
+      if (error) {
+        await new Promise((r) => setTimeout(r, 250))
+        const retry = await tryInsert()
+        data = retry.data
+        error = retry.error
+        if (error) {
+          // eslint-disable-next-line no-console
+          console.error('[addRelationship] failed after retry:', error, rel)
+          reportSupabaseFailure('addRelationship', error)
+        }
+      }
       if (data) {
         set((s) => ({
           relationships: s.relationships.map((r) =>

@@ -29,6 +29,9 @@ interface Props {
    */
   secondaryPartners?: SecondaryPartner[]
   onSecondarySelect?: (memberId: string) => void
+  /** Debug aid: exposes the member id as a DOM data attribute so we can
+   * verify in devtools which member's element is receiving a click. */
+  dataMemberId?: string
 }
 
 export function getRingGradient(m: Member): string {
@@ -121,6 +124,7 @@ export default function MemberNode({
   lineage,
   secondaryPartners,
   onSecondarySelect,
+  dataMemberId,
 }: Props) {
   const { lang } = useLang()
   const deceased = !!member.death_date
@@ -169,6 +173,7 @@ export default function MemberNode({
       transition={{ type: 'spring', stiffness: 380, damping: 26 }}
       className="relative flex flex-col items-center no-select group"
       style={{ width: cardWidth }}
+      data-member-id={dataMemberId}
     >
       {/* Story ring with photo */}
       <div
