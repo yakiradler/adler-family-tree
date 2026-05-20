@@ -589,11 +589,12 @@ export function buildLayout(
     yAccum += NODE_H + (genOverflow.get(g) ?? 0) + V_GAP
   }
 
-  // No post-layout sweep — the engine's placement stands as-is.
-  // Earlier attempts (chain/group/conservative-nudge) all introduced
-  // their own regressions (mixed members, stretched connectors,
-  // wrong-side spouse). When two members truly land at identical x,
-  // the visual collision is preferable to re-ordering an entire row.
+  // No post-layout sweep.  The engine's placement is the source of
+  // truth.  The remaining edge case — two cards landing at identical
+  // x because subtreeWidth under-counts a placed spouse's overflow —
+  // is mitigated by the actual-rightmost startX bookkeeping above
+  // (which advances the next root past whatever the previous root
+  // actually placed, not just the nominal subtreeWidth).
 
   const finalNodes: LayoutNode[] = members.map(m => {
     const g = genMap.get(m.id) ?? 0
