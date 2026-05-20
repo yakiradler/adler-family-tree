@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
@@ -12,6 +12,7 @@ import BuildFromTextModal from '../components/BuildFromTextModal'
 import BrandMark from '../components/BrandMark'
 import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
 import JoinTreeModal from '../components/JoinTreeModal'
+import TreeCardActionMenu from '../components/TreeCardActionMenu'
 import { shouldAutoShowTutorial, recordTutorialShown } from '../lib/tutorialState'
 import type { Member, Relationship } from '../types'
 
@@ -115,7 +116,15 @@ export default function Dashboard({ demoMode }: Props) {
   // Long-press / right-click → tree-card context menu. `null` when
   // closed; otherwise carries the tree summary the user invoked on
   // so we can show its name in the sheet title.
-  const [treeCardMenuTarget, setTreeCardMenuTarget] = useState<{ name: string } | null>(null)
+  const [treeCardMenuTarget, setTreeCardMenuTarget] = useState<{ id: string | null; name: string } | null>(null)
+  // Touch long-press timer for the tree cards.  iOS Safari doesn't
+  // reliably fire `contextmenu` on long-press (it shows its own
+  // text-selection callout), so we add an explicit 600ms pointer
+  // timer that mirrors the desktop right-click behaviour.  Tracking
+  // pressFiredRef lets the click handler suppress the navigate-on-tap
+  // when the press already opened the menu.
+  const treeCardPressTimerRef = useRef<number | null>(null)
+  const treeCardPressFiredRef = useRef(false)
 
   // Tutorial overlay state. Auto-launches once on the user's very
   // first visit (localStorage flag) and otherwise sits behind the
@@ -505,19 +514,53 @@ export default function Dashboard({ demoMode }: Props) {
                   whileHover={{ y: -3 }}
                   whileTap={{ scale: 0.97 }}
                   onClick={() => {
+                    // Suppress the tap-to-open-tree when the long-press
+                    // already opened the action menu — otherwise both
+                    // fire and the user lands on the tree instead of
+                    // seeing the menu.
+                    if (treeCardPressFiredRef.current) {
+                      treeCardPressFiredRef.current = false
+                      return
+                    }
                     setActiveTreeId(tree.id)
                     navigate('/tree')
                   }}
                   onContextMenu={(e) => {
-                    // Long-press / right-click menu for the tree
-                    // card — currently surfaces a "coming soon" sheet
-                    // for the icon-edit + external-share flows the
-                    // user asked for. The backend (Supabase Storage +
-                    // share tokens with admin-gated permissions) is a
-                    // follow-up; this placeholder makes the affordance
-                    // discoverable now.
+                    // Desktop right-click → action menu directly.
                     e.preventDefault()
                     setTreeCardMenuTarget(tree)
+                  }}
+                  onPointerDown={(e) => {
+                    if (e.pointerType !== 'touch') return
+                    treeCardPressFiredRef.current = false
+                    if (treeCardPressTimerRef.current != null) {
+                      window.clearTimeout(treeCardPressTimerRef.current)
+                    }
+                    treeCardPressTimerRef.current = window.setTimeout(() => {
+                      treeCardPressFiredRef.current = true
+                      setTreeCardMenuTarget(tree)
+                    }, 600)
+                  }}
+                  onPointerUp={() => {
+                    if (treeCardPressTimerRef.current != null) {
+                      window.clearTimeout(treeCardPressTimerRef.current)
+                      treeCardPressTimerRef.current = null
+                    }
+                  }}
+                  onPointerCancel={() => {
+                    if (treeCardPressTimerRef.current != null) {
+                      window.clearTimeout(treeCardPressTimerRef.current)
+                      treeCardPressTimerRef.current = null
+                    }
+                  }}
+                  onPointerMove={() => {
+                    // Any finger movement cancels the long-press —
+                    // matches native iOS behaviour where dragging
+                    // dismisses the long-press menu.
+                    if (treeCardPressTimerRef.current != null) {
+                      window.clearTimeout(treeCardPressTimerRef.current)
+                      treeCardPressTimerRef.current = null
+                    }
                   }}
                   className="flex-shrink-0 flex flex-col items-center gap-1.5 no-select rounded-2xl px-2 py-1.5 hover:bg-white/40 transition"
                   style={{ width: 96 }}
@@ -756,41 +799,16 @@ export default function Dashboard({ demoMode }: Props) {
         onClose={closeTutorial}
       />
 
-      {/* Tree-card long-press menu. Two "coming soon" actions the
-          user requested:
-            • Change the tree icon (upload an image)
-            • Share an external view-only link, with admin-gated
-              generation depth (default 3, more on approval).
-          The placeholder modal explains both so the affordance is
-          discoverable while the backend lands. */}
-      <ComingSoonModal
+      {/* Tree-card long-press / right-click menu.  "Request share
+          code" is real — it files an access_request the admin picks
+          up in their pending list.  The other rows are surfaced with
+          a "coming soon" pill so the affordance is discoverable while
+          the backends (Supabase Storage for icons, share tokens for
+          external links, depth gating) land. */}
+      <TreeCardActionMenu
         open={treeCardMenuTarget !== null}
         onClose={() => setTreeCardMenuTarget(null)}
-        icon="🌳"
-        title={
-          lang === 'he'
-            ? `אפשרויות לעץ "${treeCardMenuTarget?.name ?? ''}"`
-            : `Options for "${treeCardMenuTarget?.name ?? ''}"`
-        }
-        description={
-          lang === 'he'
-            ? 'אנחנו עובדים על שתי פעולות חדשות לכרטיס העץ. בלחיצה ארוכה / לחיצה ימנית יוצג תפריט עם:'
-            : "We're building two new actions for the tree card. Long-press / right-click will open a menu with:"
-        }
-        bullets={
-          lang === 'he'
-            ? [
-                'העלאת תמונה לאייקון של העץ',
-                'יצירת קישור שיתוף חיצוני (תצוגה בלבד)',
-                'הגבלת עומק ל-3 דורות, יותר באישור מנהל',
-              ]
-            : [
-                'Upload a custom photo as the tree icon',
-                'Generate an external view-only share link',
-                'Default depth: 3 generations, more with admin approval',
-              ]
-        }
-        gradient="from-[#34C759] to-[#007AFF]"
+        target={treeCardMenuTarget}
       />
     </div>
   )
