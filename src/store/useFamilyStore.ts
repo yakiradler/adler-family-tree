@@ -669,3 +669,12 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   isFocusedMode: false,
   setIsFocusedMode: (isFocusedMode) => set({ isFocusedMode }),
 }))
+
+// Debug-only: expose the store on window so devtools can audit state
+// when chasing layout bugs (e.g. why spousesOf misses a pair).  Read
+// only — no mutation API exposed.
+if (typeof window !== 'undefined') {
+  ;(window as unknown as { __ftStore?: { get: () => FamilyState } }).__ftStore = {
+    get: () => useFamilyStore.getState(),
+  }
+}
