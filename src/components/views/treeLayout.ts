@@ -531,10 +531,26 @@ export function buildLayout(
     placeSpousesAround(id, midX, spousesToPlace)
   }
 
+  // `startX += subtreeWidth(rootId)` undercounts when a placed spouse
+  // ends up to the right of the children-derived subtree edge (the
+  // placeSpousesAround call centers the couple on the children's
+  // midpoint, so a wide children block + narrow children-centerline
+  // pushes the spouse beyond the nominal subtreeWidth).  When that
+  // happens, the next root's startX lands INSIDE the previous root's
+  // spouse — they share an x and one card hides behind the other.
+  // We instead measure the actual right edge of every member that got
+  // placed by this root's assign() pass and use that to advance.
   let startX = 0
   for (const rootId of layoutRoots) {
+    const placedBefore = new Set(placed)
     assign(rootId, startX)
-    startX += subtreeWidth(rootId) + H_GAP * 2
+    let actualRight = startX + NODE_W
+    for (const id of placed) {
+      if (placedBefore.has(id)) continue
+      const x = xPos.get(id)
+      if (x !== undefined && x + NODE_W > actualRight) actualRight = x + NODE_W
+    }
+    startX = actualRight + H_GAP * 2
   }
   members.forEach(m => {
     if (!placed.has(m.id)) { xPos.set(m.id, startX); startX += NODE_W + H_GAP }
