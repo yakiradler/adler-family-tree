@@ -675,10 +675,15 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
 }))
 
 // Debug-only: expose the store on window so devtools can audit state
-// when chasing layout bugs (e.g. why spousesOf misses a pair).  Read
-// only — no mutation API exposed.
+// when chasing layout bugs (e.g. why spousesOf misses a pair).
 if (typeof window !== 'undefined') {
-  ;(window as unknown as { __ftStore?: { get: () => FamilyState } }).__ftStore = {
+  ;(window as unknown as {
+    __ftStore?: {
+      get: () => FamilyState
+      set: (patch: Partial<FamilyState>) => void
+    }
+  }).__ftStore = {
     get: () => useFamilyStore.getState(),
+    set: (patch) => useFamilyStore.setState(patch),
   }
 }
