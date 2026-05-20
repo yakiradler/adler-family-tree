@@ -168,23 +168,32 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   setSelectedMemberId: (selectedMemberId) => set({ selectedMemberId }),
 
   fetchMembers: async () => {
-    // ── localStorage is the source of truth ──────────────────────────
-    // Original code did `set({ members: data ?? [] })`, which silently
-    // wiped local edits whenever Supabase returned [] (RLS, missing
-    // table) or its older snapshot. The intermediate "merge" fix kept
-    // local-only rows but still let server rows OVERWRITE locally
-    // edited rows, so a spouse-status change that didn't make it past
-    // RLS got reverted on the next refresh — same bug, subtler form.
+    // ── localStorage is the source of truth, but only for owned rows ─
+    // We hydrate the store from localStorage in App.tsx, then trust
+    // the local snapshot — Supabase is only consulted to seed an empty
+    // store. That avoided wiping local edits when RLS returned [] or
+    // an older snapshot.
     //
-    // We now treat the store (hydrated from localStorage in App.tsx)
-    // as authoritative. Supabase is only consulted to seed an empty
-    // store on first run; after that, fetch never touches existing
-    // rows. Admin can force a full reload via the AdminDashboard
-    // "refresh store" button if a real cross-device sync is needed.
+    // The "trust local" rule has one critical exception: if the local
+    // snapshot has rows but NONE of them are owned by the current
+    // user, the snapshot leaked in from somewhere else (a prior demo
+    // session, a localStorage version migration, the pre-RLS Adler
+    // seed surviving on a returning visitor's machine). Skipping the
+    // server fetch in that case would let the leaked rows persist
+    // forever. Force-fetch from the server so RLS gets a chance to
+    // return the empty / scoped set the user is actually entitled to.
+    const me = get().profile
     const current = get().members
-    if (current.length > 0) {
+    const ownsAny = me ? current.some((m) => m.created_by === me.id) : false
+    if (current.length > 0 && ownsAny) {
       set({ isLoading: false })
       return
+    }
+    if (current.length > 0 && !ownsAny && me) {
+      // Local rows exist but none are mine — they're leakage. Drop
+      // them before the server fetch so the next render reflects
+      // exactly what RLS authorises.
+      set({ members: [], relationships: [] })
     }
     set({ isLoading: true })
     const { data, error } = await supabase
@@ -269,7 +278,18 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   },
 
   deleteMember: async (id) => {
-    set((s) => ({ members: s.members.filter((m) => m.id !== id) }))
+    // Cascade locally: orphaned relationships pointing at a deleted
+    // member would otherwise leave the layout engine with dangling
+    // edges, producing ghost / overlapping cards on the next render.
+    // Supabase itself cascades via `on delete cascade` in schema.sql,
+    // so we don't need a second DB call for relationships.
+    set((s) => ({
+      members: s.members.filter((m) => m.id !== id),
+      relationships: s.relationships.filter(
+        (r) => r.member_a_id !== id && r.member_b_id !== id,
+      ),
+      selectedMemberId: s.selectedMemberId === id ? null : s.selectedMemberId,
+    }))
     try {
       const { error } = await supabase.from('members').delete().eq('id', id)
       if (error) reportSupabaseFailure('deleteMember', error)

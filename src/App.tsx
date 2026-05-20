@@ -118,9 +118,15 @@ export default function App() {
     // another doesn't leak the previous user's local data (including
     // the seeded Adler family) into the new session. The demo bucket
     // is a single shared key because demo has no real identity.
+    // v4 bumps the per-user bucket so any snapshot that was captured
+    // before migration 008 tightened RLS (and could therefore contain
+    // the 79-member Adler population a non-Adler user inherited via
+    // the old open SELECT policy) is dropped on next login. Existing
+    // legitimate owners reseed from Supabase, which still returns
+    // exactly the rows they own — no data loss for yakir.
     const STORAGE_KEY = demoMode
       ? 'ft-state-v3'
-      : `ft-state-v3-${session?.user?.id ?? 'anon'}`
+      : `ft-state-v4-${session?.user?.id ?? 'anon'}`
     const LEGACY_KEYS = demoMode ? ['ft-demo-state-v2', 'ft-demo-state-v1'] : []
 
     // Migrate / hydrate.

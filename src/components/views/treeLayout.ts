@@ -314,20 +314,28 @@ export function buildLayout(
     }
   }
 
-  // Layout roots
+  // Layout roots.
+  //
+  // Previously this loop dropped a root from layoutRoots whenever its
+  // primary spouse was NOT also a root, which left that root without an
+  // x-position (assign() never ran on it) so it collapsed to (0, 0)
+  // and visually merged with whichever cluster also landed there.
+  // Real-world symptom: adding שיינדל (no parents → root) as spouse
+  // of grandfather יחזקאל made the OTHER grandfather (יעקב אהרון) on
+  // the right side "vanish" — they were stacked under each other.
+  //
+  // The correct dedupe: include every rootId in layoutRoots; only the
+  // SECOND member of a root-root spouse pair gets skipped, because the
+  // FIRST one will place them both via the spouse-placement code at
+  // line ~370 (`placedSpouses` in subtreeWidth).
   const processedAsSpouse = new Set<string>()
   const layoutRoots: string[] = []
   for (const id of rootIds) {
     if (processedAsSpouse.has(id)) continue
-    const spouses = spousesOf.get(id) ?? []
-    const primarySpouse = spouses[0]
-    if (primarySpouse && !rootIds.has(primarySpouse)) {
-      processedAsSpouse.add(id)
-      continue
-    }
     layoutRoots.push(id)
-    for (const sp of spouses) if (rootIds.has(sp)) processedAsSpouse.add(sp)
-    processedAsSpouse.add(id)
+    for (const sp of spousesOf.get(id) ?? []) {
+      if (rootIds.has(sp)) processedAsSpouse.add(sp)
+    }
   }
 
   // A "leaf" for layout purposes = no descendants AND no spouse. We

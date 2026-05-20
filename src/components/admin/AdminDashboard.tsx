@@ -1357,6 +1357,15 @@ function AccessRequestCard({ request, index, t, onApprove, onReject }: AccessReq
     isTreeAccess && a.via_member && typeof a.via_member === 'object'
       ? (a.via_member as { name?: string }).name
       : undefined
+  // Long-press → "request share code" flow from the Dashboard tree
+  // card lands here too.  We surface it with a distinct 🔑 chip so the
+  // admin knows to mint an invite code in the InviteCodeManager tab
+  // (rather than approving as a role grant, which has nothing to do
+  // with codes).
+  const isShareCodeRequest = a.intent === 'request_share_code'
+  const shareCodeTargetTree = isShareCodeRequest
+    ? (a.target_tree_name as string | undefined)
+    : undefined
   return (
     <motion.div
       layout
@@ -1386,10 +1395,26 @@ function AccessRequestCard({ request, index, t, onApprove, onReject }: AccessReq
               🌲 {t.adminAccessTreeKind}
             </span>
           )}
+          {isShareCodeRequest && (
+            <span className="text-[10px] bg-[#FF9F0A]/15 text-[#B25F00] rounded-full px-2 py-0.5 font-bold">
+              🔑 {t.adminAccessShareCodeKind}
+            </span>
+          )}
         </div>
       </div>
 
       <div className="bg-[#F2F2F7]/80 rounded-2xl p-3 mb-3 space-y-1.5">
+        {isShareCodeRequest && shareCodeTargetTree && (
+          <div className="flex items-baseline gap-2">
+            <span className="text-sf-caption text-[#8E8E93]">{t.adminAccessShareCodeTarget}:</span>
+            <span className="text-sf-caption font-bold text-[#B25F00]">{shareCodeTargetTree}</span>
+          </div>
+        )}
+        {isShareCodeRequest && (
+          <p className="text-[11px] text-[#636366] leading-snug">
+            {t.adminAccessShareCodeHint}
+          </p>
+        )}
         {isTreeAccess && treeAccessTarget && (
           <div className="flex items-baseline gap-2">
             <span className="text-sf-caption text-[#8E8E93]">{t.adminAccessTreeTarget}:</span>
@@ -1430,29 +1455,34 @@ function AccessRequestCard({ request, index, t, onApprove, onReject }: AccessReq
         )}
       </div>
 
-      {/* Granted-role selector */}
-      <div className="mb-3">
-        <p className="text-[10px] text-[#8E8E93] mb-1.5 font-semibold">{t.adminAccessApproveAs}</p>
-        <div className="bg-[#F2F2F7] rounded-xl p-1 flex gap-1">
-          {ROLE_OPTIONS.map(r => (
-            <button
-              key={r.key}
-              type="button"
-              onClick={() => setGrantRole(r.key)}
-              aria-pressed={grantRole === r.key}
-              aria-label={t[r.labelKey]}
-              className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition flex flex-col items-center gap-0.5 ${
-                grantRole === r.key
-                  ? 'bg-white text-[#1C1C1E] shadow-sm'
-                  : 'text-[#636366]'
-              }`}
-            >
-              <span className="text-[14px] leading-none">{r.icon}</span>
-              <span className="text-[9.5px] font-bold whitespace-nowrap">{t[r.labelKey]}</span>
-            </button>
-          ))}
+      {/* Granted-role selector — not relevant when the request is for a
+          share code, since granting a code is done in the Invites tab.
+          We hide the selector in that case so the admin isn't tempted
+          to use it as a substitute. */}
+      {!isShareCodeRequest && (
+        <div className="mb-3">
+          <p className="text-[10px] text-[#8E8E93] mb-1.5 font-semibold">{t.adminAccessApproveAs}</p>
+          <div className="bg-[#F2F2F7] rounded-xl p-1 flex gap-1">
+            {ROLE_OPTIONS.map(r => (
+              <button
+                key={r.key}
+                type="button"
+                onClick={() => setGrantRole(r.key)}
+                aria-pressed={grantRole === r.key}
+                aria-label={t[r.labelKey]}
+                className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition flex flex-col items-center gap-0.5 ${
+                  grantRole === r.key
+                    ? 'bg-white text-[#1C1C1E] shadow-sm'
+                    : 'text-[#636366]'
+                }`}
+              >
+                <span className="text-[14px] leading-none">{r.icon}</span>
+                <span className="text-[9.5px] font-bold whitespace-nowrap">{t[r.labelKey]}</span>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="flex gap-2">
         <motion.button
