@@ -344,6 +344,26 @@ export function buildLayout(
     processedAsSpouse.add(primary)
   }
 
+  // A root whose spouse has parents in some other subtree is a
+  // married-in partner, not an independent founder.  The previous code
+  // only merged ROOT-ROOT spouse pairs (above), so a root R married to
+  // a non-root S got placed as its own subtree to the right of the
+  // main tree — producing 17 phantom "trees" on the live Adler render
+  // and the abnormal horizontal spread the user reported.
+  //
+  // We strip such roots from layoutRoots.  S's assign() picks R up via
+  // placeSpousesAround (the spousesToPlace filter on line ~434 already
+  // allows it once R is no longer in layoutRoots), and any joint
+  // children of R+S already appear in familyChildrenOf(S) via the
+  // cross-spouse merge at lines 264-285 — so R's whole descendant
+  // chain naturally absorbs into S's subtree under the joint couple.
+  for (let i = layoutRoots.length - 1; i >= 0; i--) {
+    const id = layoutRoots[i]
+    const spouses = spousesOf.get(id) ?? []
+    const hasInTreeSpouse = spouses.some((sp) => !rootIds.has(sp))
+    if (hasInTreeSpouse) layoutRoots.splice(i, 1)
+  }
+
   // A "leaf" for layout purposes = no descendants AND no spouse. We
   // exclude married childless members from the leaf cluster because the
   // cluster's `dx` placements are sized for ONE node per slot — when a
