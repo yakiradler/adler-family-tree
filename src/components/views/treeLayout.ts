@@ -573,74 +573,16 @@ export function buildLayout(
     yAccum += NODE_H + (genOverflow.get(g) ?? 0) + V_GAP
   }
 
-  // Minimal post-layout sweep — fix ONLY two specific defects without
-  // disturbing the spatial structure the engine computed:
-  //
-  //   1. A spouse that landed unreasonably far from their partner
-  //      (e.g. שיינדל at x=14000 because she had no children → fell
-  //      through the safety net at the right edge of the canvas).
-  //      For each same-gen spouse pair we check the gap; if it's
-  //      wider than 4× NODE_W we yank the stranded spouse to sit
-  //      immediately right of their partner.  Below 4× we leave it
-  //      alone — wider-but-not-absurd gaps are usually legitimate
-  //      (joining couples between two grandparent subtrees).
-  //
-  //   2. Any same-gen pair whose footprints visually overlap.  Only
-  //      the second card (in array order) is nudged right, by the
-  //      minimum amount needed to clear the first.  This preserves
-  //      every other card's original x.
-  //
-  // The previous "group-based" sweep re-packed every generation into
-  // a tight cursor-driven line, which collapsed the family-subtree
-  // structure into one long row.  This minimal version stays out of
-  // the engine's way unless something is genuinely broken.
-  const MIN_HORIZONTAL_GAP = 8
-  const FAR_SPOUSE_THRESHOLD = NODE_W * 4
-
-  // (1) Yank stranded same-gen spouses next to their partner.
-  for (const m of members) {
-    if (!xPos.has(m.id)) continue
-    const myGen = genMap.get(m.id) ?? 0
-    for (const sp of spousesOf.get(m.id) ?? []) {
-      if (!xPos.has(sp)) continue
-      const spGen = genMap.get(sp) ?? 0
-      if (spGen !== myGen) continue
-      const myX = xPos.get(m.id)!
-      const spX = xPos.get(sp)!
-      // Iterate each ordered pair once: only act when the spouse sits
-      // strictly to the right beyond the threshold (so we don't
-      // double-snap).
-      if (spX - myX > FAR_SPOUSE_THRESHOLD) {
-        const targetX = myX + NODE_W + MIN_HORIZONTAL_GAP
-        xPos.set(sp, targetX)
-        if (typeof console !== 'undefined') {
-          // eslint-disable-next-line no-console
-          console.warn(`[treeLayout] couple snap: ${sp} pulled from ${Math.round(spX)} to ${Math.round(targetX)} (spouse of ${m.id})`)
-        }
-      }
-    }
-  }
-
-  // (2) Per-gen pairwise overlap nudge — preserves order, only acts
-  // when two cards would visibly share pixels.
-  const byGen = new Map<number, string[]>()
-  for (const m of members) {
-    if (!xPos.has(m.id)) continue
-    const g = genMap.get(m.id) ?? 0
-    if (!byGen.has(g)) byGen.set(g, [])
-    byGen.get(g)!.push(m.id)
-  }
-  for (const ids of byGen.values()) {
-    ids.sort((a, b) => xPos.get(a)! - xPos.get(b)!)
-    for (let i = 1; i < ids.length; i++) {
-      const prevX = xPos.get(ids[i - 1])!
-      const curX = xPos.get(ids[i])!
-      const minAllowedX = prevX + NODE_W + MIN_HORIZONTAL_GAP
-      if (curX < minAllowedX) {
-        xPos.set(ids[i], minAllowedX)
-      }
-    }
-  }
+  // No post-layout sweep — the engine's placement is the source of
+  // truth. Previous attempts at a "fix-up" sweep (chain-based,
+  // group-based, "yank far spouses") all caused more damage than
+  // they fixed: they re-packed each generation into a tight line,
+  // mixed up members, or stretched parent→child connectors when an
+  // orphan spouse was pulled across the canvas. The original bugs
+  // (אדלר couples overlapping, שיינדל stranded) are real but they
+  // live in the DATA — a member that exists optimistic-only because
+  // RLS blocked the INSERT — and need to be addressed there, not
+  // patched at render time.
 
   const finalNodes: LayoutNode[] = members.map(m => {
     const g = genMap.get(m.id) ?? 0

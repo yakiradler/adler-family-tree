@@ -10,7 +10,7 @@ interface Props {
 }
 
 export default function AddMemberModal({ open, onClose }: Props) {
-  const { addMember, profile } = useFamilyStore()
+  const { addMember, profile, activeTreeId } = useFamilyStore()
   const { t } = useLang()
   const [form, setForm] = useState({ first_name: '', last_name: '', maiden_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '' as Gender | '', birth_order: '', lineage: '' as Lineage | '' })
   const [loading, setLoading] = useState(false)
@@ -33,6 +33,11 @@ export default function AddMemberModal({ open, onClose }: Props) {
       birth_order: parsedOrder != null && !isNaN(parsedOrder) ? parsedOrder : undefined,
       lineage: (form.lineage as Lineage) || null,
       created_by: profile.id,
+      // Inherit the active tree so the new member shows up in the
+      // current tree view. Without this the row lands with tree_id=null
+      // and TreeView's `activeTreeId === null ? main pool : === activeTreeId`
+      // filter hides them from any non-main tree the user is viewing.
+      tree_id: activeTreeId ?? undefined,
     })
     setLoading(false)
     setForm({ first_name: '', last_name: '', maiden_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '', birth_order: '', lineage: '' })
