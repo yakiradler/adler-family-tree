@@ -573,29 +573,38 @@ export function buildLayout(
     yAccum += NODE_H + (genOverflow.get(g) ?? 0) + V_GAP
   }
 
-  // Defensive collision guard.  If any pair of members ended up
-  // close enough that their click-targets visually overlap, push the
-  // later occupants to the right so each card has its own hit area.
-  // Bucket size = NODE_W / 2 (instead of 1px) catches near-overlaps
-  // that the previous round-to-pixel bucketing missed — those were
-  // the residual "click שיינדל but יעקב opens" cases on the live site.
-  const HALF_NODE = NODE_W / 2
-  const slotOccupants = new Map<string, number>()
+  // Defensive collision sweep.  Bucketing by x doesn't catch the case
+  // where two cards are close enough to visually overlap but happen to
+  // straddle a bucket boundary (yechezkel @ x=745, ya'akov @ x=824 in
+  // logical coords — different buckets, but visual cards width≈110
+  // overlap by ~30px on screen).  Instead, sort every generation by x
+  // and walk left-to-right: any card whose left edge falls inside the
+  // previous card's footprint gets pushed right until it clears.  This
+  // guarantees no two cards share any horizontal pixel.
+  const byGen = new Map<number, string[]>()
   for (const m of members) {
     if (!xPos.has(m.id)) continue
-    const x0 = xPos.get(m.id)!
     const g = genMap.get(m.id) ?? 0
-    const bucket = Math.floor(x0 / HALF_NODE)
-    const key = `${bucket}|${g}`
-    const occupied = slotOccupants.get(key) ?? 0
-    if (occupied > 0) {
-      xPos.set(m.id, x0 + occupied * (NODE_W + H_GAP))
-      if (typeof console !== 'undefined') {
-        // eslint-disable-next-line no-console
-        console.warn(`[treeLayout] slot collision at ${key} for member ${m.id}; nudged by ${occupied} slot(s)`)
+    if (!byGen.has(g)) byGen.set(g, [])
+    byGen.get(g)!.push(m.id)
+  }
+  const MIN_HORIZONTAL_GAP = 8 // px of breathing room between adjacent cards
+  for (const ids of byGen.values()) {
+    ids.sort((a, b) => xPos.get(a)! - xPos.get(b)!)
+    for (let i = 1; i < ids.length; i++) {
+      const prevId = ids[i - 1]
+      const curId = ids[i]
+      const prevX = xPos.get(prevId)!
+      const curX = xPos.get(curId)!
+      const minAllowedX = prevX + NODE_W + MIN_HORIZONTAL_GAP
+      if (curX < minAllowedX) {
+        xPos.set(curId, minAllowedX)
+        if (typeof console !== 'undefined') {
+          // eslint-disable-next-line no-console
+          console.warn(`[treeLayout] overlap fix: ${curId} pushed from ${Math.round(curX)} to ${Math.round(minAllowedX)} (after ${prevId})`)
+        }
       }
     }
-    slotOccupants.set(key, occupied + 1)
   }
 
   const finalNodes: LayoutNode[] = members.map(m => {
