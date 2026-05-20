@@ -135,7 +135,7 @@ export default function Auth({ demoMode = false, onDemoEnter }: Props) {
         if (error) throw error
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'שגיאה')
+      setError(err instanceof Error ? err.message : t.genericError)
     } finally {
       setLoading(false)
     }
