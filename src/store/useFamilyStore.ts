@@ -232,8 +232,15 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     }
     const serverRows = data as Relationship[]
     const serverIds = new Set(serverRows.map((r) => r.id))
+    // Preserve ANY local row the server doesn't have — not just ones
+    // with the `rel-` prefix.  Some optimistic rows acquire a UUID
+    // (e.g. a previous Supabase success that later orphaned because
+    // its member was wiped by an RLS race), and dropping those silently
+    // lost the spouse link between יחזקאל and שיינדל on the live tree.
+    // The risk of resurrecting truly-deleted server rows is acceptable
+    // — the next mutation through the normal CRUD path will reconcile.
     const localOptimistic = get().relationships.filter(
-      (r) => r.id.startsWith('rel-') && !serverIds.has(r.id),
+      (r) => !serverIds.has(r.id),
     )
     set({ relationships: [...serverRows, ...localOptimistic] })
   },
