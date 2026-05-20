@@ -287,9 +287,20 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     const localId = `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     const optimistic: Member = { ...member, id: localId } as Member
     set((s) => ({ members: [...s.members, optimistic] }))
+    // Retry once after a short delay on RLS-flake — same reasoning as
+    // addRelationship: when several members + relationships are added
+    // back-to-back (seedSkeletonFamily), the visibility-check helper
+    // can race the previous tuple's commit and reject.
+    const tryInsert = () => supabase.from('members').insert(member).select().single()
     try {
-      const { data, error } = await supabase.from('members').insert(member).select().single()
-      if (error) reportSupabaseFailure('addMember', error)
+      let { data, error } = await tryInsert()
+      if (error) {
+        await new Promise((r) => setTimeout(r, 250))
+        const retry = await tryInsert()
+        data = retry.data
+        error = retry.error
+        if (error) reportSupabaseFailure('addMember', error)
+      }
       if (data) {
         set((s) => ({ members: s.members.map((m) => (m.id === localId ? (data as Member) : m)) }))
         return data as Member

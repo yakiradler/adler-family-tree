@@ -573,34 +573,11 @@ export function buildLayout(
     yAccum += NODE_H + (genOverflow.get(g) ?? 0) + V_GAP
   }
 
-  // Conservative overlap guard.  The engine occasionally places two
-  // root subtrees with collapsed widths (joining-couple cases) at
-  // identical or near-identical x, which makes one card hide behind
-  // the other and steals the click target.  We walk each generation
-  // in x-order and, ONLY when two cards' left edges would land within
-  // NODE_W of each other, nudge the second one rightward by the
-  // minimum needed to clear.  Every other card keeps its original
-  // engine-computed x — no chains, no group repacking, no spouse
-  // yanking across the canvas.
-  const MIN_HORIZONTAL_GAP = 8
-  const byGen = new Map<number, string[]>()
-  for (const m of members) {
-    if (!xPos.has(m.id)) continue
-    const g = genMap.get(m.id) ?? 0
-    if (!byGen.has(g)) byGen.set(g, [])
-    byGen.get(g)!.push(m.id)
-  }
-  for (const ids of byGen.values()) {
-    ids.sort((a, b) => xPos.get(a)! - xPos.get(b)!)
-    for (let i = 1; i < ids.length; i++) {
-      const prevX = xPos.get(ids[i - 1])!
-      const curX = xPos.get(ids[i])!
-      const minAllowedX = prevX + NODE_W + MIN_HORIZONTAL_GAP
-      if (curX < minAllowedX) {
-        xPos.set(ids[i], minAllowedX)
-      }
-    }
-  }
+  // No post-layout sweep — the engine's placement stands as-is.
+  // Earlier attempts (chain/group/conservative-nudge) all introduced
+  // their own regressions (mixed members, stretched connectors,
+  // wrong-side spouse). When two members truly land at identical x,
+  // the visual collision is preferable to re-ordering an entire row.
 
   const finalNodes: LayoutNode[] = members.map(m => {
     const g = genMap.get(m.id) ?? 0
