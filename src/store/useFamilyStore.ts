@@ -209,12 +209,33 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   },
 
   fetchRelationships: async () => {
-    // Same authority rule as fetchMembers — only seed an empty store.
-    const current = get().relationships
-    if (current.length > 0) return
+    // Always pull from the server when reachable.  Previous build had
+    // an early-exit if any local rows existed, which permanently
+    // stranded users whose original seedSkeletonFamily INSERTs were
+    // RLS-blocked: their local store cached an empty relationships
+    // array (or partially-failed optimistic ones), and the early-exit
+    // prevented a recovery fetch from picking up the heal.  We now
+    // fetch every time; if the server returns a non-empty result we
+    // merge it with any *unsynced* optimistic rows (those with the
+    // local `rel-` id prefix) so that mid-flight edits aren't lost.
     const { data, error } = await supabase.from('relationships').select('*')
-    if (error || !Array.isArray(data) || data.length === 0) return
-    set({ relationships: data as Relationship[] })
+    if (error) {
+      reportSupabaseFailure('fetchRelationships', error, 'read')
+      return
+    }
+    if (!Array.isArray(data)) return
+    if (data.length === 0) {
+      // Server returned empty — could be RLS blocking or a fresh
+      // account.  Keep whatever is local rather than wiping pending
+      // optimistic edits.
+      return
+    }
+    const serverRows = data as Relationship[]
+    const serverIds = new Set(serverRows.map((r) => r.id))
+    const localOptimistic = get().relationships.filter(
+      (r) => r.id.startsWith('rel-') && !serverIds.has(r.id),
+    )
+    set({ relationships: [...serverRows, ...localOptimistic] })
   },
 
   fetchEditRequests: async () => {

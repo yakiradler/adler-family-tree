@@ -573,14 +573,15 @@ export function buildLayout(
     yAccum += NODE_H + (genOverflow.get(g) ?? 0) + V_GAP
   }
 
-  // Defensive collision sweep.  Bucketing by x doesn't catch the case
-  // where two cards are close enough to visually overlap but happen to
-  // straddle a bucket boundary (yechezkel @ x=745, ya'akov @ x=824 in
-  // logical coords — different buckets, but visual cards width≈110
-  // overlap by ~30px on screen).  Instead, sort every generation by x
-  // and walk left-to-right: any card whose left edge falls inside the
-  // previous card's footprint gets pushed right until it clears.  This
-  // guarantees no two cards share any horizontal pixel.
+  // Defensive collision sweep.  Within each generation, build an
+  // ordered chain that keeps spouses immediately adjacent to their
+  // partner — otherwise a naive sort-by-x interleaves couples when a
+  // bridging marriage (e.g. Adler: יצחק married שולמית, daughter of
+  // יעקב) collapses the two grandparent couples' x-ranges and forces
+  // them to share placements.  After building the chain, walk it
+  // left-to-right and push any card whose left edge falls inside the
+  // previous card's footprint.  This guarantees zero pixel overlap
+  // AND that a couple never gets a stranger card slipped between them.
   const byGen = new Map<number, string[]>()
   for (const m of members) {
     if (!xPos.has(m.id)) continue
@@ -588,12 +589,29 @@ export function buildLayout(
     if (!byGen.has(g)) byGen.set(g, [])
     byGen.get(g)!.push(m.id)
   }
-  const MIN_HORIZONTAL_GAP = 8 // px of breathing room between adjacent cards
-  for (const ids of byGen.values()) {
-    ids.sort((a, b) => xPos.get(a)! - xPos.get(b)!)
-    for (let i = 1; i < ids.length; i++) {
-      const prevId = ids[i - 1]
-      const curId = ids[i]
+  const MIN_HORIZONTAL_GAP = 8
+  for (const [, ids] of byGen) {
+    // Sort by current x to find the leftmost member to anchor the chain.
+    const sortedByX = [...ids].sort((a, b) => xPos.get(a)! - xPos.get(b)!)
+    const visited = new Set<string>()
+    const ordered: string[] = []
+    for (const id of sortedByX) {
+      if (visited.has(id)) continue
+      ordered.push(id)
+      visited.add(id)
+      // Pull all same-gen spouses in immediately after, so a "married
+      // outsider" can't slip between the primary and the spouse during
+      // the overlap pass below.
+      for (const sp of spousesOf.get(id) ?? []) {
+        if (!visited.has(sp) && ids.includes(sp)) {
+          ordered.push(sp)
+          visited.add(sp)
+        }
+      }
+    }
+    for (let i = 1; i < ordered.length; i++) {
+      const prevId = ordered[i - 1]
+      const curId = ordered[i]
       const prevX = xPos.get(prevId)!
       const curX = xPos.get(curId)!
       const minAllowedX = prevX + NODE_W + MIN_HORIZONTAL_GAP
