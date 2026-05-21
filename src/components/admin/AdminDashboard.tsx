@@ -511,15 +511,15 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
                 <BigStat label={t.membersCount} value={members.length} icon="👨‍👩‍👧" grad="from-[#007AFF] to-[#32ADE6]" />
                 <BigStat label={t.adminTabUsers} value={users.length} icon="👤" grad="from-[#32ADE6] to-[#5AC8FA]" />
                 <BigStat label={t.adminTabRequests} value={pendingCount} icon="🔔" grad="from-[#5AC8FA] to-[#64D2FF]" />
-                <BigStat label="ז״ל" value={deceased} icon="🕯️" grad="from-[#8E8E93] to-[#636366]" />
+                <BigStat label={t.statDeceased} value={deceased} icon="🕯️" grad="from-[#8E8E93] to-[#636366]" />
               </div>
 
               {/* Breakdown card */}
               <div className="glass-strong rounded-3xl p-5 shadow-glass">
                 <h3 className="text-sf-subhead font-bold text-[#1C1C1E] mb-3">📈 {t.adminTabOverview}</h3>
                 <div className="space-y-3">
-                  <ProgressRow label="חיים" count={alive} total={members.length} color="#34C759" />
-                  <ProgressRow label="ז״ל" count={deceased} total={members.length} color="#8E8E93" />
+                  <ProgressRow label={t.statAlive} count={alive} total={members.length} color="#34C759" />
+                  <ProgressRow label={t.statDeceased} count={deceased} total={members.length} color="#8E8E93" />
                 </div>
               </div>
 
