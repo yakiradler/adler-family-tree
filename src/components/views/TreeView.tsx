@@ -56,6 +56,21 @@ function buildConnectors(nodes: LayoutNode[], relationships: Relationship[]) {
     }
   }
 
+  // Map of current-status spouses for the "father's spouse → anchor"
+  // rule below. Only `current` couples count — exes don't get to be
+  // anchors for someone else's children.
+  const currentSpousesOf = new Map<string, string[]>()
+  for (const r of relationships) {
+    if (r.type !== 'spouse') continue
+    if ((r.status ?? 'current') !== 'current') continue
+    const add = (a: string, b: string) => {
+      if (!currentSpousesOf.has(a)) currentSpousesOf.set(a, [])
+      if (!currentSpousesOf.get(a)!.includes(b)) currentSpousesOf.get(a)!.push(b)
+    }
+    add(r.member_a_id, r.member_b_id)
+    add(r.member_b_id, r.member_a_id)
+  }
+
   interface LineD { d: string }
   const lines: LineD[] = []
 
@@ -63,10 +78,11 @@ function buildConnectors(nodes: LayoutNode[], relationships: Relationship[]) {
   // Anchor priority:
   //   1. explicit `child.member.connector_parent_id`  — manual override
   //   2. the child's mother (parent with gender 'female')
-  //   3. the first parent we have a layout node for
-  // This implements the user's request: "every child's connector should
-  // come from the mother by default, with a way to change it per
-  // member." Falling back to the father preserves single-parent trees.
+  //   3. the recorded father's CURRENT spouse if she's in the layout —
+  //      handles the "I added the father first, then later attached a
+  //      wife beside him without re-linking her as parent of the kids"
+  //      case the user reported on the top generation
+  //   4. the first parent we have a layout node for
   const CARD_TOP_OFFSET = AVATAR - 10
   for (const [childId, pars] of childToParents) {
     const child = posMap.get(childId)
@@ -75,10 +91,29 @@ function buildConnectors(nodes: LayoutNode[], relationships: Relationship[]) {
     if (parents.length === 0) continue
 
     const explicit = child.member.connector_parent_id
-    const anchor =
-      (explicit && parents.find(p => p.member.id === explicit)) ||
-      parents.find(p => p.member.gender === 'female') ||
-      parents[0]
+    const explicitAnchor = explicit && parents.find(p => p.member.id === explicit)
+    const motherAnchor = parents.find(p => p.member.gender === 'female')
+    // Look up the father's current spouse only when no mother is among
+    // the recorded parents — otherwise mother (rule 2) still wins.
+    let spouseAnchor: LayoutNode | undefined
+    if (!explicitAnchor && !motherAnchor) {
+      const father = parents.find(p => p.member.gender === 'male')
+      if (father) {
+        const spouseIds = currentSpousesOf.get(father.member.id) ?? []
+        for (const sid of spouseIds) {
+          const node = posMap.get(sid)
+          // Only adopt a spouse anchor when she's a layout-row peer of
+          // the father (same generation, rendered as his side-by-side
+          // partner). A spouse pulled in from elsewhere would draw the
+          // line diagonally across generations.
+          if (node && node.generation === father.generation) {
+            spouseAnchor = node
+            break
+          }
+        }
+      }
+    }
+    const anchor = explicitAnchor || motherAnchor || spouseAnchor || parents[0]
 
     const childCX = Math.round(child.x + NODE_W / 2)
     const childTopY = Math.round(child.y + CARD_TOP_OFFSET)
