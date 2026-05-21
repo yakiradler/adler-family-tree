@@ -609,6 +609,67 @@ export function buildLayout(
     yAccum += NODE_H + (genOverflow.get(g) ?? 0) + V_GAP
   }
 
+  // ─── Couple-adjacency pass ────────────────────────────────────────
+  // The user explicitly asked: "every wife should be adjacent to her
+  // husband as the default." The placement engine handles this for
+  // couples merged via root-root or spouse-of-non-root flows, but in
+  // a top generation with multiple INDEPENDENT couples (each husband
+  // is a separate root, his wife is also a root, no parent-child
+  // links between the couples), the iteration places h1 + w1, then
+  // h2 + w2 — which works on synthetic data but on the user's actual
+  // tree produced [h1, h2, w1, w2] instead of [h1, w1, h2, w2].
+  //
+  // To bullet-proof the rule regardless of the placement path that
+  // led here, we run a final couple-adjacency pass: for each
+  // generation, walk cards left → right; if a card has a recorded
+  // CURRENT spouse in the same generation, ensure that spouse sits
+  // immediately to the right. If not, swap the x position of the
+  // spouse with whichever leaf is currently in that slot. We only
+  // ever swap LEAVES (members without recorded children) so the
+  // descender lines from parent → child don't get disconnected from
+  // their visual column.
+  const partnerOf = new Map<string, string>()
+  for (const r of relationships) {
+    if (r.type !== 'spouse') continue
+    if ((r.status ?? 'current') !== 'current') continue
+    if (!partnerOf.has(r.member_a_id)) partnerOf.set(r.member_a_id, r.member_b_id)
+    if (!partnerOf.has(r.member_b_id)) partnerOf.set(r.member_b_id, r.member_a_id)
+  }
+  const hasOwnChildren = (id: string) => (childrenOf.get(id)?.length ?? 0) > 0
+
+  const cardsByGen = new Map<number, string[]>()
+  for (const m of members) {
+    if (!xPos.has(m.id)) continue
+    const g = genMap.get(m.id) ?? 0
+    if (!cardsByGen.has(g)) cardsByGen.set(g, [])
+    cardsByGen.get(g)!.push(m.id)
+  }
+  for (const ids of cardsByGen.values()) {
+    ids.sort((a, b) => (xPos.get(a) ?? 0) - (xPos.get(b) ?? 0))
+    // Swap leaves into "spouse slot" if a couple isn't adjacent.
+    for (let i = 0; i < ids.length - 1; i++) {
+      const me = ids[i]
+      const partner = partnerOf.get(me)
+      if (!partner) continue
+      const partnerIdx = ids.indexOf(partner)
+      if (partnerIdx < 0) continue
+      if (partnerIdx === i + 1 || partnerIdx === i - 1) continue   // already adjacent
+      // Try to swap the partner with whoever is at i+1, but only if
+      // BOTH the partner and the i+1 occupant are leaves (no recorded
+      // children). Leaves are safe to move; non-leaves anchor their
+      // own subtree below them and would tear the descender.
+      const neighbour = ids[i + 1]
+      if (hasOwnChildren(neighbour) || hasOwnChildren(partner)) continue
+      const xN = xPos.get(neighbour) ?? 0
+      const xP = xPos.get(partner) ?? 0
+      xPos.set(neighbour, xP)
+      xPos.set(partner, xN)
+      // Reflect the new ordering so subsequent iterations see it.
+      ids[i + 1] = partner
+      ids[partnerIdx] = neighbour
+    }
+  }
+
   // Defensive collision guard: per-generation sweep that detects any
   // pair whose horizontal bounding boxes overlap (or come within
   // MIN_SIDE_GAP of each other) and pushes the right-side card just
@@ -624,13 +685,6 @@ export function buildLayout(
   // spacing to its predecessor's right-edge + MIN_SIDE_GAP. This is
   // O(n log n) per generation and safe — it only ever moves cards to
   // the right, never compressing legitimate spacing.
-  const cardsByGen = new Map<number, string[]>()
-  for (const m of members) {
-    if (!xPos.has(m.id)) continue
-    const g = genMap.get(m.id) ?? 0
-    if (!cardsByGen.has(g)) cardsByGen.set(g, [])
-    cardsByGen.get(g)!.push(m.id)
-  }
   for (const ids of cardsByGen.values()) {
     ids.sort((a, b) => (xPos.get(a) ?? 0) - (xPos.get(b) ?? 0))
     for (let i = 1; i < ids.length; i++) {
