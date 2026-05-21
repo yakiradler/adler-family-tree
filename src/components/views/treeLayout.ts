@@ -612,22 +612,24 @@ export function buildLayout(
   // ─── Couple-adjacency pass ────────────────────────────────────────
   // The user explicitly asked: "every wife should be adjacent to her
   // husband as the default." The placement engine handles this for
-  // couples merged via root-root or spouse-of-non-root flows, but in
-  // a top generation with multiple INDEPENDENT couples (each husband
-  // is a separate root, his wife is also a root, no parent-child
-  // links between the couples), the iteration places h1 + w1, then
-  // h2 + w2 — which works on synthetic data but on the user's actual
-  // tree produced [h1, h2, w1, w2] instead of [h1, w1, h2, w2].
+  // most cases, but in a top generation with multiple INDEPENDENT
+  // couples — each husband a separate root, his wife also a root,
+  // no parent-child links between the two couples — the user
+  // observed the wives drifting away from their husbands.
   //
-  // To bullet-proof the rule regardless of the placement path that
-  // led here, we run a final couple-adjacency pass: for each
-  // generation, walk cards left → right; if a card has a recorded
-  // CURRENT spouse in the same generation, ensure that spouse sits
-  // immediately to the right. If not, swap the x position of the
-  // spouse with whichever leaf is currently in that slot. We only
-  // ever swap LEAVES (members without recorded children) so the
-  // descender lines from parent → child don't get disconnected from
-  // their visual column.
+  // This pass runs per generation: build couple groups (current-spouse
+  // pairs at the same generation), then re-tuck each spouse so they
+  // sit immediately next to their partner. We keep whichever partner
+  // was already on the LEFT in place, and slide the other partner to
+  // the slot directly to their right (NODE_W + COUPLE_GAP). This is
+  // intentionally aggressive — even when a partner has children
+  // recorded, we still tuck them adjacent. The descender to the child
+  // may zig-zag a bit after the move, but couple adjacency was the
+  // user's explicit priority over straight orthogonal lines.
+  //
+  // The subsequent near-collision sweep cleans up any side-effect
+  // overlaps the tuck introduces (e.g., when a spouse's new position
+  // crashes into a different couple's space).
   const partnerOf = new Map<string, string>()
   for (const r of relationships) {
     if (r.type !== 'spouse') continue
@@ -635,7 +637,6 @@ export function buildLayout(
     if (!partnerOf.has(r.member_a_id)) partnerOf.set(r.member_a_id, r.member_b_id)
     if (!partnerOf.has(r.member_b_id)) partnerOf.set(r.member_b_id, r.member_a_id)
   }
-  const hasOwnChildren = (id: string) => (childrenOf.get(id)?.length ?? 0) > 0
 
   const cardsByGen = new Map<number, string[]>()
   for (const m of members) {
@@ -646,27 +647,25 @@ export function buildLayout(
   }
   for (const ids of cardsByGen.values()) {
     ids.sort((a, b) => (xPos.get(a) ?? 0) - (xPos.get(b) ?? 0))
-    // Swap leaves into "spouse slot" if a couple isn't adjacent.
-    for (let i = 0; i < ids.length - 1; i++) {
-      const me = ids[i]
-      const partner = partnerOf.get(me)
+    const visited = new Set<string>()
+    for (const id of ids) {
+      if (visited.has(id)) continue
+      visited.add(id)
+      const partner = partnerOf.get(id)
       if (!partner) continue
-      const partnerIdx = ids.indexOf(partner)
-      if (partnerIdx < 0) continue
-      if (partnerIdx === i + 1 || partnerIdx === i - 1) continue   // already adjacent
-      // Try to swap the partner with whoever is at i+1, but only if
-      // BOTH the partner and the i+1 occupant are leaves (no recorded
-      // children). Leaves are safe to move; non-leaves anchor their
-      // own subtree below them and would tear the descender.
-      const neighbour = ids[i + 1]
-      if (hasOwnChildren(neighbour) || hasOwnChildren(partner)) continue
-      const xN = xPos.get(neighbour) ?? 0
-      const xP = xPos.get(partner) ?? 0
-      xPos.set(neighbour, xP)
-      xPos.set(partner, xN)
-      // Reflect the new ordering so subsequent iterations see it.
-      ids[i + 1] = partner
-      ids[partnerIdx] = neighbour
+      if (visited.has(partner)) continue
+      if (!xPos.has(partner)) continue
+      // Same generation? (cards are bucketed by gen, so partner being
+      // in `ids` is the canonical same-gen check.)
+      if (!ids.includes(partner)) continue
+      visited.add(partner)
+      // Tuck the partner immediately right of the left-most member of
+      // the couple. Whichever was already on the left keeps their x;
+      // the other moves to leftX + NODE_W + COUPLE_GAP.
+      const xA = xPos.get(id) ?? 0
+      const xB = xPos.get(partner) ?? 0
+      if (xA <= xB) xPos.set(partner, xA + NODE_W + COUPLE_GAP)
+      else          xPos.set(id,      xB + NODE_W + COUPLE_GAP)
     }
   }
 
