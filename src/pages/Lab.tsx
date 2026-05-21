@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useCallback } from 'react'
+import { useState, useRef, useMemo, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useLang, isRTL } from '../i18n/useT'
@@ -22,7 +22,7 @@ import type { Member, Relationship } from '../types'
 //      thing being prototyped here.
 
 // ── Constants ──────────────────────────────────────────────────────
-const SNAP_RADIUS = 60        // px — pull-into-node distance during drag
+const SNAP_RADIUS = 80        // px — pull-into-node distance during drag (touch-friendly)
 const NODE_W = 110            // card width
 const NODE_H = 56             // card height
 const ANCHOR_OFFSET = 28      // distance from card center to the line attachment point
@@ -40,12 +40,19 @@ const SEED_MEMBERS: Member[] = [
   makeMember('c3', 'ילד 3', 'male'),
 ]
 
-const SEED_POSITIONS: Record<string, { x: number; y: number }> = {
-  mom:  { x: 360, y: 140 },
-  dad:  { x: 560, y: 140 },
-  c1:   { x: 240, y: 380 },
-  c2:   { x: 460, y: 380 },
-  c3:   { x: 680, y: 380 },
+// Positions expressed as FRACTIONS of the viewport so the seed family
+// fits the actual screen — on a 360px phone the original absolute-
+// pixel seed (max x=680) pushed 4 of 5 members off-screen, which is
+// the bug the user spotted in their screen recording. Fractions are
+// resolved on mount + on resize to absolute coordinates relative to
+// the canvas, with a vertical band reserved for the header strip and
+// the bottom debug list.
+const SEED_FRACTIONS: Record<string, { fx: number; fy: number }> = {
+  mom:  { fx: 0.30, fy: 0.20 },
+  dad:  { fx: 0.70, fy: 0.20 },
+  c1:   { fx: 0.20, fy: 0.55 },
+  c2:   { fx: 0.50, fy: 0.55 },
+  c3:   { fx: 0.80, fy: 0.55 },
 }
 
 // Two seed edges: one fully connected, one dangling (the green case
@@ -91,9 +98,40 @@ export default function Lab() {
   const { lang } = useLang()
   const rtl = isRTL(lang)
 
+  const canvasRef = useRef<HTMLDivElement>(null)
   const [members] = useState<Member[]>(SEED_MEMBERS)
-  const [positions] = useState<Record<string, { x: number; y: number }>>(SEED_POSITIONS)
   const [rels, setRels] = useState<LabRel[]>(SEED_RELS)
+
+  // Resolve fraction-based seed positions to pixels every time the
+  // viewport changes. Reserve a vertical band for the header strip
+  // (~72px) and the bottom debug list (~150px) so cards never spawn
+  // underneath them. The previous absolute-pixel seed (max x=680)
+  // pushed 4 of 5 members off-screen on a phone — visible in the
+  // user's screen recording where only "ילד 1" appeared in the middle
+  // of an otherwise empty canvas.
+  const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>({})
+  useEffect(() => {
+    const compute = () => {
+      const el = canvasRef.current
+      const w = el?.clientWidth ?? window.innerWidth
+      const h = el?.clientHeight ?? window.innerHeight
+      const TOP_RESERVED = 72
+      const BOTTOM_RESERVED = 150
+      const usableH = Math.max(200, h - TOP_RESERVED - BOTTOM_RESERVED)
+      const next: Record<string, { x: number; y: number }> = {}
+      for (const [id, f] of Object.entries(SEED_FRACTIONS)) {
+        next[id] = { x: f.fx * w, y: TOP_RESERVED + f.fy * usableH }
+      }
+      setPositions(next)
+    }
+    compute()
+    window.addEventListener('resize', compute)
+    window.addEventListener('orientationchange', compute)
+    return () => {
+      window.removeEventListener('resize', compute)
+      window.removeEventListener('orientationchange', compute)
+    }
+  }, [])
 
   // Drag state: which edge is being dragged + current pointer pos in
   // canvas coordinates. Null when nothing is being dragged.
@@ -102,7 +140,6 @@ export default function Lab() {
   // Member id under the cursor right now, if any — used to render the
   // snap-preview ring on the candidate target while dragging.
   const [hoverTarget, setHoverTarget] = useState<string | null>(null)
-  const canvasRef = useRef<HTMLDivElement>(null)
 
   const memberById = useMemo(
     () => new Map(members.map((m) => [m.id, m])),
@@ -280,20 +317,33 @@ export default function Lab() {
                   opacity={0.5}
                 />
               )}
-              {/* Drag handle at the child end. Always grabbable. */}
+              {/* Drag handle at the child end. Always grabbable.
+                  Two concentric circles: the inner one is the visual
+                  dot; the outer (transparent) one is the touch
+                  target — sized for mobile thumbs so drags don't
+                  miss. touchAction:none keeps the browser from
+                  hijacking the gesture as a scroll. */}
               <circle
                 cx={end.x}
                 cy={end.y}
-                r={isDragging ? 14 : 10}
+                r={24}
+                fill="transparent"
+                className="cursor-grab active:cursor-grabbing"
+                style={{ touchAction: 'none' }}
+                onPointerDown={(e) => onHandleDown(r.id, e)}
+              />
+              <circle
+                cx={end.x}
+                cy={end.y}
+                r={isDragging ? 18 : 14}
                 fill={handleFill}
                 stroke="#FFFFFF"
-                strokeWidth={2}
-                className="cursor-grab active:cursor-grabbing"
+                strokeWidth={2.5}
                 style={{
-                  filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.12))',
+                  filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.18))',
                   transition: isDragging ? 'none' : 'r 150ms, fill 200ms',
+                  pointerEvents: 'none',
                 }}
-                onPointerDown={(e) => onHandleDown(r.id, e)}
               />
             </g>
           )
