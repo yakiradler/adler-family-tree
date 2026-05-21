@@ -54,7 +54,7 @@ export default function AIScanModal({
 }) {
   const { t, lang } = useLang()
   const rtl = isRTL(lang)
-  const { addMember, addRelationship, members, profile } = useFamilyStore()
+  const { addMember, addRelationship, members, profile, activeTreeId } = useFamilyStore()
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [phase, setPhase] = useState<Phase>('pick')
@@ -137,6 +137,14 @@ export default function AIScanModal({
     try {
       const creatorId = profile?.id ?? 'ai-scan'
       for (const c of picked) {
+        // Anchor relative's tree wins over activeTreeId so AI-imported
+        // members land in the same tree as the relative they're being
+        // placed next to (not the tree currently being viewed, which
+        // could differ if the user switched views mid-flow).
+        const anchor = c.placement.relativeId
+          ? members.find((m) => m.id === c.placement.relativeId)
+          : null
+        const treeIdForNew = anchor?.tree_id ?? activeTreeId ?? undefined
         const member: Omit<Member, 'id'> = {
           first_name: c.first_name,
           last_name: c.last_name ?? '',
@@ -144,6 +152,7 @@ export default function AIScanModal({
           birth_date: c.birth_year ? `${c.birth_year}-01-01` : undefined,
           bio: c.notes,
           created_by: creatorId,
+          tree_id: treeIdForNew,
         }
         const created = await addMember(member)
         // Wire the placement chosen during the chat — sibling means
