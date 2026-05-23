@@ -18,3 +18,15 @@ otherwise.
 
 After `AGENTS.md`, also skim `ARCHITECTURE.md` before any non-trivial
 change, and `ROADMAP.md` if the task is a new feature.
+
+**For environment / workflow questions** — branching, CI, dev vs.
+production data, how to promote a change — read `DEVELOPMENT.md`.
+Short version:
+- PRs target `develop`, NOT `main`. CI must pass before merge.
+- `develop` deploys to a Vercel preview URL backed by the dev
+  Supabase project. Real family data is untouched.
+- Promote to production by opening a PR from `develop` → `main`
+  and squash-merging once CI is green.
+- A red/orange "🧪 Preview" banner is visible on every non-prod
+  deployment — if you don't see it on `infinitree.vercel.app`,
+  that's production, treat data with care.

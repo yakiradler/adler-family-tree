@@ -13,6 +13,7 @@ import ThemeShell from './components/ThemeShell'
 import PersistenceIndicator from './components/PersistenceIndicator'
 import InstallPrompt from './components/InstallPrompt'
 import VersionUpdateModal from './components/VersionUpdateModal'
+import DevEnvBanner from './components/DevEnvBanner'
 import { ADLER_MEMBERS, ADLER_RELATIONSHIPS } from './data/adlerFamily'
 import { isPendingOnboarding, clearPendingOnboarding } from './lib/pendingOnboarding'
 import type { Profile } from './types'
@@ -397,6 +398,10 @@ export default function App() {
 
   return (
     <div dir={dir} className="min-h-screen">
+      {/* Non-production deployments get a coloured banner at the very
+          top so it's impossible to mistake the dev/preview site for
+          the real app. Renders nothing in production. */}
+      <DevEnvBanner />
       {/* Persistence toast — fixed-positioned, listens for save events
           dispatched by the store-subscriber. */}
       <PersistenceIndicator />
