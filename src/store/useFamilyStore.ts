@@ -331,17 +331,35 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   },
 
   addMember: async (member) => {
+    // ── tree_id enforcement ──────────────────────────────────────────
+    // Every member MUST belong to a tree (migration 011). If the
+    // caller forgot to pass tree_id, fall back to the activeTreeId
+    // from the store so the caller's omission doesn't leak the member
+    // into "the implicit main tree" — which is the bug that prompted
+    // the rewrite. In demo mode we tolerate a synthetic 'demo-default'
+    // bucket so the local seed continues to work without a tree row.
+    const activeTreeId = get().activeTreeId
+    const effectiveTreeId =
+      member.tree_id ?? activeTreeId ?? (isSupabaseConfigured ? null : 'demo-default')
+    if (isSupabaseConfigured && !effectiveTreeId) {
+      // Supabase mode + no active tree + caller didn't pass one → refuse.
+      // Surface to the UI so the user knows to pick a tree first.
+      reportSupabaseFailure('addMember', new Error('No active tree — pick or create one first'))
+      return null
+    }
+    const payload: Omit<Member, 'id'> = { ...member, tree_id: effectiveTreeId }
+
     // Optimistic insert. If Supabase responds with a row we reconcile
     // the synthetic id; otherwise the local row stays — guaranteeing
     // the UI always reflects the user's action even offline.
     const localId = `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-    const optimistic: Member = { ...member, id: localId } as Member
+    const optimistic: Member = { ...payload, id: localId } as Member
     set((s) => ({ members: [...s.members, optimistic] }))
     // Retry once after a short delay on RLS-flake — same reasoning as
     // addRelationship: when several members + relationships are added
     // back-to-back (seedSkeletonFamily), the visibility-check helper
     // can race the previous tuple's commit and reject.
-    const tryInsert = () => supabase.from('members').insert(member).select().single()
+    const tryInsert = () => supabase.from('members').insert(payload).select().single()
     try {
       let { data, error } = await tryInsert()
       if (error) {

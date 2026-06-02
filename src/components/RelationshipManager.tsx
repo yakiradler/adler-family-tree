@@ -148,10 +148,18 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
     if (!newFirst.trim() || busy) return
     setBusy(true)
     try {
+      // tree_id MUST inherit from the anchor member — a new relative
+      // added from someone's panel always belongs to that person's
+      // tree, never to whatever tree the store happened to have
+      // active. Without this, a sibling added from tree #2 used to
+      // leak into the main tree because addMember fell back to
+      // activeTreeId, and the activeTreeId could differ from the
+      // panel's member's tree (e.g. user switched tabs mid-action).
       const created = await addMember({
         first_name: newFirst.trim(),
         last_name: newLast.trim() || member.last_name,
         gender: (newGender || undefined) as Gender | undefined,
+        tree_id: member.tree_id ?? null,
         created_by: profile?.id ?? 'demo',
       })
       if (created) {

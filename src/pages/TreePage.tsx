@@ -121,10 +121,31 @@ export default function TreePage({ demoMode }: Props) {
     ]
   }, [lang, setTreeControlsExpanded])
 
+  // Auto-pick the first available tree when nothing is active. Without
+  // this, /tree would show an empty canvas after migration 011 (every
+  // member now belongs to SOME tree — none have tree_id IS NULL — so
+  // the previous "activeTreeId == null → orphans" branch matches
+  // nothing). The first tree wins deterministically; the user can
+  // switch via the TreeSwitcher.
+  useEffect(() => {
+    if (activeTreeId != null) return
+    // Prefer any tree the current user already loaded; otherwise
+    // derive one from the first member's tree_id so demo mode (which
+    // seeds members but not trees) still renders something.
+    const treeId =
+      useFamilyStore.getState().trees[0]?.id
+      ?? allMembers.find((m) => m.tree_id)?.tree_id
+      ?? null
+    if (treeId) useFamilyStore.getState().setActiveTreeId(treeId)
+  }, [activeTreeId, allMembers])
+
   const members = useMemo(
     () =>
+      // Strict per-tree isolation: a member is shown if and only if
+      // their tree_id matches the active tree. The legacy "null = main
+      // tree" branch is gone — migration 011 made tree_id NOT NULL.
       activeTreeId == null
-        ? allMembers.filter((m) => !m.tree_id)
+        ? []
         : allMembers.filter((m) => m.tree_id === activeTreeId),
     [allMembers, activeTreeId],
   )

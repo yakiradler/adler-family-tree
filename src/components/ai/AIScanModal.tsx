@@ -150,6 +150,13 @@ export default function AIScanModal({
         list.push(r.member_a_id)
         parentsOfRelative.set(r.member_b_id, list)
       }
+      // Resolve the active tree at the start of the batch. addMember
+      // will reject the insert in Supabase mode if there is no active
+      // tree — surfaces the failure rather than silently leaking the
+      // member into "the implicit main tree". The activeTreeId is set
+      // by TreePage when the user switches trees, so an AI scan opened
+      // from /tree always inherits the tree the user is viewing.
+      const targetTreeId = useFamilyStore.getState().activeTreeId ?? null
       for (const c of picked) {
         const member: Omit<Member, 'id'> = {
           first_name: c.first_name,
@@ -157,6 +164,7 @@ export default function AIScanModal({
           gender: c.gender,
           birth_date: c.birth_year ? `${c.birth_year}-01-01` : undefined,
           bio: c.notes,
+          tree_id: targetTreeId,
           created_by: creatorId,
         }
         const created = await addMember(member)
