@@ -118,17 +118,24 @@ export default function TreeSwitcher({
               {t.treeSwitcherTitle}
             </p>
 
-            {/* Default / main tree row */}
-            <TreeRow
-              label={t.treeSwitcherDefault}
-              hint={t.treeSwitcherDefaultHint}
-              color="#007AFF"
-              active={activeTreeId === null}
-              onClick={() => {
-                setActiveTreeId(null)
-                setOpen(false)
-              }}
-            />
+            {/* "Main tree" row — only shown if the user still has any
+                member with tree_id IS NULL (impossible after migration
+                011, but kept as a graceful fallback for accounts that
+                somehow predate it). After the migration every member
+                belongs to an explicit tree, so this row is just dead
+                UI and would let the user "switch" to an empty canvas. */}
+            {useFamilyStore.getState().members.some((m) => !m.tree_id) && (
+              <TreeRow
+                label={t.treeSwitcherDefault}
+                hint={t.treeSwitcherDefaultHint}
+                color="#007AFF"
+                active={activeTreeId === null}
+                onClick={() => {
+                  setActiveTreeId(null)
+                  setOpen(false)
+                }}
+              />
+            )}
 
             {/* Custom trees */}
             {trees.map((tt) => (
