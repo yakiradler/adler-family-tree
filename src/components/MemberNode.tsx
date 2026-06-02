@@ -4,6 +4,8 @@ import type { LineageInfo } from '../lib/lineage'
 import type { SecondaryPartner } from './views/treeLayout'
 import LineageBadge from './LineageBadge'
 import { useLang } from '../i18n/useT'
+// `t` flows through useLang() (which also exposes `lang`); used for the
+// deceased badge so the "ז״ל" / "RIP" label flips with the active locale.
 
 // Instagram-story-style tree node: photo-ring above a white card with
 // name + date range. Designed to be readable at the default tree scale
@@ -126,7 +128,7 @@ export default function MemberNode({
   onSecondarySelect,
   dataMemberId,
 }: Props) {
-  const { lang } = useLang()
+  const { lang, t } = useLang()
   const deceased = !!member.death_date
   const birthYear = member.birth_date ? new Date(member.birth_date).getFullYear() : null
   const deathYear = member.death_date ? new Date(member.death_date).getFullYear() : null
@@ -215,7 +217,7 @@ export default function MemberNode({
             {deceased && (
               <div className="absolute bottom-0 inset-x-0 flex justify-center pb-1">
                 <span className="text-[9px] bg-black/60 text-white px-1.5 py-[1px] rounded-full font-bold leading-none">
-                  ז״ל
+                  {t.deceasedBadge}
                 </span>
               </div>
             )}

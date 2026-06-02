@@ -155,8 +155,8 @@ export default function TreeSearchModal({
                             {[
                               m.lineage && m.lineage !== 'israel'
                                 ? m.lineage === 'kohen'
-                                  ? '👑 ' + (lang === 'he' ? 'כהן' : 'Kohen')
-                                  : '🎵 ' + (lang === 'he' ? 'לוי' : 'Levi')
+                                  ? '👑 ' + t.lineageKohen
+                                  : '🎵 ' + t.lineageLevi
                                 : null,
                               m.birth_date
                                 ? new Date(m.birth_date).getFullYear()

@@ -77,6 +77,10 @@ export const translations = {
     // Member Card
     age: 'גיל',
     deceased: '†',
+    deceasedBadge: 'ז״ל',
+    statAlive: 'חיים',
+    statDeceased: 'ז״ל',
+    genericError: 'שגיאה',
 
     // Member Modal
     about: 'אודות',
@@ -762,6 +766,10 @@ export const translations = {
 
     age: 'Age',
     deceased: '†',
+    deceasedBadge: 'RIP',
+    statAlive: 'Living',
+    statDeceased: 'Deceased',
+    genericError: 'Error',
 
     about: 'About',
     family: 'Family',

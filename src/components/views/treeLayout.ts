@@ -220,6 +220,15 @@ export function buildLayout(
   // be hidden without orphaning the children. Per-member override via
   // `connector_parent_id` lets families opt back to the father where
   // it's the more meaningful anchor (e.g. patrilineal traditions).
+  //
+  // Extended rule (per the user's request after seeing the top
+  // generation anchor on the father instead of the mother): when the
+  // child has NO mother recorded as a parent but the recorded father
+  // has a CURRENT spouse who is in the rendered population, that
+  // spouse becomes the visual anchor anyway. This handles the common
+  // case where a male was added first (becoming the recorded parent)
+  // and only later was a wife added beside him without back-linking
+  // her as a parent of the existing children.
   const primaryParentOf = new Map<string, string>()
   for (const [childId, parents] of parentsOf) {
     const child = memberById.get(childId)
@@ -227,9 +236,16 @@ export function buildLayout(
     const explicitParent = explicit && parents.includes(explicit) ? explicit : null
     const motherPrimary = parents.find(p => memberById.get(p)?.gender === 'female')
     const fatherPrimary = parents.find(p => memberById.get(p)?.gender === 'male')
+    // If only the father is recorded, check his current spouse: if she's
+    // in the tree's rendered population, anchor on her instead of him.
+    let fathersSpouse: string | undefined
+    if (!motherPrimary && fatherPrimary) {
+      const candidates = spousesOf.get(fatherPrimary) ?? []
+      fathersSpouse = candidates.find((sp) => memberById.has(sp))
+    }
     primaryParentOf.set(
       childId,
-      explicitParent ?? motherPrimary ?? fatherPrimary ?? parents[0],
+      explicitParent ?? motherPrimary ?? fathersSpouse ?? fatherPrimary ?? parents[0],
     )
   }
 
@@ -716,27 +732,101 @@ export function buildLayout(
     yAccum += NODE_H + (genOverflow.get(g) ?? 0) + V_GAP
   }
 
-  // Defensive collision guard.  If any pair of members ended up at the
-  // same (rounded x, generation) slot — usually because of an edge case
-  // in the root-spouse selection above or a corrupted relationship row
-  // — push the later occupants to the right so each card has its own
-  // click target.  Better a slightly-misaligned card than a click that
-  // hits the wrong member because they're stacked.
-  const slotOccupants = new Map<string, number>()
+  // ─── Couple-adjacency pass ────────────────────────────────────────
+  // The user explicitly asked: "every wife should be adjacent to her
+  // husband as the default." The placement engine handles this for
+  // most cases, but in a top generation with multiple INDEPENDENT
+  // couples — each husband a separate root, his wife also a root,
+  // no parent-child links between the two couples — the user
+  // observed the wives drifting away from their husbands.
+  //
+  // This pass runs per generation: build couple groups (current-spouse
+  // pairs at the same generation), then re-tuck each spouse so they
+  // sit immediately next to their partner. We keep whichever partner
+  // was already on the LEFT in place, and slide the other partner to
+  // the slot directly to their right (NODE_W + COUPLE_GAP). This is
+  // intentionally aggressive — even when a partner has children
+  // recorded, we still tuck them adjacent. The descender to the child
+  // may zig-zag a bit after the move, but couple adjacency was the
+  // user's explicit priority over straight orthogonal lines.
+  //
+  // The subsequent near-collision sweep cleans up any side-effect
+  // overlaps the tuck introduces (e.g., when a spouse's new position
+  // crashes into a different couple's space).
+  const partnerOf = new Map<string, string>()
+  for (const r of relationships) {
+    if (r.type !== 'spouse') continue
+    if ((r.status ?? 'current') !== 'current') continue
+    if (!partnerOf.has(r.member_a_id)) partnerOf.set(r.member_a_id, r.member_b_id)
+    if (!partnerOf.has(r.member_b_id)) partnerOf.set(r.member_b_id, r.member_a_id)
+  }
+
+  const cardsByGen = new Map<number, string[]>()
   for (const m of members) {
     if (!xPos.has(m.id)) continue
-    const x0 = xPos.get(m.id)!
     const g = genMap.get(m.id) ?? 0
-    const key = `${Math.round(x0)}|${g}`
-    const occupied = slotOccupants.get(key) ?? 0
-    if (occupied > 0) {
-      xPos.set(m.id, x0 + occupied * (NODE_W + H_GAP))
-      if (typeof console !== 'undefined') {
-        // eslint-disable-next-line no-console
-        console.warn(`[treeLayout] slot collision at ${key} for member ${m.id}; nudged by ${occupied} slot(s)`)
+    if (!cardsByGen.has(g)) cardsByGen.set(g, [])
+    cardsByGen.get(g)!.push(m.id)
+  }
+  for (const ids of cardsByGen.values()) {
+    ids.sort((a, b) => (xPos.get(a) ?? 0) - (xPos.get(b) ?? 0))
+    const visited = new Set<string>()
+    for (const id of ids) {
+      if (visited.has(id)) continue
+      visited.add(id)
+      const partner = partnerOf.get(id)
+      if (!partner) continue
+      if (visited.has(partner)) continue
+      if (!xPos.has(partner)) continue
+      // Same generation? (cards are bucketed by gen, so partner being
+      // in `ids` is the canonical same-gen check.)
+      if (!ids.includes(partner)) continue
+      visited.add(partner)
+      // Tuck the partner immediately right of the left-most member of
+      // the couple. Whichever was already on the left keeps their x;
+      // the other moves to leftX + NODE_W + COUPLE_GAP.
+      const xA = xPos.get(id) ?? 0
+      const xB = xPos.get(partner) ?? 0
+      if (xA <= xB) xPos.set(partner, xA + NODE_W + COUPLE_GAP)
+      else          xPos.set(id,      xB + NODE_W + COUPLE_GAP)
+    }
+  }
+
+  // Defensive collision guard: per-generation sweep that detects any
+  // pair whose horizontal bounding boxes overlap (or come within
+  // MIN_SIDE_GAP of each other) and pushes the right-side card just
+  // far enough to clear. The previous guard only caught exact same
+  // rounded-x collisions; a member placed at e.g. x=100 and another at
+  // x=102 share generation but DIFFERENT rounded keys, yet still
+  // visually overlap (NODE_W=144). The user reported a top-row
+  // "שיינדל" sitting directly on top of another profile — exactly that
+  // near-collision scenario.
+  //
+  // Strategy: group cards by generation, sort by current x, sweep
+  // left → right, and slide any card that violates the minimum
+  // spacing to its predecessor's right-edge + MIN_SIDE_GAP. This is
+  // O(n log n) per generation and safe — it only ever moves cards to
+  // the right, never compressing legitimate spacing.
+  for (const ids of cardsByGen.values()) {
+    ids.sort((a, b) => (xPos.get(a) ?? 0) - (xPos.get(b) ?? 0))
+    for (let i = 1; i < ids.length; i++) {
+      const prev = ids[i - 1]
+      const curr = ids[i]
+      const minStart = (xPos.get(prev) ?? 0) + NODE_W + MIN_SIDE_GAP
+      const currX = xPos.get(curr) ?? 0
+      if (currX < minStart) {
+        xPos.set(curr, minStart)
+        if (typeof console !== 'undefined') {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[treeLayout] near-collision @ gen ${genMap.get(curr) ?? 0}: ` +
+            `${memberById.get(curr)?.first_name ?? curr} was at ${currX.toFixed(1)}, ` +
+            `predecessor ${memberById.get(prev)?.first_name ?? prev} at ${(xPos.get(prev) ?? 0).toFixed(1)}; ` +
+            `nudged to ${minStart.toFixed(1)}`,
+          )
+        }
       }
     }
-    slotOccupants.set(key, occupied + 1)
   }
 
   const finalNodes: LayoutNode[] = members.map(m => {

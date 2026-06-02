@@ -747,6 +747,24 @@ export default function Dashboard({ demoMode }: Props) {
                 onClick={() => navigate('/admin')}
               />
             )}
+            {/* Experimental lab tile — gated to admins so it stays out
+                of the way for normal users while the editor's UX is
+                still being prototyped. The /lab route itself is
+                public (no auth needed); this is just the entry point. */}
+            {isAdmin(profile) && (
+              <AppTile
+                index={8}
+                icon="🧪"
+                label={lang === 'he' ? 'מעבדת קווים' : 'Lab'}
+                gradient="from-[#34C759] to-[#06D6A0]"
+                onClick={() => navigate('/lab')}
+                tooltip={
+                  lang === 'he'
+                    ? 'עורך קווי-עץ ניסיוני — נתונים מבודדים'
+                    : 'Experimental tree-edge editor — isolated data'
+                }
+              />
+            )}
           </div>
         </motion.section>
 

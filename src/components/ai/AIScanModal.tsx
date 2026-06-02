@@ -54,7 +54,7 @@ export default function AIScanModal({
 }) {
   const { t, lang } = useLang()
   const rtl = isRTL(lang)
-  const { addMember, addRelationship, members, profile } = useFamilyStore()
+  const { addMember, addRelationship, members, profile, activeTreeId } = useFamilyStore()
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [phase, setPhase] = useState<Phase>('pick')
@@ -158,13 +158,24 @@ export default function AIScanModal({
       // from /tree always inherits the tree the user is viewing.
       const targetTreeId = useFamilyStore.getState().activeTreeId ?? null
       for (const c of picked) {
+        // Anchor relative's tree wins over activeTreeId so AI-imported
+        // members land in the same tree as the relative they're being
+        // placed next to (not the tree currently being viewed, which
+        // could differ if the user switched views mid-flow).
+        const anchor = c.placement.relativeId
+          ? members.find((m) => m.id === c.placement.relativeId)
+          : null
+        const treeIdForNew = anchor?.tree_id ?? activeTreeId ?? undefined
         const member: Omit<Member, 'id'> = {
           first_name: c.first_name,
           last_name: c.last_name ?? '',
           gender: c.gender,
           birth_date: c.birth_year ? `${c.birth_year}-01-01` : undefined,
           bio: c.notes,
-          tree_id: targetTreeId,
+          // Prefer the anchor relative's tree (resolved above) over the
+          // batch-level fallback (`targetTreeId`) so AI scans launched
+          // from a member panel always land in that member's tree.
+          tree_id: treeIdForNew ?? targetTreeId,
           created_by: creatorId,
         }
         const created = await addMember(member)

@@ -1,0 +1,78 @@
+name: CI
+
+# Runs on every push to main + every PR that targets main or develop.
+# A green CI is the gate for promotion to production — branch
+# protection on `main` (configured in GitHub settings) should require
+# this workflow to pass before allowing a merge.
+#
+# The jobs run in parallel where possible. Typecheck + lint don't
+# depend on anything beyond `npm ci`; build does its own typecheck
+# again as part of `tsc -b && vite build` but we keep the separate
+# typecheck job so its failure surfaces faster (~10s vs ~60s).
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run typecheck
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    # Lint is advisory for now — the existing codebase carries a
+    # backlog of warnings/errors (42 at the time this workflow was
+    # added) that should be cleaned up incrementally. Flip
+    # continue-on-error to false once the backlog is empty so lint
+    # becomes a hard gate.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+
+  test:
+    name: Unit tests (Vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run test:run
+
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      # Upload the build so a future job can pick it up for e2e/preview.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 7

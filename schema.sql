@@ -18,26 +18,13 @@
 -- ─── Extensions ──────────────────────────────────────────────
 create extension if not exists "uuid-ossp";
 
--- ─── helpers ─────────────────────────────────────────────────
--- Reusable "is admin" check. Centralises the role lookup so RLS
--- policies stay readable.
-create or replace function public.is_admin(uid uuid)
-returns boolean
-language sql
-security definer
-stable
-as $$
-  select exists (
-    select 1 from public.profiles
-    where id = uid
-      and role = 'admin'
-      and coalesce(active, true) = true
-  );
-$$;
-
 -- ============================================================
 -- PROFILES — one row per auth.users user
 -- ============================================================
+-- Defined first so the helpers below can reference it. PostgreSQL
+-- validates `language sql` function bodies at CREATE TIME (unlike
+-- plpgsql), so any helper that queries `public.profiles` would fail
+-- to install on a fresh database if the table didn't already exist.
 create table if not exists public.profiles (
   id                  uuid primary key references auth.users(id) on delete cascade,
   full_name           text not null default '',
@@ -69,6 +56,27 @@ begin
     check (role in ('guest', 'user', 'master', 'admin'));
 exception when others then null;
 end$$;
+
+-- ─── helpers ─────────────────────────────────────────────────
+-- Reusable "is admin" check. Centralises the role lookup so RLS
+-- policies stay readable.
+create or replace function public.is_admin(uid uuid)
+returns boolean
+language sql
+security definer
+stable
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = uid
+      and role = 'admin'
+      and coalesce(active, true) = true
+  );
+$$;
+
+-- ============================================================
+-- PROFILES — triggers
+-- ============================================================
 
 -- Auto-create a profile row whenever a user signs up. Honours the
 -- `full_name` + `invited_role` that the AdminDashboard invite flow

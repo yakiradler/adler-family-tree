@@ -13,6 +13,7 @@ import ThemeShell from './components/ThemeShell'
 import PersistenceIndicator from './components/PersistenceIndicator'
 import InstallPrompt from './components/InstallPrompt'
 import VersionUpdateModal from './components/VersionUpdateModal'
+import DevEnvBanner from './components/DevEnvBanner'
 import { ADLER_MEMBERS, ADLER_RELATIONSHIPS, ADLER_TREES } from './data/adlerFamily'
 import { isPendingOnboarding, clearPendingOnboarding } from './lib/pendingOnboarding'
 import type { Profile } from './types'
@@ -26,6 +27,7 @@ const TreePage = lazy(() => import('./pages/TreePage'))
 const BirthdayPage = lazy(() => import('./pages/BirthdayPage'))
 const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'))
 const OnboardingWizard = lazy(() => import('./components/onboarding/OnboardingWizard'))
+const Lab = lazy(() => import('./pages/Lab'))
 
 const SUPABASE_CONFIGURED =
   !!import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_URL !== ''
@@ -409,6 +411,10 @@ export default function App() {
 
   return (
     <div dir={dir} className="min-h-screen">
+      {/* Non-production deployments get a coloured banner at the very
+          top so it's impossible to mistake the dev/preview site for
+          the real app. Renders nothing in production. */}
+      <DevEnvBanner />
       {/* Persistence toast — fixed-positioned, listens for save events
           dispatched by the store-subscriber. */}
       <PersistenceIndicator />
@@ -509,6 +515,14 @@ export default function App() {
                 : <Navigate to="/home" replace />
               }
             />
+            {/*
+              /lab — experimental playground for the new connector-
+              driven tree editor. Intentionally bypasses auth gates:
+              it has its own isolated local state and no access to
+              real family data, so anyone with the URL can poke at it
+              without risk.
+            */}
+            <Route path="/lab" element={<Lab />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           </Suspense>

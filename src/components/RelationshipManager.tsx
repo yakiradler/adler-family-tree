@@ -155,6 +155,13 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
       // leak into the main tree because addMember fell back to
       // activeTreeId, and the activeTreeId could differ from the
       // panel's member's tree (e.g. user switched tabs mid-action).
+      // Inherit the same tree as the existing related member. Without
+      // this, the new parent/spouse/child is created with tree_id=null
+      // and ends up in the main tree pool — invisible from any sub-tree
+      // view the user is currently in. Live bug: user created "ילד" in
+      // "עץ הניסיון", added "אבא" as a parent via this modal, and
+      // "אבא" landed alone in the main Adler tree instead of beside
+      // the child.
       const created = await addMember({
         first_name: newFirst.trim(),
         last_name: newLast.trim() || member.last_name,
