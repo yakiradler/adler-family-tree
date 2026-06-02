@@ -132,7 +132,7 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
       hebrew_birth_date: form.hebrew_birth_date.trim() || undefined,
       hebrew_death_date: form.hebrew_death_date.trim() || undefined,
       gender: (form.gender as Gender) || undefined,
-      birth_order: parsedOrder != null && !isNaN(parsedOrder) ? parsedOrder : null as unknown as undefined,
+      birth_order: parsedOrder != null && !isNaN(parsedOrder) ? parsedOrder : null,
       lineage: (form.lineage as Lineage) || null,
       photo_url: form.photo_url || undefined,
       photos: form.photos.length ? form.photos : undefined,
@@ -252,6 +252,21 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
                     </>
                   )}
                 </div>
+                {/* Warning when any photo on this member is still a base64
+                    data: URI — localStorage strips those on reload (the
+                    quota would explode in seconds otherwise), and we
+                    don't yet upload to Supabase Storage. Tell the user
+                    so they don't think their photo vanished. */}
+                {(
+                  (form.photo_url && form.photo_url.startsWith('data:')) ||
+                  form.photos.some((p) => p.startsWith('data:'))
+                ) && (
+                  <div className="mx-1 mt-1 px-3 py-2 rounded-xl bg-[#FFCC00]/15 border border-[#FFCC00]/30 text-[11px] text-[#8E6E00] leading-snug max-w-[18rem] text-center">
+                    {lang === 'he'
+                      ? 'תמונה זו נשמרת בזיכרון בלבד — סגירת הטאב או רענון הדף ימחקו אותה (אחסון תמונות ב-Supabase עדיין לא פעיל). השתמש בקישור http/https לתמונה שצריכה להישמר.'
+                      : 'This photo is in-memory only — closing the tab or refreshing will lose it (Supabase Storage uploads aren’t wired yet). Use an http/https image URL for photos that need to persist.'}
+                  </div>
+                )}
               </div>
 
               {/* Details */}

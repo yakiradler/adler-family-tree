@@ -82,8 +82,18 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
   if (!open) return null
   // Reuse the same `isAdmin` variable name (it now means
   // "can manage relationships" via the centralised permission helper —
-  // admins always pass; users + masters with the toggle pass).
-  const isAdmin = canManageRelationships(profile)
+  // admins always pass; users + masters with the toggle pass; plain
+  // users only pass for their own nuclear family OR their own card).
+  const nuclearFamilyIds = new Set<string>([
+    ...parents.map(p => p.id),
+    ...children.map(c => c.id),
+    ...spouses.map(s => s.id),
+  ])
+  const isAdmin = canManageRelationships(profile, {
+    targetMemberId: member.id,
+    nuclearFamilyIds,
+    ownMemberId: profile?.linked_member_id ?? undefined,
+  })
 
   // Candidates for picker
   const takenIds = new Set<string>([

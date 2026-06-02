@@ -108,6 +108,32 @@ export function applyTreeFilters(
   // Iterates to convergence — each pass can orphan members that the
   // previous one disconnected.
   const allHidden = new Set(members.filter(m => m.hidden).map(m => m.id))
+
+  // Strong preservation rule (fixes the cascade-prune bug for deep
+  // generation trees): a member with ANY visible descendant must
+  // NEVER be pruned, even if their direct children all happen to have
+  // an alternate visible parent. Without this, hiding a single
+  // great-grandparent could remove the whole branch one generation
+  // at a time as each layer gets reclassified as "redundant ex".
+  // Recomputed every iteration because `allowed` shrinks as we prune.
+  const hasVisibleDescendant = (id: string): boolean => {
+    const seen = new Set<string>([id])
+    const stack = [id]
+    while (stack.length > 0) {
+      const cur = stack.pop()!
+      for (const r of relationships) {
+        if (r.type !== 'parent-child') continue
+        if (r.member_a_id !== cur) continue
+        const child = r.member_b_id
+        if (seen.has(child)) continue
+        seen.add(child)
+        if (allowed.has(child)) return true
+        stack.push(child)
+      }
+    }
+    return false
+  }
+
   let removedAny = true
   while (removedAny) {
     removedAny = false
@@ -132,6 +158,9 @@ export function applyTreeFilters(
         // Honor "Show divorces" — keep ex / widowed spouses with shared
         // children when the user explicitly asked to see them.
         if (filters.showFormerSpouses) continue
+        // Strong preservation — if we still have any visible blood
+        // descendant in the tree, we are not redundant, full stop.
+        if (hasVisibleDescendant(id)) continue
         const someChildNeedsMe = childRels.some(rel => {
           const childId = rel.member_b_id
           const otherVisibleParents = relationships.filter(
@@ -151,6 +180,11 @@ export function applyTreeFilters(
       // No anchors at all (case (a)). Preserve standalone founders
       // unless the user is actively narrowing the tree with hides.
       if (allHidden.size === 0) continue
+      // Belt-and-braces: even in the no-direct-children branch, a
+      // member might still have visible great-grandchildren (e.g.
+      // every direct child was hidden but a deeper descendant isn't).
+      // Don't prune them either.
+      if (hasVisibleDescendant(id)) continue
       const hasAnyParent = relationships.some(
         r => r.type === 'parent-child' && r.member_b_id === id,
       )
@@ -170,6 +204,18 @@ export function applyTreeFilters(
       .filter(r => r.type === 'spouse' && (r.member_a_id === focusId || r.member_b_id === focusId))
       .map(r => (r.member_a_id === focusId ? r.member_b_id : r.member_a_id))
     const focusSet = new Set<string>([focusId, ...ancestors, ...descendants, ...spouseIds])
+    // Second pass — pull in the spouses of every in-scope member (e.g.
+    // an aunt's husband, or a great-grandfather's wife). Without this,
+    // the layout draws a married couple's connector to a spouse who
+    // isn't actually rendered, leaving a dangling line. We walk a
+    // copy because we're mutating focusSet during iteration.
+    for (const id of [...focusSet]) {
+      for (const r of relationships) {
+        if (r.type !== 'spouse') continue
+        if (r.member_a_id === id) focusSet.add(r.member_b_id)
+        else if (r.member_b_id === id) focusSet.add(r.member_a_id)
+      }
+    }
     allowed = new Set([...allowed].filter(id => focusSet.has(id)))
     // Always include the focused person even if other filters would have
     // dropped them — focus is the primary signal.

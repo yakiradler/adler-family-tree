@@ -11,7 +11,7 @@ import MemberNotesSection from './MemberNotesSection'
 import ComingSoonModal from './ComingSoonModal'
 import BuildFromTextModal from './BuildFromTextModal'
 import { canEditMember, canManageRelationships } from '../lib/permissions'
-import { buildParentMap, resolveLineage } from '../lib/lineage'
+import { getParentMap, resolveLineage } from '../lib/lineage'
 import type { Member, SpouseStatus } from '../types'
 
 interface Props {
@@ -139,10 +139,13 @@ export default function MemberPanel({ onClose }: Props) {
     return out
   }, [member, relationships])
 
-  // Lineage info — male-only badge + daughterOf marker.
+  // Lineage info — male-only badge + daughterOf marker. The parent map
+  // is shared with TreeView via getParentMap (reference-identity cache
+  // on the input arrays) so we don't rebuild the same O(N+R) map twice
+  // on every member edit.
   const lineageInfo = useMemo(() => {
     if (!member) return null
-    const parentMap = buildParentMap(members, relationships)
+    const parentMap = getParentMap(members, relationships)
     return resolveLineage(member, parentMap)
   }, [member, members, relationships])
 
@@ -156,13 +159,23 @@ export default function MemberPanel({ onClose }: Props) {
     ...parents.map(p => p.id),
     ...children.map(c => c.id),
   ])
+  // `linked_member_id` comes from the profile and points at the user's
+  // "own card" on the tree (seeded during onboarding). This lets a
+  // plain `user`-role account self-edit without admin rights — see
+  // migration 010.
+  const ownMemberId = profile?.linked_member_id ?? undefined
   const editAllowed = canEditMember(profile, {
     targetMemberId: member.id,
     nuclearFamilyIds,
-    // ownMemberId is not yet wired into Profile; nuclearFamilyIds covers the
-    // "edit your immediate family" case until that link is added.
+    ownMemberId,
   })
-  const relAllowed = canManageRelationships(profile)
+  // User-role can only restructure their own nuclear family; admins +
+  // masters with the toggle pass unconditionally.
+  const relAllowed = canManageRelationships(profile, {
+    targetMemberId: member.id,
+    nuclearFamilyIds,
+    ownMemberId,
+  })
   // Delete is admin-only — destructive, can't be undone.
   const deleteAllowed = profile?.role === 'admin'
 

@@ -36,13 +36,24 @@ function getUpcomingBirthdays(members: Member[], mode: CalMode): BirthdayEntry[]
       })
     }
     if ((mode === 'hebrew' || mode === 'both') && m.hebrew_birth_date && m.birth_date) {
+      // hebrew_birth_date is a free-text Hebrew date string (e.g.
+      // "כ״ג בניסן תשפ״ד") with no ISO machine-readable counterpart yet,
+      // so we can't compute the *actual* next-occurrence in the Hebrew
+      // calendar without bundling a hebcal library. As a best-effort
+      // approximation we use the Gregorian birth_date to schedule the
+      // entry (sort + days-until) and surface the hebrew_birth_date
+      // text as the row label. `turning` is left null because computing
+      // a Hebrew age from a Gregorian anchor is wrong by ±1 year
+      // depending on whether the user's Hebrew birthday has passed.
+      // TODO: add hebrew_birth_date_iso column + use @hebcal/core to
+      // compute next.
       const bd = new Date(m.birth_date)
       const next = new Date(today.getFullYear(), bd.getMonth(), bd.getDate())
       if (next < today) next.setFullYear(today.getFullYear() + 1)
       const diff = Math.round((next.getTime() - today.getTime()) / 86400000)
       entries.push({
         member: m, daysUntil: diff, nextDate: next,
-        calendar: 'hebrew', turning: next.getFullYear() - bd.getFullYear(),
+        calendar: 'hebrew', turning: null,
       })
     }
   }

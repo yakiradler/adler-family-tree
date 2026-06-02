@@ -52,10 +52,33 @@ export function canDeleteMember(profile: Profile | null | undefined): boolean {
   return profile?.role === 'admin' || masterCan(profile, 'canDeleteMembers')
 }
 
-export function canManageRelationships(profile: Profile | null | undefined): boolean {
-  if (profile?.role === 'admin') return true
-  if (profile?.role === 'user') return true
-  return masterCan(profile, 'canManageRelationships')
+/**
+ * Gate for adding/removing parent-child + spouse + sibling edges from
+ * the relationship manager.
+ *
+ * - admin: always allowed
+ * - master with canManageRelationships=true: always allowed
+ * - user: allowed only when the target member is in the user's own
+ *   nuclear family (or is the user themselves). Without a ctx, the
+ *   answer is `false` for user-role — they cannot blanket-edit the
+ *   whole tree just because they're authenticated.
+ * - guest: never allowed
+ */
+export function canManageRelationships(
+  profile: Profile | null | undefined,
+  ctx: PermissionContext = {},
+): boolean {
+  if (!profile) return false
+  if (profile.role === 'admin') return true
+  if (masterCan(profile, 'canManageRelationships')) return true
+  if (profile.role !== 'user') return false
+  // User-role gate: only first-degree family. If ctx is missing we have
+  // to refuse — the caller forgot to pass it, and returning `true` would
+  // re-introduce the bug where any user can rewrite anyone's edges.
+  const target = ctx.targetMemberId
+  if (!target) return false
+  if (ctx.ownMemberId && target === ctx.ownMemberId) return true
+  return Boolean(ctx.nuclearFamilyIds?.has(target))
 }
 
 export function canApproveEditRequests(profile: Profile | null | undefined): boolean {

@@ -27,7 +27,7 @@ if (!file) {
 const sql = readFileSync(resolve(file), 'utf8')
 console.log(`Applying ${file} (${sql.length} bytes)…`)
 
-const PROJECT_REF = 'oklwywuxglaefchjbhcw'
+const PROJECT_REF = 'wkbdqdytfjycbbcnzjuv'
 const DB_PASSWORD = 'Yakiradler1123'
 
 const here = dirname(fileURLToPath(import.meta.url))

@@ -17,7 +17,7 @@ import {
 import type { Member, Relationship } from '../src/types'
 
 const DB_URL =
-  'postgresql://postgres:Yakiradler1123@db.oklwywuxglaefchjbhcw.supabase.co:5432/postgres'
+  'postgresql://postgres:Yakiradler1123@db.wkbdqdytfjycbbcnzjuv.supabase.co:5432/postgres'
 
 async function fetchData(): Promise<{ members: Member[]; relationships: Relationship[] }> {
   const client = new Client({ connectionString: DB_URL, ssl: { rejectUnauthorized: false } })

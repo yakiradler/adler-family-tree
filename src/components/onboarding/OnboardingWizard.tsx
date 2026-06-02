@@ -294,6 +294,27 @@ export default function OnboardingWizard() {
             tree_id: newTree.id,
             created_by: profile.id,
           })
+          // Link the profile to this freshly-created "me" card so the
+          // RBAC helpers (canEditMember, canManageRelationships) let
+          // the user manage their own card without admin rights. We
+          // do this inline (rather than via a separate helper) so the
+          // link is set in the same transaction as the member create.
+          // Non-fatal on failure: admin can re-link from the dashboard.
+          if (me) {
+            try {
+              const { error } = await supabase
+                .from('profiles')
+                .update({ linked_member_id: me.id })
+                .eq('id', profile.id)
+              if (!error) {
+                useFamilyStore.setState((s) => ({
+                  profile: s.profile
+                    ? { ...s.profile, linked_member_id: me.id }
+                    : s.profile,
+                }))
+              }
+            } catch { /* non-fatal */ }
+          }
           const sib1 = await addMember({
             first_name: '', last_name: '',
             tree_id: newTree.id, created_by: profile.id,

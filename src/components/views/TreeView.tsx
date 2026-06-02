@@ -9,7 +9,7 @@ import {
   type LayoutMode, type LayoutNode,
   buildLayout,
 } from './treeLayout'
-import { buildParentMap, resolveLineage } from '../../lib/lineage'
+import { getParentMap, resolveLineage } from '../../lib/lineage'
 import type { FilterState } from './AdvancedFilter'
 import { applyTreeFilters } from './applyTreeFilters'
 import FocusedCentricView from './FocusedCentricView'
@@ -184,9 +184,10 @@ export default function TreeView({
   }
 
   // Resolve full lineage map first — needed for the lineage filter to
-  // honour the male-only Kohen/Levi rule.
+  // honour the male-only Kohen/Levi rule. Uses the shared cache so
+  // MemberPanel doesn't rebuild the same parent map a second time.
   const fullLineageById = useMemo(() => {
-    const parentMap = buildParentMap(members, relationships)
+    const parentMap = getParentMap(members, relationships)
     const map = new Map<string, ReturnType<typeof resolveLineage>>()
     for (const m of members) map.set(m.id, resolveLineage(m, parentMap))
     return map
@@ -274,14 +275,31 @@ export default function TreeView({
   // at the top of the canvas).
   const nodes = useMemo(() => {
     if (density === 'wide') return fullNodes
-    const visible = fullNodes.filter(
+    let visible = fullNodes.filter(
       (n) => n.generation >= windowMin && n.generation <= windowMax,
     )
-    if (visible.length === 0) return fullNodes // safety net
+    if (visible.length === 0 && fullNodes.length > 0) {
+      // The active filter wiped out every generation inside the compact
+      // window. Rather than silently falling back to wide (which defeats
+      // compact mode), re-center on the populated generation closest to
+      // the user's anchor and re-slice from there. The user's window
+      // size (±1 + extraUp/Down) is preserved.
+      const populatedGens = Array.from(new Set(fullNodes.map((n) => n.generation)))
+      const nearest = populatedGens.reduce((best, g) =>
+        Math.abs(g - centerGen) < Math.abs(best - centerGen) ? g : best,
+        populatedGens[0],
+      )
+      const lo = nearest - 1 - extraUp
+      const hi = nearest + 1 + extraDown
+      visible = fullNodes.filter(
+        (n) => n.generation >= lo && n.generation <= hi,
+      )
+    }
+    if (visible.length === 0) return fullNodes // last-ditch safety net
     const minVisibleY = Math.min(...visible.map((n) => n.y))
     const yShift = -minVisibleY
     return visible.map((n) => ({ ...n, y: n.y + yShift }))
-  }, [fullNodes, density, windowMin, windowMax])
+  }, [fullNodes, density, windowMin, windowMax, centerGen, extraUp, extraDown])
 
   const { lines, spouseLines } = useMemo(
     () => buildConnectors(nodes, filtered.relationships),

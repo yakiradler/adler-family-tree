@@ -54,6 +54,39 @@ export function buildParentMap(
   return parentsOf
 }
 
+// ─── Shared parent-map cache ──────────────────────────────────────────
+// `buildParentMap` is O(N + R) — cheap on its own, but it's called from
+// both TreeView (once per render) AND MemberPanel (once per panel open),
+// and both subscribe to the same Zustand slice. Without dedup it runs
+// twice on every member/relationship change.
+//
+// We cache by reference identity of the input arrays. Zustand keeps the
+// same array reference as long as the slice hasn't changed, so repeat
+// callers within the same render cycle hit the cache instantly. When
+// the store mutates, the array reference changes and the cache key
+// misses, falling through to a fresh build.
+let _parentMapCache: {
+  members: Member[]
+  relationships: Relationship[]
+  map: Map<string, Member[]>
+} | null = null
+
+export function getParentMap(
+  members: Member[],
+  relationships: Relationship[],
+): Map<string, Member[]> {
+  if (
+    _parentMapCache &&
+    _parentMapCache.members === members &&
+    _parentMapCache.relationships === relationships
+  ) {
+    return _parentMapCache.map
+  }
+  const map = buildParentMap(members, relationships)
+  _parentMapCache = { members, relationships, map }
+  return map
+}
+
 /**
  * Effective lineage info for a member.
  *

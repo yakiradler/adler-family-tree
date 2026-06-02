@@ -47,6 +47,14 @@ export interface Profile {
    *  and within the past 30 days, App.tsx refuses to load the
    *  session and signs the user out with a "suspended" notice. */
   deleted_at?: string | null
+  /** The `members.id` row that represents this user on the family
+   *  tree (their "own card"). Populated during onboarding when the
+   *  wizard seeds the "me" node, or manually by an admin from the
+   *  user-management dashboard. Null for accounts onboarded before
+   *  migration 010 — in that case nuclear-family checks still
+   *  apply via `nuclearFamilyIds`, the user just can't self-edit
+   *  until they're linked. */
+  linked_member_id?: string | null
 }
 
 /**
@@ -92,7 +100,8 @@ export interface Member {
   photo_url?: string
   photos?: string[]
   gender?: Gender
-  birth_order?: number
+  /** Sibling order; `null` clears it explicitly (DB column is nullable). */
+  birth_order?: number | null
   /**
    * Priestly lineage (שושלת). When unset, an automatic rule still applies
    * for Adler descendants (see lineage.ts → `resolveLineage`).

@@ -1,7 +1,7 @@
 import { Client } from 'pg'
 const c = new Client({
   connectionString:
-    'postgresql://postgres:Yakiradler1123@db.oklwywuxglaefchjbhcw.supabase.co:5432/postgres',
+    'postgresql://postgres:Yakiradler1123@db.wkbdqdytfjycbbcnzjuv.supabase.co:5432/postgres',
   ssl: { rejectUnauthorized: false },
 })
 await c.connect()

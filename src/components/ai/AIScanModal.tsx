@@ -136,6 +136,20 @@ export default function AIScanModal({
     setAdding(true)
     try {
       const creatorId = profile?.id ?? 'ai-scan'
+      // Snapshot the parent map BEFORE we start adding members in this
+      // batch. The relevant parents for a sibling placement are the
+      // *existing* parents of the relative — adding more candidates
+      // mid-loop can append optimistic rows with synthetic `rel-` IDs
+      // that don't reconcile with Supabase UUIDs in time for the next
+      // iteration, producing dangling edges. Sourcing the parent IDs
+      // from this snapshot guarantees stable references.
+      const parentsOfRelative = new Map<string, string[]>()
+      for (const r of useFamilyStore.getState().relationships) {
+        if (r.type !== 'parent-child') continue
+        const list = parentsOfRelative.get(r.member_b_id) ?? []
+        list.push(r.member_a_id)
+        parentsOfRelative.set(r.member_b_id, list)
+      }
       for (const c of picked) {
         const member: Omit<Member, 'id'> = {
           first_name: c.first_name,
@@ -162,11 +176,9 @@ export default function AIScanModal({
               status: 'current',
             })
           } else if (c.placement.kind === 'sibling') {
-            // Mirror the sibling's parents onto the new member.
-            const parentIds = useFamilyStore
-              .getState()
-              .relationships.filter((r) => r.type === 'parent-child' && r.member_b_id === rid)
-              .map((r) => r.member_a_id)
+            // Use the pre-batch snapshot so we don't pick up edges that
+            // were created by previous iterations of this same loop.
+            const parentIds = parentsOfRelative.get(rid) ?? []
             for (const pid of parentIds) {
               await addRelationship({ type: 'parent-child', member_a_id: pid, member_b_id: created.id })
             }

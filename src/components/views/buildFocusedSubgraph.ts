@@ -3,7 +3,7 @@ import type { Member, Relationship } from '../../types'
 export type MemberRole =
   | 'focus' | 'spouse' | 'sibling' | 'sibling-spouse'
   | 'parent' | 'parent-spouse' | 'grandparent'
-  | 'child' | 'grandchild'
+  | 'child' | 'step-child' | 'grandchild'
 
 export type ParentalSide = 'paternal' | 'maternal'
 
@@ -89,16 +89,32 @@ export function buildFocusedSubgraph(
     for (const sspId of getSpouses(sibId)) add(sspId, 0, 'sibling-spouse')
   }
 
-  const focusChildIds = new Set<string>()
-  for (const cid of getChildren(focusId)) focusChildIds.add(cid)
+  // Biological children of the focus person.
+  const bioChildIds = new Set<string>(getChildren(focusId))
+  // Step-children = children of the focus's spouse where the focus is
+  // NOT also a parent. Previously these were dropped from the focused
+  // view entirely, which is misleading for blended families — a parent
+  // who's been raising their stepchildren for years would see them
+  // disappear when they focus on themselves. We keep the role distinct
+  // ('step-child' vs 'child') so the layout/UI can render them slightly
+  // differently if it wants.
+  const stepChildIds = new Set<string>()
   for (const spouseId of getSpouses(focusId)) {
     for (const cid of getChildren(spouseId)) {
-      if (getParents(cid).includes(focusId)) focusChildIds.add(cid)
+      if (bioChildIds.has(cid)) continue
+      if (getParents(cid).includes(focusId)) continue // bio, already counted
+      stepChildIds.add(cid)
     }
   }
-  for (const cid of focusChildIds) add(cid, -1, 'child')
+  for (const cid of bioChildIds) add(cid, -1, 'child')
+  for (const cid of stepChildIds) add(cid, -1, 'step-child')
 
-  for (const cid of focusChildIds) {
+  // Grandchildren are walked through BOTH bio and step children — the
+  // focus person is socially the grandparent regardless of biology.
+  for (const cid of bioChildIds) {
+    for (const gcid of getChildren(cid)) add(gcid, -2, 'grandchild')
+  }
+  for (const cid of stepChildIds) {
     for (const gcid of getChildren(cid)) add(gcid, -2, 'grandchild')
   }
 

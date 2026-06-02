@@ -46,6 +46,17 @@ function reportSupabaseFailure(op: string, err: unknown, kind: 'read' | 'write' 
   )
 }
 
+// ─── Relationship tombstones ──────────────────────────────────────────
+// IDs of relationships the user has explicitly deleted in this session
+// (via `deleteRelationship`). `fetchRelationships` consults this set
+// before merging server data with local optimistic rows, so a row the
+// user just deleted can't come back from the dead — both via a re-fetch
+// before the DELETE landed (server still has it) and via a stale
+// localStorage snapshot (local UUID row never reconciled). We keep this
+// outside Zustand state because it must not trigger UI re-renders and
+// its lifetime is the JS module (not persisted).
+const deletedRelationshipIds = new Set<string>()
+
 interface FamilyState {
   profile: Profile | null
   members: Member[]
@@ -169,47 +180,75 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   setSelectedMemberId: (selectedMemberId) => set({ selectedMemberId }),
 
   fetchMembers: async () => {
-    // ── localStorage is the source of truth, but only for owned rows ─
-    // We hydrate the store from localStorage in App.tsx, then trust
-    // the local snapshot — Supabase is only consulted to seed an empty
-    // store. That avoided wiping local edits when RLS returned [] or
-    // an older snapshot.
+    // ── Hydration policy ──────────────────────────────────────────────
+    // Demo mode (no Supabase configured): localStorage IS the source of
+    // truth — there's nowhere else to fetch from, so we skip the
+    // network call entirely if we have anything local.
     //
-    // The "trust local" rule has one critical exception: if the local
-    // snapshot has rows but NONE of them are owned by the current
-    // user, the snapshot leaked in from somewhere else (a prior demo
-    // session, a localStorage version migration, the pre-RLS Adler
-    // seed surviving on a returning visitor's machine). Skipping the
-    // server fetch in that case would let the leaked rows persist
-    // forever. Force-fetch from the server so RLS gets a chance to
-    // return the empty / scoped set the user is actually entitled to.
+    // Supabase mode: always re-fetch on login. Previously this function
+    // exited early as soon as `current.length > 0 && (ownsAny ||
+    // isAdmin)`, which meant an admin whose localStorage held stale
+    // demo data NEVER consulted Supabase — every edit they made was
+    // applied to the leaked snapshot, never to the real DB, and they
+    // worked on phantom data until they cleared storage. We force-
+    // fetch instead and merge: server rows are authoritative; local
+    // optimistic writes (with synthetic `mem-` IDs that the server
+    // doesn't know about yet) are preserved so in-flight edits don't
+    // get clobbered mid-flight.
     const me = get().profile
     const current = get().members
-    const isAdmin = me?.role === 'admin'
-    const ownsAny = me ? current.some((m) => m.created_by === me.id) : false
-    if (current.length > 0 && (ownsAny || isAdmin)) {
-      // Admins legitimately see members they didn't create (every tree
-      // in the system), so absence-of-owned-rows is not a leakage
-      // signal for them.  Same early-exit either way.
+
+    if (!isSupabaseConfigured) {
+      if (current.length > 0) {
+        set({ isLoading: false })
+        return
+      }
+      // Demo mode with empty local — nothing else to do.
       set({ isLoading: false })
       return
     }
+
+    // Non-admin with rows but none they own: residual leakage from
+    // pre-RLS state. Drop before fetching so RLS authoritatively
+    // returns what they're allowed to see.
+    const isAdmin = me?.role === 'admin'
+    const ownsAny = me ? current.some((m) => m.created_by === me.id) : false
     if (current.length > 0 && !ownsAny && !isAdmin && me) {
-      // Non-admin with no owned rows: this is residual leakage from
-      // the pre-RLS era.  Drop and re-fetch so the next render
-      // reflects exactly what RLS authorises.
       set({ members: [], relationships: [] })
     }
+
     set({ isLoading: true })
     const { data, error } = await supabase
       .from('members')
       .select('*')
       .order('birth_date', { ascending: true })
-    if (error || !Array.isArray(data) || data.length === 0) {
+    if (error) {
+      reportSupabaseFailure('fetchMembers', error, 'read')
       set({ isLoading: false })
       return
     }
-    set({ members: data as Member[], isLoading: false })
+    if (!Array.isArray(data)) {
+      set({ isLoading: false })
+      return
+    }
+    if (data.length === 0) {
+      // Server returned an empty set. Could be a brand-new account or
+      // an RLS-scoped read with no allowed rows. Keep whatever local
+      // optimistic rows we have so an in-flight create isn't wiped,
+      // but drop server-authoritative rows that no longer exist.
+      const localOptimistic = current.filter((m) => m.id.startsWith('mem-'))
+      set({ members: localOptimistic, isLoading: false })
+      return
+    }
+    const serverRows = data as Member[]
+    const serverIds = new Set(serverRows.map((m) => m.id))
+    // Preserve any synthetic-id local rows the server doesn't know
+    // about yet (mid-flight optimistic creates). Server rows take
+    // precedence for everything they cover.
+    const localOptimistic = current.filter(
+      (m) => m.id.startsWith('mem-') && !serverIds.has(m.id),
+    )
+    set({ members: [...serverRows, ...localOptimistic], isLoading: false })
   },
 
   fetchRelationships: async () => {
@@ -241,11 +280,22 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     // (e.g. a previous Supabase success that later orphaned because
     // its member was wiped by an RLS race), and dropping those silently
     // lost the spouse link between יחזקאל and שיינדל on the live tree.
-    // The risk of resurrecting truly-deleted server rows is acceptable
-    // — the next mutation through the normal CRUD path will reconcile.
+    //
+    // Guard against resurrection: a row in `deletedRelationshipIds`
+    // was explicitly deleted by the user this session. Even if our
+    // local UUID row still exists in `get().relationships` (because
+    // the optimistic delete and a concurrent fetch raced), don't
+    // bring it back. Server side this row is either already gone or
+    // about to be — either way the user's intent was DELETE.
     const localOptimistic = get().relationships.filter(
-      (r) => !serverIds.has(r.id),
+      (r) => !serverIds.has(r.id) && !deletedRelationshipIds.has(r.id),
     )
+    // Once the server confirms a tombstoned row is gone (i.e. it's
+    // missing from serverIds), we can prune the tombstone. Keeping
+    // them indefinitely would slowly leak memory for long sessions.
+    for (const id of deletedRelationshipIds) {
+      if (!serverIds.has(id)) deletedRelationshipIds.delete(id)
+    }
     set({ relationships: [...serverRows, ...localOptimistic] })
   },
 
@@ -341,6 +391,47 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   },
 
   addRelationship: async (rel) => {
+    // ── Sanity guards ────────────────────────────────────────────────
+    // (a) Self-edges are always nonsense — refuse them early so a
+    //     misclick doesn't poison the relationships table.
+    if (rel.member_a_id === rel.member_b_id) {
+      // eslint-disable-next-line no-console
+      console.warn('[addRelationship] refusing self-edge', rel)
+      return
+    }
+    // (b) Cycle detection for parent-child. If the proposed child is
+    //     already an ancestor of the proposed parent, this edge would
+    //     form a loop in the parent-child graph — breaking generation
+    //     math, the layout fixpoint, and any UI that walks ancestors.
+    //     Walking from the proposed parent upward is O(N) on a
+    //     reasonably sized tree.
+    if (rel.type === 'parent-child') {
+      const allRels = get().relationships
+      const seen = new Set<string>([rel.member_a_id])
+      const stack = [rel.member_a_id]
+      let cycle = false
+      while (stack.length && !cycle) {
+        const cur = stack.pop()!
+        for (const r of allRels) {
+          if (r.type !== 'parent-child') continue
+          if (r.member_b_id !== cur) continue
+          const parent = r.member_a_id
+          if (parent === rel.member_b_id) { cycle = true; break }
+          if (seen.has(parent)) continue
+          seen.add(parent)
+          stack.push(parent)
+        }
+      }
+      if (cycle) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          '[addRelationship] refusing parent-child edge that would create a cycle',
+          rel,
+        )
+        return
+      }
+    }
+
     // Optimistic insert with a synthetic id; if Supabase returns a real
     // row, swap our local one for it so the id stays in sync.
     const localId = `rel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
@@ -395,6 +486,10 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   },
 
   deleteRelationship: async (id) => {
+    // Tombstone BEFORE optimistic removal — if a concurrent fetch races
+    // with our DELETE, the merge in fetchRelationships will see the ID
+    // in the tombstone set and skip resurrecting it.
+    deletedRelationshipIds.add(id)
     set((s) => ({ relationships: s.relationships.filter((r) => r.id !== id) }))
     try {
       const { error } = await supabase.from('relationships').delete().eq('id', id)
@@ -405,15 +500,56 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   approveEditRequest: async (requestId) => {
     const req = get().editRequests.find((r) => r.id === requestId)
     if (!req) return
-    await supabase.from('members').update(req.change_data).eq('id', req.target_member_id)
-    await supabase.from('edit_requests').update({ status: 'approved' }).eq('id', requestId)
-    set((s) => ({ editRequests: s.editRequests.filter((r) => r.id !== requestId) }))
+    // Apply optimistically to the local member so the admin sees the
+    // change before fetchMembers round-trips, and remove the request
+    // from the queue so it doesn't reappear if something below fails
+    // mid-way (worst case: the admin re-applies manually).
+    set((s) => ({
+      members: s.members.map((m) =>
+        m.id === req.target_member_id ? { ...m, ...req.change_data } : m,
+      ),
+      editRequests: s.editRequests.filter((r) => r.id !== requestId),
+    }))
+    let memberOk = false
+    try {
+      const { error } = await supabase
+        .from('members')
+        .update(req.change_data)
+        .eq('id', req.target_member_id)
+      if (error) reportSupabaseFailure('approveEditRequest:member', error)
+      else memberOk = true
+    } catch (err) {
+      reportSupabaseFailure('approveEditRequest:member', err)
+    }
+    // Only mark the request approved if the member write actually
+    // landed — otherwise an admin retry has something to retry.
+    if (memberOk) {
+      try {
+        const { error } = await supabase
+          .from('edit_requests')
+          .update({ status: 'approved' })
+          .eq('id', requestId)
+        if (error) reportSupabaseFailure('approveEditRequest:request', error)
+      } catch (err) {
+        reportSupabaseFailure('approveEditRequest:request', err)
+      }
+    }
+    // Refresh from the server so any constraints / triggers that
+    // shape the result (computed columns, defaults) are reflected.
     await get().fetchMembers()
   },
 
   rejectEditRequest: async (requestId) => {
-    await supabase.from('edit_requests').update({ status: 'rejected' }).eq('id', requestId)
     set((s) => ({ editRequests: s.editRequests.filter((r) => r.id !== requestId) }))
+    try {
+      const { error } = await supabase
+        .from('edit_requests')
+        .update({ status: 'rejected' })
+        .eq('id', requestId)
+      if (error) reportSupabaseFailure('rejectEditRequest', error)
+    } catch (err) {
+      reportSupabaseFailure('rejectEditRequest', err)
+    }
   },
 
   // ── Onboarding + RBAC ────────────────────────────────────────────────
@@ -493,16 +629,43 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       status: decision,
       decided_at: new Date().toISOString(),
     }
-    await supabase.from('access_requests').update(patch).eq('id', id)
-    if (decision === 'approved' && req) {
-      const role = grantedRole ?? req.requested_role
-      await supabase.from('profiles').update({ role }).eq('id', req.requester_id)
-    }
+    // Apply optimistically to local state first so the admin UI feels
+    // instant; we still try to persist and surface a toast on failure.
     set((s) => ({
       accessRequests: s.accessRequests.map(r =>
         r.id === id ? { ...r, status: decision, decided_at: patch.decided_at as string } : r,
       ),
     }))
+    try {
+      const { error } = await supabase.from('access_requests').update(patch).eq('id', id)
+      if (error) reportSupabaseFailure('decideAccessRequest:request', error)
+    } catch (err) {
+      reportSupabaseFailure('decideAccessRequest:request', err)
+    }
+    if (decision === 'approved' && req) {
+      const role = grantedRole ?? req.requested_role
+      try {
+        const { error } = await supabase
+          .from('profiles')
+          .update({ role })
+          .eq('id', req.requester_id)
+        if (error) {
+          reportSupabaseFailure('decideAccessRequest:profile', error)
+        } else {
+          // If the admin just approved their OWN request (e.g. they
+          // self-promoted from `user` to `master` for testing) the
+          // local profile slice has to reflect the new role too,
+          // otherwise the UI keeps gating them out of master-only
+          // features until next reload.
+          const me = get().profile
+          if (me?.id === req.requester_id) {
+            set({ profile: { ...me, role } })
+          }
+        }
+      } catch (err) {
+        reportSupabaseFailure('decideAccessRequest:profile', err)
+      }
+    }
   },
 
   completeOnboarding: async (patch) => {
@@ -512,14 +675,37 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       ...patch,
       onboarded_at: new Date().toISOString(),
     }
-    await supabase.from('profiles').update(finalPatch).eq('id', me.id)
+    // Update local FIRST so the wizard can transition to step 5 even if
+    // the network is flaky. The optimistic write is harmless — server
+    // sync will retry on next user action, and the local snapshot
+    // already shows them as onboarded.
     set({ profile: { ...me, ...finalPatch } })
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update(finalPatch)
+        .eq('id', me.id)
+      if (error) reportSupabaseFailure('completeOnboarding', error)
+    } catch (err) {
+      reportSupabaseFailure('completeOnboarding', err)
+    }
   },
 
   updateProfileById: async (id, patch) => {
-    await supabase.from('profiles').update(patch).eq('id', id)
+    // Apply optimistically to the local profile when it's the current
+    // user — admin tools update OTHER users' profiles too, in which case
+    // the AdminDashboard re-fetches its `users` list on success.
     const me = get().profile
     if (me?.id === id) set({ profile: { ...me, ...patch } })
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update(patch)
+        .eq('id', id)
+      if (error) reportSupabaseFailure('updateProfileById', error)
+    } catch (err) {
+      reportSupabaseFailure('updateProfileById', err)
+    }
   },
 
   // ── Tree viewport implementation ──────────────────────────────────

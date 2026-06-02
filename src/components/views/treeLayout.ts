@@ -285,14 +285,60 @@ export function buildLayout(
     if (all.length > 0) familyChildrenOf.set(m.id, all)
   }
 
-  // Generation via fixpoint
+  // Cycle detection — DFS the parent-child graph for back-edges. A
+  // cycle (e.g. A is parent of B and B is parent of A, possible if the
+  // user creates contradictory edges since the DB schema doesn't enforce
+  // acyclicity) breaks the generation fixpoint below: each pass keeps
+  // bumping members in the cycle, never converging. We mark cycle
+  // members in `inCycle` so the fixpoint loop skips them (their
+  // generation stays at 0, which is wrong but at least deterministic)
+  // and surface a console.warn so the data can be repaired.
+  const inCycle = new Set<string>()
+  {
+    const WHITE = 0, GRAY = 1, BLACK = 2
+    const color = new Map<string, number>()
+    members.forEach(m => color.set(m.id, WHITE))
+    const dfs = (id: string, stack: string[]) => {
+      color.set(id, GRAY)
+      stack.push(id)
+      for (const child of childrenOf.get(id) ?? []) {
+        const c = color.get(child) ?? WHITE
+        if (c === GRAY) {
+          // Back-edge — every member in the cycle slice from `child`
+          // back to `id` (inclusive) is part of the cycle.
+          const cycleStart = stack.indexOf(child)
+          if (cycleStart >= 0) {
+            for (let i = cycleStart; i < stack.length; i++) inCycle.add(stack[i])
+          }
+          inCycle.add(child)
+          // eslint-disable-next-line no-console
+          console.warn('[treeLayout] parent-child cycle detected involving', stack.slice(cycleStart))
+        } else if (c === WHITE) {
+          dfs(child, stack)
+        }
+      }
+      stack.pop()
+      color.set(id, BLACK)
+    }
+    for (const m of members) {
+      if ((color.get(m.id) ?? WHITE) === WHITE) dfs(m.id, [])
+    }
+  }
+
+  // Generation via fixpoint. The cap scales with the population: each
+  // pass propagates one generation deeper, so a tall tree with N members
+  // can legitimately need ~N iterations to converge. Cycle members are
+  // skipped (their gen stays at 0) so the loop terminates even if the
+  // user has bad data.
   const genMap = new Map<string, number>()
   members.forEach(m => genMap.set(m.id, 0))
   let changed = true
   let safety = 0
-  while (changed && safety++ < 200) {
+  const SAFETY_CAP = Math.max(200, members.length * 2)
+  while (changed && safety++ < SAFETY_CAP) {
     changed = false
     for (const m of members) {
+      if (inCycle.has(m.id)) continue
       const parents = parentsOf.get(m.id) ?? []
       if (parents.length === 0) continue
       const newGen = Math.max(...parents.map(p => genMap.get(p) ?? 0)) + 1
@@ -301,10 +347,17 @@ export function buildLayout(
         changed = true
       }
     }
+    // Spouse generation alignment. Previously this only ran for members
+    // WITHOUT parents — meaning a wife added without parents stayed at
+    // gen 0 while her husband (gen 2 via his parents) ended up two rows
+    // above her. We now align BOTH members of every couple to the
+    // maximum of their generations so the pair renders side-by-side
+    // regardless of which side has ancestors in the tree.
     for (const m of members) {
-      if (parentsOf.has(m.id)) continue
+      if (inCycle.has(m.id)) continue
       const currGen = genMap.get(m.id) ?? 0
       for (const sp of spousesOf.get(m.id) ?? []) {
+        if (inCycle.has(sp)) continue
         const spGen = genMap.get(sp) ?? 0
         if (spGen > currGen) {
           genMap.set(m.id, spGen)
@@ -312,6 +365,10 @@ export function buildLayout(
         }
       }
     }
+  }
+  if (safety >= SAFETY_CAP) {
+    // eslint-disable-next-line no-console
+    console.warn('[treeLayout] generation fixpoint hit safety cap', { cap: SAFETY_CAP, members: members.length })
   }
 
   // Layout roots.
@@ -360,7 +417,15 @@ export function buildLayout(
   for (let i = layoutRoots.length - 1; i >= 0; i--) {
     const id = layoutRoots[i]
     const spouses = spousesOf.get(id) ?? []
-    const hasInTreeSpouse = spouses.some((sp) => !rootIds.has(sp))
+    // The spouse must actually exist in the current filtered member set —
+    // otherwise we'd strip `id` from layoutRoots based on a spouse who's
+    // hidden by the current filter, making `id` itself vanish (no subtree
+    // would pick them up via placeSpousesAround). `spousesOf` is built
+    // from the full relationships table, so filtered-out partners can
+    // appear here even though `memberById` excludes them.
+    const hasInTreeSpouse = spouses.some(
+      (sp) => !rootIds.has(sp) && memberById.has(sp),
+    )
     if (hasInTreeSpouse) layoutRoots.splice(i, 1)
   }
 
@@ -545,8 +610,22 @@ export function buildLayout(
       assign(c, childLeft)
       childLeft += subtreeWidth(c) + H_GAP
     }
-    const firstCX = xPos.get(children[0])!
-    const lastCX = xPos.get(children[children.length - 1])!
+    // If a child was already placed by another subtree (shared-parent edge
+    // case), `assign` returns early without writing xPos. Collect the actual
+    // positioned children so we don't end up centering the parent on NaN.
+    const positionedXs: number[] = []
+    for (const c of children) {
+      const cx = xPos.get(c)
+      if (cx !== undefined) positionedXs.push(cx)
+    }
+    if (positionedXs.length === 0) {
+      // No child was actually placed in this slot (all were pre-placed
+      // elsewhere). Fall back to centering on the reserved couple slot.
+      placeSpousesAround(id, leftX + coupleWidth / 2, spousesToPlace)
+      return
+    }
+    const firstCX = Math.min(...positionedXs)
+    const lastCX = Math.max(...positionedXs)
     const midX = (firstCX + lastCX + NODE_W) / 2
     placeSpousesAround(id, midX, spousesToPlace)
   }
