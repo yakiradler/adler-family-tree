@@ -13,7 +13,7 @@ import ThemeShell from './components/ThemeShell'
 import PersistenceIndicator from './components/PersistenceIndicator'
 import InstallPrompt from './components/InstallPrompt'
 import VersionUpdateModal from './components/VersionUpdateModal'
-import { ADLER_MEMBERS, ADLER_RELATIONSHIPS } from './data/adlerFamily'
+import { ADLER_MEMBERS, ADLER_RELATIONSHIPS, ADLER_TREES } from './data/adlerFamily'
 import { isPendingOnboarding, clearPendingOnboarding } from './lib/pendingOnboarding'
 import type { Profile } from './types'
 import type { Session } from '@supabase/supabase-js'
@@ -118,16 +118,20 @@ export default function App() {
     // another doesn't leak the previous user's local data (including
     // the seeded Adler family) into the new session. The demo bucket
     // is a single shared key because demo has no real identity.
-    // v4 bumps the per-user bucket so any snapshot that was captured
-    // before migration 008 tightened RLS (and could therefore contain
-    // the 79-member Adler population a non-Adler user inherited via
-    // the old open SELECT policy) is dropped on next login. Existing
-    // legitimate owners reseed from Supabase, which still returns
-    // exactly the rows they own — no data loss for yakir.
+    // v5 bumps the per-user bucket again because stages 0-3 of the
+    // base-rebuild changed the seed shape (7-member nuclear family
+    // instead of 84 across 4 generations) AND introduced the
+    // tree_id NOT NULL invariant. Old snapshots could resurrect the
+    // 84-member population client-side even though the server already
+    // restructured. Demo mode bucket also bumps to ft-state-v4 so a
+    // returning demo visitor sees the new nuclear seed immediately
+    // rather than the legacy 84-member fixture they cached.
     const STORAGE_KEY = demoMode
-      ? 'ft-state-v3'
-      : `ft-state-v4-${session?.user?.id ?? 'anon'}`
-    const LEGACY_KEYS = demoMode ? ['ft-demo-state-v2', 'ft-demo-state-v1'] : []
+      ? 'ft-state-v4'
+      : `ft-state-v5-${session?.user?.id ?? 'anon'}`
+    const LEGACY_KEYS = demoMode
+      ? ['ft-state-v3', 'ft-demo-state-v2', 'ft-demo-state-v1']
+      : []
 
     // Migrate / hydrate.
     let restored = false
@@ -176,9 +180,18 @@ export default function App() {
       useFamilyStore.setState({
         members: demoMode ? ADLER_MEMBERS : [],
         relationships: demoMode ? ADLER_RELATIONSHIPS : [],
-        trees: [],
+        // Seed demo trees so the per-tree filter has something to
+        // anchor on. Without this, TreePage's "auto-pick first tree"
+        // useEffect would fall through to the (now empty) main-tree
+        // branch and show an empty canvas.
+        trees: demoMode ? ADLER_TREES : [],
         notes: [],
       })
+      // Auto-select the demo tree as active so /tree renders the
+      // seed without forcing the user through a tree-picker first.
+      if (demoMode) {
+        useFamilyStore.getState().setActiveTreeId(ADLER_TREES[0].id)
+      }
     }
 
     // Mirror mutations to localStorage. We use reference equality so
