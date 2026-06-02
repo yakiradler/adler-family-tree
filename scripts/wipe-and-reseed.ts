@@ -76,22 +76,34 @@ async function connect(): Promise<Client> {
 const OWNER_EMAILS = ['yakir@davidvatine.co.il', 'yakir00010@gmail.com', 'yakir17ari@gmail.com']
 const NUCLEAR_TREE_ID = '00000000-0000-4000-8000-000000000001' // deterministic v4-shaped UUID
 
+// Generic 7-member family, 3 generations. Chosen for symmetry testing:
+//   • Gen 0: Grandfather + Grandmother
+//   • Gen 1: Father + Mother
+//   • Gen 2: Son + Daughter (centre) + Son  (3 siblings — odd count so
+//           the middle child sits directly under the parents)
+// birth_order is set explicitly so the layout engine can place
+// siblings deterministically (oldest → middle → youngest).
 const SEED_MEMBERS = [
-  { id: '00000000-0000-4000-8000-000000000010', first_name: 'יצחק',    last_name: 'אדלר', gender: 'male',   birth_date: '1940-05-20' },
-  { id: '00000000-0000-4000-8000-000000000011', first_name: 'שולמית',  last_name: 'אדלר', gender: 'female', birth_date: '1943-06-10' },
-  { id: '00000000-0000-4000-8000-000000000012', first_name: 'אריה',    last_name: 'אדלר', gender: 'male',   birth_date: '1968-09-22' },
-  { id: '00000000-0000-4000-8000-000000000013', first_name: 'מרים',    last_name: 'אדלר', gender: 'female', birth_date: '1970-03-15' },
-  { id: '00000000-0000-4000-8000-000000000014', first_name: 'נתנאל',   last_name: 'כהן',  gender: 'male',   hidden: true },
-  { id: '00000000-0000-4000-8000-000000000015', first_name: 'יקיר',    last_name: 'אדלר', gender: 'male',   birth_date: '1995-07-08' },
-  { id: '00000000-0000-4000-8000-000000000016', first_name: 'נועה',    last_name: 'אדלר', gender: 'female', birth_date: '1998-04-18' },
+  { id: '00000000-0000-4000-8000-000000000010', first_name: 'סבא',   last_name: 'דוגמה', gender: 'male',   birth_date: '1940-01-01', birth_order: null },
+  { id: '00000000-0000-4000-8000-000000000011', first_name: 'סבתא',  last_name: 'דוגמה', gender: 'female', birth_date: '1942-01-01', birth_order: null },
+  { id: '00000000-0000-4000-8000-000000000012', first_name: 'אבא',   last_name: 'דוגמה', gender: 'male',   birth_date: '1968-01-01', birth_order: null },
+  { id: '00000000-0000-4000-8000-000000000013', first_name: 'אמא',   last_name: 'דוגמה', gender: 'female', birth_date: '1970-01-01', birth_order: null },
+  { id: '00000000-0000-4000-8000-000000000014', first_name: 'בן א\'', last_name: 'דוגמה', gender: 'male',   birth_date: '1992-01-01', birth_order: 1 },
+  { id: '00000000-0000-4000-8000-000000000015', first_name: 'בת',    last_name: 'דוגמה', gender: 'female', birth_date: '1995-01-01', birth_order: 2 },
+  { id: '00000000-0000-4000-8000-000000000016', first_name: 'בן ב\'', last_name: 'דוגמה', gender: 'male',   birth_date: '1998-01-01', birth_order: 3 },
 ] as const
 
 const SEED_RELATIONSHIPS = [
+  // Gen 0 marriage
   { a: SEED_MEMBERS[0].id, b: SEED_MEMBERS[1].id, type: 'spouse', status: 'current' },
+  // Grandparents → father
   { a: SEED_MEMBERS[0].id, b: SEED_MEMBERS[2].id, type: 'parent-child' },
   { a: SEED_MEMBERS[1].id, b: SEED_MEMBERS[2].id, type: 'parent-child' },
+  // Gen 1 marriage
   { a: SEED_MEMBERS[2].id, b: SEED_MEMBERS[3].id, type: 'spouse', status: 'current' },
-  { a: SEED_MEMBERS[3].id, b: SEED_MEMBERS[4].id, type: 'spouse', status: 'ex' },
+  // Parents → 3 children
+  { a: SEED_MEMBERS[2].id, b: SEED_MEMBERS[4].id, type: 'parent-child' },
+  { a: SEED_MEMBERS[3].id, b: SEED_MEMBERS[4].id, type: 'parent-child' },
   { a: SEED_MEMBERS[2].id, b: SEED_MEMBERS[5].id, type: 'parent-child' },
   { a: SEED_MEMBERS[3].id, b: SEED_MEMBERS[5].id, type: 'parent-child' },
   { a: SEED_MEMBERS[2].id, b: SEED_MEMBERS[6].id, type: 'parent-child' },

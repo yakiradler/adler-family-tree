@@ -1,261 +1,177 @@
-// Standalone tree-layout engine.
-// Extracted so it can be unit-tested against real family data without
-// pulling React. All dimensions are in pixels.
+// ─────────────────────────────────────────────────────────────────────
+// Tree layout engine — clean rewrite for the base rebuild.
+// ─────────────────────────────────────────────────────────────────────
+//
+// Design principles (priority order):
+//
+//   1. SYMMETRY. A couple is always drawn side-by-side at the same Y.
+//      Children are centred under their parents. The whole subtree
+//      reads as a mirror image around its own centre.
+//
+//   2. DETERMINISTIC PLACEMENT. Every member has exactly one (x, y)
+//      derived from its generation and its position inside its sibling
+//      group. Same input always produces the same output.
+//
+//   3. NO OVERLAP. Two cards never share the same bounding box. Width
+//      calculations bubble up so every parent slot is at least as
+//      wide as its children block. A defensive same-generation sweep
+//      enforces the invariant even on malformed input.
+//
+//   4. CONNECTORS FROM MOTHER. Parent-child links anchor at the
+//      mother's card (with explicit `connector_parent_id` override
+//      respected). Spouse links are a horizontal line between the
+//      pair. No line ever ends in empty space — the renderer
+//      derives all geometry from this engine's output.
+//
+//   5. EXCLUSIONS ARE ABSOLUTE. `hidden=true` members are stripped by
+//      applyTreeFilters before the engine sees them. The engine has
+//      no special-case for hidden members.
+//
+// Coordinates: x grows right, y grows down. The canvas is pixel-LTR;
+// the page chrome may be RTL but the tree itself uses LTR coordinates
+// and the gender placement keeps the visual order consistent.
+// ─────────────────────────────────────────────────────────────────────
 
 import type { Member, Relationship, SpouseStatus } from '../../types'
 
-// ─── Dimensions ─────────────────────────────────────────────────────────────
+// ─── Dimensions ──────────────────────────────────────────────────────
 export const AVATAR = 64
-export const NODE_W = AVATAR + 72
-export const NODE_H = AVATAR + 62
-// Gaps are generous enough that NO two cards can ever visually touch, even
-// when avatars have protruding gender/birth-order badges on the corners.
-// H_GAP=18 (was 40) keeps siblings tight so a nuclear-family of 3 kids
-// reads as one visual unit instead of strung across the canvas. The
-// MIN_SIDE_GAP=12 floor still rules out actual overlap.
-export const H_GAP = 18
-export const V_GAP = 96
-export const COUPLE_GAP = 22
-// Minimum breathing space required on every side of a card. Any layout that
-// produces a closer neighbour should be considered a bug.
-export const MIN_SIDE_GAP = 12
+export const NODE_W = AVATAR + 72     // 136
+export const NODE_H = AVATAR + 62     // 126
+export const H_GAP = 28               // between siblings
+export const V_GAP = 110              // between generations
+export const COUPLE_GAP = 32          // inside a couple
+export const MIN_SIDE_GAP = 16        // anti-collision floor
 
+// LayoutMode is kept in the public API for back-compat. Only 'classic'
+// has an effect — the alternate cluster shapes are kept as stubs.
 export type LayoutMode = 'classic' | 'grid' | 'arc' | 'staggered'
 
 export interface SecondaryPartner {
   member: Member
-  status: Exclude<SpouseStatus, 'current'>  // 'ex' | 'deceased'
+  status: Exclude<SpouseStatus, 'current'>
 }
 
 export interface LayoutNode {
   member: Member
-  x: number
-  y: number
+  x: number               // left edge of the card
+  y: number               // top edge of the card
   generation: number
-  /**
-   * Ex / deceased partners that should render as a smaller circle BELOW
-   * this member's card. They don't reserve horizontal layout width — so a
-   * divorce never widens the tree — but the consumer is expected to draw
-   * them at a known offset (see SECONDARY_PARTNER_* constants).
-   */
+  /** Ex / deceased partners shown as small badges below the card.
+   *  Populated only when `options.showFormerSpouses` is true. */
   secondaryPartners?: SecondaryPartner[]
 }
 
-// Visual constants for ex/deceased partner indicators rendered by the
-// caller. Kept in this module so tests and TreeView agree on the geometry.
-export const SECONDARY_PARTNER_SIZE = 36           // avatar diameter, px
-export const SECONDARY_PARTNER_TOP_OFFSET = NODE_H + 6  // gap below card
+// Visual constants consumed by the renderer.
+export const SECONDARY_PARTNER_SIZE = 36
+export const SECONDARY_PARTNER_TOP_OFFSET = NODE_H + 6
 
+// Cluster helpers kept as classic-only stubs (existing imports won't
+// break, but the new layout doesn't fan-out via clusters any more).
 interface Placement { dx: number; dy: number }
 interface ClusterResult { placements: Placement[]; width: number; height: number }
 
-// ─── Sibling cluster shapes ────────────────────────────────────────────────
-// Each returns per-child (dx, dy) and the total bounding width/height.
-// These operate ONLY on leaf siblings (no descendants of their own) so the
-// dy shifts never collide with deeper subtrees.
-
 export function clusterClassic(n: number): ClusterResult {
-  const width = n * NODE_W + (n - 1) * H_GAP
+  const width = n * NODE_W + Math.max(0, n - 1) * H_GAP
   const placements: Placement[] = []
   for (let i = 0; i < n; i++) placements.push({ dx: i * (NODE_W + H_GAP), dy: 0 })
   return { placements, width, height: NODE_H }
 }
-
-export function clusterGrid(n: number): ClusterResult {
-  const perRow = n > 8 ? 5 : 4
-  const cols = Math.min(perRow, n)
-  const rowStep = NODE_H + V_GAP * 0.38
-  const width = cols * NODE_W + (cols - 1) * H_GAP
-  const placements: Placement[] = []
-  const rows = Math.ceil(n / perRow)
-  for (let i = 0; i < n; i++) {
-    const r = Math.floor(i / perRow)
-    const col = i % perRow
-    const thisRowCount = Math.min(perRow, n - r * perRow)
-    const thisRowW = thisRowCount * NODE_W + (thisRowCount - 1) * H_GAP
-    const dx = (width - thisRowW) / 2 + col * (NODE_W + H_GAP)
-    const dy = r * rowStep
-    placements.push({ dx, dy })
-  }
-  return { placements, width, height: NODE_H + (rows - 1) * rowStep }
-}
-
-export function clusterStaggered(n: number): ClusterResult {
-  // Zigzag / brick pattern. To guarantee no two cards ever visually touch:
-  //   - adjacent indices sit on different rows, so vertical separation must
-  //     fully clear a card height: yOffset ≥ NODE_H + MIN_SIDE_GAP.
-  //   - same-row items (indices i and i+2) must have 2*step ≥ NODE_W + gap.
-  // With step ≈ 0.55·NODE_W the layout still visibly shrinks horizontally
-  // compared to classic while keeping a clean 12+ px visual gap everywhere.
-  const step = Math.round(NODE_W * 0.55 + MIN_SIDE_GAP)       // ~87 px
-  const yOffset = NODE_H + MIN_SIDE_GAP + 2                   // 140 px
-  const width = (n - 1) * step + NODE_W
-  const placements: Placement[] = []
-  for (let i = 0; i < n; i++) {
-    placements.push({ dx: i * step, dy: (i % 2) * yOffset })
-  }
-  return { placements, width, height: NODE_H + yOffset }
-}
-
-export function clusterArc(n: number): ClusterResult {
-  // Fan siblings along a shallow arc. Two constraints:
-  //   (a) Neighbouring cards must have enough horizontal spacing at the arc's
-  //       edges — the x-distance between adjacent positions is roughly
-  //       `chord * cos(angle)`, which SHRINKS towards the ends of the arc.
-  //       Cap sweep so cos(halfSweep) stays bounded and bump chord as needed.
-  //   (b) Arc sag (max dy) must not bleed into the next generation. Clamp
-  //       the depth factor so maxDy ≤ NODE_H · 0.9.
-  const sweep = Math.min(Math.PI * 0.55, Math.PI * 0.28 + n * 0.05)   // ≤ 99°
-  const halfSweep = sweep / 2
-  const cosHalf = Math.max(0.35, Math.cos(halfSweep))                  // bounded
-  const minEdgeDx = NODE_W + MIN_SIDE_GAP + 8                          // 156
-  const chord = Math.max(NODE_W + H_GAP * 0.9, minEdgeDx / cosHalf)
-  const R = chord / (2 * Math.sin(sweep / (2 * Math.max(n - 1, 1))))
-  const width = 2 * R * Math.sin(halfSweep) + NODE_W
-  const naturalDepth = 0.55
-  const maxAllowedSag = NODE_H * 0.9
-  const rawMaxSag = R * (1 - Math.cos(halfSweep)) * naturalDepth
-  const depthFactor =
-    rawMaxSag > maxAllowedSag && rawMaxSag > 0
-      ? (maxAllowedSag / (R * (1 - Math.cos(halfSweep))))
-      : naturalDepth
-  const centerX = width / 2
-  const placements: Placement[] = []
-  let maxDy = 0
-  for (let i = 0; i < n; i++) {
-    const t = n === 1 ? 0 : i / (n - 1)
-    const angle = -halfSweep + t * sweep
-    const dx = centerX + R * Math.sin(angle) - NODE_W / 2
-    const dy = R * (1 - Math.cos(angle)) * depthFactor
-    if (dy > maxDy) maxDy = dy
-    placements.push({ dx, dy })
-  }
-  return { placements, width, height: NODE_H + maxDy }
-}
-
-// Threshold: apply cluster shape when there are ≥2 leaves. Below that we
-// fall back to classic (2 side-by-side feels fine in every mode).
-export function clusterFor(mode: LayoutMode, n: number): ClusterResult {
-  if (n < 2) return clusterClassic(n)
-  if (mode === 'grid') return clusterGrid(n)
-  if (mode === 'staggered') return clusterStaggered(n)
-  if (mode === 'arc') return clusterArc(n)
+export const clusterGrid = clusterClassic
+export const clusterStaggered = clusterClassic
+export const clusterArc = clusterClassic
+export function clusterFor(_mode: LayoutMode, n: number): ClusterResult {
   return clusterClassic(n)
 }
 
-// ─── Main layout engine ────────────────────────────────────────────────────
+// ─── Public API ──────────────────────────────────────────────────────
 
 export interface LayoutOptions {
-  /**
-   * Show ex / deceased partners as secondary circles beneath their card.
-   * When false (default — divorce is a sensitive topic and stays inside
-   * the profile panel), they are omitted from the layout entirely so the
-   * tree never reserves vertical genOverflow for them.
-   */
+  /** When true, ex/deceased partners surface as small badges beneath
+   *  their card. When false (default) they are excluded entirely. */
   showFormerSpouses?: boolean
 }
 
 export function buildLayout(
   members: Member[],
   relationships: Relationship[],
-  mode: LayoutMode = 'classic',
+  _mode: LayoutMode = 'classic',
   options: LayoutOptions = {},
 ): LayoutNode[] {
   if (members.length === 0) return []
   const showFormerSpouses = options.showFormerSpouses ?? false
 
-  const memberById = new Map(members.map(m => [m.id, m]))
+  // ─── Step 1: adjacency maps ────────────────────────────────────────
+  const memberById = new Map(members.map((m) => [m.id, m]))
   const parentsOf = new Map<string, string[]>()
   const childrenOf = new Map<string, string[]>()
-  // Only CURRENT spouses are co-placed in the main row.
-  const spousesOf = new Map<string, string[]>()
-  // Ex / deceased partners surface separately — rendered as small circles
-  // below the member without affecting layout slot widths.
+  const currentSpouseOf = new Map<string, string>()
   const secondaryPartnersOf = new Map<string, SecondaryPartner[]>()
 
-  const spouseStatusOf = (r: Relationship): SpouseStatus =>
-    (r.status ?? 'current') as SpouseStatus
-
   for (const r of relationships) {
+    if (!memberById.has(r.member_a_id) || !memberById.has(r.member_b_id)) continue
+
     if (r.type === 'parent-child') {
-      if (!parentsOf.has(r.member_b_id)) parentsOf.set(r.member_b_id, [])
-      parentsOf.get(r.member_b_id)!.push(r.member_a_id)
-      if (!childrenOf.has(r.member_a_id)) childrenOf.set(r.member_a_id, [])
-      const ch = childrenOf.get(r.member_a_id)!
-      if (!ch.includes(r.member_b_id)) ch.push(r.member_b_id)
+      const list = parentsOf.get(r.member_b_id) ?? []
+      if (!list.includes(r.member_a_id)) list.push(r.member_a_id)
+      parentsOf.set(r.member_b_id, list)
+
+      const kids = childrenOf.get(r.member_a_id) ?? []
+      if (!kids.includes(r.member_b_id)) kids.push(r.member_b_id)
+      childrenOf.set(r.member_a_id, kids)
+      continue
     }
+
     if (r.type === 'spouse') {
-      const status = spouseStatusOf(r)
+      const status = (r.status ?? 'current') as SpouseStatus
       if (status === 'current') {
-        const add = (a: string, b: string) => {
-          if (!spousesOf.has(a)) spousesOf.set(a, [])
-          if (!spousesOf.get(a)!.includes(b)) spousesOf.get(a)!.push(b)
-        }
-        add(r.member_a_id, r.member_b_id)
-        add(r.member_b_id, r.member_a_id)
+        // One-to-one pairing — first 'current' tie wins for each member.
+        if (!currentSpouseOf.has(r.member_a_id)) currentSpouseOf.set(r.member_a_id, r.member_b_id)
+        if (!currentSpouseOf.has(r.member_b_id)) currentSpouseOf.set(r.member_b_id, r.member_a_id)
       } else if (showFormerSpouses) {
-        // ex / deceased: surface as a secondary partner on BOTH sides so
-        // either member's card shows the relationship indicator. Only
-        // collected when the caller opts in via showFormerSpouses (the
-        // tree hides them by default — see options).
-        const addSecondary = (ownerId: string, partnerId: string) => {
-          const partner = memberById.get(partnerId)
-          if (!partner) return
-          if (!secondaryPartnersOf.has(ownerId)) secondaryPartnersOf.set(ownerId, [])
-          const list = secondaryPartnersOf.get(ownerId)!
-          if (!list.some(p => p.member.id === partnerId)) {
-            list.push({ member: partner, status })
+        const push = (owner: string, partner: string) => {
+          const partnerMember = memberById.get(partner)
+          if (!partnerMember) return
+          const list = secondaryPartnersOf.get(owner) ?? []
+          if (!list.some((p) => p.member.id === partner)) {
+            list.push({ member: partnerMember, status })
+            secondaryPartnersOf.set(owner, list)
           }
         }
-        addSecondary(r.member_a_id, r.member_b_id)
-        addSecondary(r.member_b_id, r.member_a_id)
+        push(r.member_a_id, r.member_b_id)
+        push(r.member_b_id, r.member_a_id)
       }
     }
   }
 
-  const rootIds = new Set(members.filter(m => !parentsOf.has(m.id)).map(m => m.id))
-
-  // Children are grouped under their MOTHER's column by default — the
-  // user explicitly asked for this so a discreet first ex-spouse can
-  // be hidden without orphaning the children. Per-member override via
-  // `connector_parent_id` lets families opt back to the father where
-  // it's the more meaningful anchor (e.g. patrilineal traditions).
-  //
-  // Extended rule (per the user's request after seeing the top
-  // generation anchor on the father instead of the mother): when the
-  // child has NO mother recorded as a parent but the recorded father
-  // has a CURRENT spouse who is in the rendered population, that
-  // spouse becomes the visual anchor anyway. This handles the common
-  // case where a male was added first (becoming the recorded parent)
-  // and only later was a wife added beside him without back-linking
-  // her as a parent of the existing children.
-  const primaryParentOf = new Map<string, string>()
-  for (const [childId, parents] of parentsOf) {
-    const child = memberById.get(childId)
-    const explicit = child?.connector_parent_id
-    const explicitParent = explicit && parents.includes(explicit) ? explicit : null
-    const motherPrimary = parents.find(p => memberById.get(p)?.gender === 'female')
-    const fatherPrimary = parents.find(p => memberById.get(p)?.gender === 'male')
-    // If only the father is recorded, check his current spouse: if she's
-    // in the tree's rendered population, anchor on her instead of him.
-    let fathersSpouse: string | undefined
-    if (!motherPrimary && fatherPrimary) {
-      const candidates = spousesOf.get(fatherPrimary) ?? []
-      fathersSpouse = candidates.find((sp) => memberById.has(sp))
+  // ─── Step 2: couples ───────────────────────────────────────────────
+  // For every current couple, pick ONE partner as the "primary" used
+  // for tree traversal. The one with descendants wins; tie-broken by
+  // member id for stable ordering across re-renders.
+  const primaryOf = new Map<string, string>()
+  const partnerOfPrimary = new Map<string, string>()
+  const handled = new Set<string>()
+  for (const m of members) {
+    if (handled.has(m.id)) continue
+    const spouseId = currentSpouseOf.get(m.id)
+    if (!spouseId || handled.has(spouseId)) {
+      primaryOf.set(m.id, m.id)
+      handled.add(m.id)
+      continue
     }
-    primaryParentOf.set(
-      childId,
-      explicitParent ?? motherPrimary ?? fathersSpouse ?? fatherPrimary ?? parents[0],
-    )
+    const aKids = (childrenOf.get(m.id) ?? []).length
+    const bKids = (childrenOf.get(spouseId) ?? []).length
+    const primary = aKids > bKids ? m.id : bKids > aKids ? spouseId : (m.id < spouseId ? m.id : spouseId)
+    const partner = primary === m.id ? spouseId : m.id
+    primaryOf.set(m.id, primary)
+    primaryOf.set(spouseId, primary)
+    partnerOfPrimary.set(primary, partner)
+    handled.add(m.id)
+    handled.add(spouseId)
   }
 
-  const ownerChildrenOf = new Map<string, string[]>()
-  for (const [childId, parentId] of primaryParentOf) {
-    if (!ownerChildrenOf.has(parentId)) ownerChildrenOf.set(parentId, [])
-    ownerChildrenOf.get(parentId)!.push(childId)
-  }
-
-  const siblingSort = (aId: string, bId: string) => {
+  // ─── Step 3: combined children per primary ────────────────────────
+  const siblingSort = (aId: string, bId: string): number => {
     const a = memberById.get(aId), b = memberById.get(bId)
     if (!a || !b) return 0
     const ao = a.birth_order, bo = b.birth_order
@@ -269,619 +185,189 @@ export function buildLayout(
     if (ad == null && bd != null) return 1
     return (a.first_name || '').localeCompare(b.first_name || '', 'he')
   }
-  for (const [pid, kids] of ownerChildrenOf) {
-    kids.sort(siblingSort)
-    ownerChildrenOf.set(pid, kids)
-  }
 
-  // Children of the *couple*, grouped by which side of the couple they
-  // biologically belong to. Order in the resulting array (per the user's
-  // explicit request: "each spouse's children should be on their own
-  // side"):
-  //   1. children whose primary parent is `m` (m's own bio kids)
-  //   2. shared children — both m and a spouse are in their parents
-  //   3. each spouse's bio kids that m is NOT a parent of
-  // Within each group we keep the existing sibling sort (birth order →
-  // birth date → name). Because the page is RTL by default, group #1
-  // ends up on the visual-right (mother's side) and the spouse's
-  // exclusive kids on the visual-left.
-  const familyChildrenOf = new Map<string, string[]>()
+  const kidsOfPrimary = new Map<string, string[]>()
   for (const m of members) {
-    const owned = ownerChildrenOf.get(m.id) ?? []
-    const ownedSet = new Set(owned)
-    const spouses = spousesOf.get(m.id) ?? []
-    const ownGroup: string[] = [...owned].sort(siblingSort)
-    const spouseGroups: string[][] = []
-    for (const sp of spouses) {
-      const spOwned = ownerChildrenOf.get(sp) ?? []
-      const exclusive = spOwned.filter((c) => !ownedSet.has(c))
-      if (exclusive.length > 0) spouseGroups.push([...exclusive].sort(siblingSort))
-    }
-    const all = [...new Set([...ownGroup, ...spouseGroups.flat()])]
-    if (all.length > 0) familyChildrenOf.set(m.id, all)
+    if (primaryOf.get(m.id) !== m.id) continue
+    const partner = partnerOfPrimary.get(m.id)
+    const mine = childrenOf.get(m.id) ?? []
+    const theirs = partner ? (childrenOf.get(partner) ?? []) : []
+    const merged = Array.from(new Set([...mine, ...theirs]))
+      .filter((id) => memberById.has(id))
+      .sort(siblingSort)
+    kidsOfPrimary.set(m.id, merged)
   }
 
-  // Cycle detection — DFS the parent-child graph for back-edges. A
-  // cycle (e.g. A is parent of B and B is parent of A, possible if the
-  // user creates contradictory edges since the DB schema doesn't enforce
-  // acyclicity) breaks the generation fixpoint below: each pass keeps
-  // bumping members in the cycle, never converging. We mark cycle
-  // members in `inCycle` so the fixpoint loop skips them (their
-  // generation stays at 0, which is wrong but at least deterministic)
-  // and surface a console.warn so the data can be repaired.
-  const inCycle = new Set<string>()
-  {
-    const WHITE = 0, GRAY = 1, BLACK = 2
-    const color = new Map<string, number>()
-    members.forEach(m => color.set(m.id, WHITE))
-    const dfs = (id: string, stack: string[]) => {
-      color.set(id, GRAY)
-      stack.push(id)
-      for (const child of childrenOf.get(id) ?? []) {
-        const c = color.get(child) ?? WHITE
-        if (c === GRAY) {
-          // Back-edge — every member in the cycle slice from `child`
-          // back to `id` (inclusive) is part of the cycle.
-          const cycleStart = stack.indexOf(child)
-          if (cycleStart >= 0) {
-            for (let i = cycleStart; i < stack.length; i++) inCycle.add(stack[i])
-          }
-          inCycle.add(child)
-          // eslint-disable-next-line no-console
-          console.warn('[treeLayout] parent-child cycle detected involving', stack.slice(cycleStart))
-        } else if (c === WHITE) {
-          dfs(child, stack)
-        }
-      }
-      stack.pop()
-      color.set(id, BLACK)
-    }
+  // ─── Step 4: generations (iterative fixpoint) ──────────────────────
+  const genOf = new Map<string, number>()
+  for (const m of members) genOf.set(m.id, 0)
+  const safetyCap = members.length * 2 + 10
+  let pass = 0, mutated = true
+  while (mutated && pass++ < safetyCap) {
+    mutated = false
     for (const m of members) {
-      if ((color.get(m.id) ?? WHITE) === WHITE) dfs(m.id, [])
-    }
-  }
-
-  // Generation via fixpoint. The cap scales with the population: each
-  // pass propagates one generation deeper, so a tall tree with N members
-  // can legitimately need ~N iterations to converge. Cycle members are
-  // skipped (their gen stays at 0) so the loop terminates even if the
-  // user has bad data.
-  const genMap = new Map<string, number>()
-  members.forEach(m => genMap.set(m.id, 0))
-  let changed = true
-  let safety = 0
-  const SAFETY_CAP = Math.max(200, members.length * 2)
-  while (changed && safety++ < SAFETY_CAP) {
-    changed = false
-    for (const m of members) {
-      if (inCycle.has(m.id)) continue
-      const parents = parentsOf.get(m.id) ?? []
-      if (parents.length === 0) continue
-      const newGen = Math.max(...parents.map(p => genMap.get(p) ?? 0)) + 1
-      if (newGen > (genMap.get(m.id) ?? 0)) {
-        genMap.set(m.id, newGen)
-        changed = true
+      const ps = parentsOf.get(m.id) ?? []
+      if (ps.length === 0) continue
+      const parentMax = Math.max(...ps.map((p) => genOf.get(p) ?? 0))
+      const want = parentMax + 1
+      if ((genOf.get(m.id) ?? 0) < want) {
+        genOf.set(m.id, want)
+        mutated = true
       }
     }
-    // Spouse generation alignment. Previously this only ran for members
-    // WITHOUT parents — meaning a wife added without parents stayed at
-    // gen 0 while her husband (gen 2 via his parents) ended up two rows
-    // above her. We now align BOTH members of every couple to the
-    // maximum of their generations so the pair renders side-by-side
-    // regardless of which side has ancestors in the tree.
-    for (const m of members) {
-      if (inCycle.has(m.id)) continue
-      const currGen = genMap.get(m.id) ?? 0
-      for (const sp of spousesOf.get(m.id) ?? []) {
-        if (inCycle.has(sp)) continue
-        const spGen = genMap.get(sp) ?? 0
-        if (spGen > currGen) {
-          genMap.set(m.id, spGen)
-          changed = true
-        }
+    for (const [a, b] of currentSpouseOf) {
+      const ga = genOf.get(a) ?? 0
+      const gb = genOf.get(b) ?? 0
+      if (ga !== gb) {
+        const max = Math.max(ga, gb)
+        if (ga < max) { genOf.set(a, max); mutated = true }
+        if (gb < max) { genOf.set(b, max); mutated = true }
       }
     }
   }
-  if (safety >= SAFETY_CAP) {
-    // eslint-disable-next-line no-console
-    console.warn('[treeLayout] generation fixpoint hit safety cap', { cap: SAFETY_CAP, members: members.length })
-  }
 
-  // Layout roots.
-  //
-  // For each root-root spouse pair we promote ONE partner to layoutRoots
-  // and demote the other to "placed as a spouse" so they render side by
-  // side via subtreeWidth's couple placement.  Which partner is primary
-  // matters: assign() recurses through `familyChildrenOf(primary)`, so
-  // if the partner WITHOUT children is picked as primary, the actual
-  // descendants of the couple never get placed and fall through to the
-  // (0,0) safety net at line ~533 — which is what produced the
-  // "clicking שיינדל opens יעקב" bug after the previous fix.  We pick
-  // the partner with more descendants as primary; ties keep iteration
-  // order, which is deterministic given the members array order.
-  const processedAsSpouse = new Set<string>()
+  // ─── Step 5: layout roots ──────────────────────────────────────────
   const layoutRoots: string[] = []
-  const childCount = (id: string) => (familyChildrenOf.get(id) ?? []).length
-  for (const id of rootIds) {
-    if (processedAsSpouse.has(id)) continue
-    const partners = (spousesOf.get(id) ?? []).filter(
-      (sp) => rootIds.has(sp) && !processedAsSpouse.has(sp),
-    )
-    let primary = id
-    for (const sp of partners) {
-      if (childCount(sp) > childCount(primary)) primary = sp
-    }
-    layoutRoots.push(primary)
-    for (const sp of partners) if (sp !== primary) processedAsSpouse.add(sp)
-    if (primary !== id) processedAsSpouse.add(id)
-    processedAsSpouse.add(primary)
+  for (const m of members) {
+    if (primaryOf.get(m.id) !== m.id) continue
+    const partner = partnerOfPrimary.get(m.id)
+    const aHasParent = (parentsOf.get(m.id) ?? []).length > 0
+    const bHasParent = partner ? (parentsOf.get(partner) ?? []).length > 0 : false
+    if (!aHasParent && !bHasParent) layoutRoots.push(m.id)
   }
+  layoutRoots.sort()
 
-  // A root whose spouse has parents in some other subtree is a
-  // married-in partner, not an independent founder.  The previous code
-  // only merged ROOT-ROOT spouse pairs (above), so a root R married to
-  // a non-root S got placed as its own subtree to the right of the
-  // main tree — producing 17 phantom "trees" on the live Adler render
-  // and the abnormal horizontal spread the user reported.
-  //
-  // We strip such roots from layoutRoots.  S's assign() picks R up via
-  // placeSpousesAround (the spousesToPlace filter on line ~434 already
-  // allows it once R is no longer in layoutRoots), and any joint
-  // children of R+S already appear in familyChildrenOf(S) via the
-  // cross-spouse merge at lines 264-285 — so R's whole descendant
-  // chain naturally absorbs into S's subtree under the joint couple.
-  for (let i = layoutRoots.length - 1; i >= 0; i--) {
-    const id = layoutRoots[i]
-    const spouses = spousesOf.get(id) ?? []
-    // The spouse must actually exist in the current filtered member set —
-    // otherwise we'd strip `id` from layoutRoots based on a spouse who's
-    // hidden by the current filter, making `id` itself vanish (no subtree
-    // would pick them up via placeSpousesAround). `spousesOf` is built
-    // from the full relationships table, so filtered-out partners can
-    // appear here even though `memberById` excludes them.
-    const hasInTreeSpouse = spouses.some(
-      (sp) => !rootIds.has(sp) && memberById.has(sp),
-    )
-    if (hasInTreeSpouse) layoutRoots.splice(i, 1)
-  }
-
-  // A "leaf" for layout purposes = no descendants AND no spouse. We
-  // exclude married childless members from the leaf cluster because the
-  // cluster's `dx` placements are sized for ONE node per slot — when a
-  // leaf has a spouse, the partner overflows out of the slot and the
-  // user perceives it as "spouses jumping to the side". By promoting
-  // married childless members to non-leaves, each gets its own
-  // horizontal subtree slot wide enough for the couple, keeping the
-  // pair glued together in every layout mode.
-  const isLeaf = (id: string) =>
-    !(familyChildrenOf.get(id)?.length) &&
-    !((spousesOf.get(id) ?? []).length)
-
-  // Split children into non-leaves (need horizontal subtree slots) and
-  // leaves (can be clustered). This lets the alternate modes actually trigger
-  // on MIXED groups — the common case in real family trees, where some
-  // children have their own descendants and some don't.
-  function splitChildren(ids: string[]): { nonLeaves: string[]; leaves: string[] } {
-    const nonLeaves: string[] = []
-    const leaves: string[] = []
-    for (const c of ids) (isLeaf(c) ? leaves : nonLeaves).push(c)
-    return { nonLeaves, leaves }
-  }
-
-  // When to apply an alternate cluster shape to the leaves subset.
-  // Requires: non-classic mode AND ≥2 leaves. Works whether or not non-leaves
-  // are present — they stay in classic horizontal slots on the left.
-  const shouldCluster = (leafCount: number) =>
-    mode !== 'classic' && leafCount >= 2
-
-  // ── Subtree width (mode-aware) ────────────────────────────────────────
+  // ─── Step 6: subtree widths ────────────────────────────────────────
   const swCache = new Map<string, number>()
-  const leafClusterCache = new Map<string, ClusterResult>() // parent id → cluster
-
-  // ── Multi-spouse lane width helper ─────────────────────────────────
-  // Returns the EXTRA horizontal width (beyond a bare spouse card)
-  // needed for spouse `sp` to fit their own exclusive descendants
-  // directly beneath them, when `id` has 2+ co-placed spouses. With
-  // just one spouse the existing "centered above shared children"
-  // logic already works — only the multi-spouse case needs the lane
-  // padding so wife #1's subtree doesn't overlap wife #2's.
-  //
-  // We use ownerChildrenOf (post-primaryParent assignment) rather than
-  // raw parent-child rows, so a child is counted under one spouse only
-  // — matching how the layout actually places them downstream.
-  function spouseExclusiveLaneExtra(ownerId: string, spouseId: string): number {
-    const ownedByOwner = new Set(ownerChildrenOf.get(ownerId) ?? [])
-    const spOwn = (ownerChildrenOf.get(spouseId) ?? []).filter(c => !ownedByOwner.has(c))
-    if (spOwn.length === 0) return 0
-    const spOwnW = spOwn.reduce((s, c) => s + subtreeWidth(c), 0)
-      + Math.max(0, spOwn.length - 1) * H_GAP
-    return Math.max(0, spOwnW - NODE_W)
-  }
-
-  function subtreeWidth(id: string): number {
-    if (swCache.has(id)) return swCache.get(id)!
-    const children = familyChildrenOf.get(id) ?? []
-    const spouses = spousesOf.get(id) ?? []
-    const placedSpouses = spouses.filter(sp => !layoutRoots.includes(sp))
-    // Base couple width: every spouse contributes one node-slot plus a
-    // gap. When 2+ spouses each have their own (non-shared) subtree,
-    // bump the reserved width by the per-spouse extra lane so the
-    // children of each marriage don't overlap.
-    let extraLane = 0
-    if (placedSpouses.length >= 2) {
-      for (const sp of placedSpouses) extraLane += spouseExclusiveLaneExtra(id, sp)
+  function subtreeWidth(primaryId: string): number {
+    const cached = swCache.get(primaryId)
+    if (cached != null) return cached
+    const hasPartner = partnerOfPrimary.has(primaryId)
+    const coupleW = hasPartner ? (2 * NODE_W + COUPLE_GAP) : NODE_W
+    const kids = kidsOfPrimary.get(primaryId) ?? []
+    let kidsW = 0
+    if (kids.length > 0) {
+      const kidWidths = kids.map((k) => subtreeWidth(primaryOf.get(k) ?? k))
+      kidsW = kidWidths.reduce((s, x) => s + x, 0) + Math.max(0, kids.length - 1) * H_GAP
     }
-    const coupleWidth =
-      NODE_W + placedSpouses.length * (NODE_W + COUPLE_GAP) + extraLane
-
-    let childrenWidth = 0
-    if (children.length > 0) {
-      const { nonLeaves, leaves } = splitChildren(children)
-      if (shouldCluster(leaves.length)) {
-        const cluster = clusterFor(mode, leaves.length)
-        leafClusterCache.set(id, cluster)
-        const nonLeavesW = nonLeaves.reduce((s, c) => s + subtreeWidth(c), 0)
-          + Math.max(0, nonLeaves.length - 1) * H_GAP
-        const sep = nonLeaves.length > 0 ? H_GAP : 0
-        childrenWidth = nonLeavesW + sep + cluster.width
-      } else {
-        childrenWidth =
-          children.reduce((s, c) => s + subtreeWidth(c), 0) +
-          H_GAP * (children.length - 1)
-      }
-    }
-    const w = Math.max(coupleWidth, childrenWidth)
-    swCache.set(id, w)
+    const w = Math.max(coupleW, kidsW)
+    swCache.set(primaryId, w)
     return w
   }
-  layoutRoots.forEach(id => subtreeWidth(id))
-  members.forEach(m => { if (!swCache.has(m.id)) subtreeWidth(m.id) })
+  for (const root of layoutRoots) subtreeWidth(root)
 
-  // ── Position assignment ───────────────────────────────────────────────
+  // ─── Step 7: placement (top-down DFS) ──────────────────────────────
   const xPos = new Map<string, number>()
-  const yOffset = new Map<string, number>()
   const placed = new Set<string>()
 
-  function placeSpousesAround(id: string, midX: number, spousesToPlace: string[]) {
-    if (spousesToPlace.length === 0) {
-      xPos.set(id, midX - NODE_W / 2)
+  function place(primaryId: string, leftX: number): void {
+    if (placed.has(primaryId)) return
+    placed.add(primaryId)
+    const partner = partnerOfPrimary.get(primaryId)
+    if (partner) placed.add(partner)
+
+    const totalW = subtreeWidth(primaryId)
+    const hasPartner = partner != null
+    const kids = kidsOfPrimary.get(primaryId) ?? []
+
+    // Place children first, then centre the couple over their visual
+    // middle. Guarantees parents always sit directly above their kids.
+    let coupleCentre: number
+    if (kids.length > 0) {
+      const kidPrimaries = kids.map((k) => primaryOf.get(k) ?? k)
+      const kidWidths = kidPrimaries.map((p) => subtreeWidth(p))
+      const kidsBlockW = kidWidths.reduce((s, x) => s + x, 0) + Math.max(0, kids.length - 1) * H_GAP
+      let cursorX = leftX + (totalW - kidsBlockW) / 2
+      for (let i = 0; i < kids.length; i++) {
+        place(kidPrimaries[i], cursorX)
+        cursorX += kidWidths[i] + H_GAP
+      }
+      const childCentres = kids
+        .map((k) => xPos.get(k))
+        .filter((x): x is number => x != null)
+        .map((x) => x + NODE_W / 2)
+      coupleCentre = childCentres.length > 0
+        ? (Math.min(...childCentres) + Math.max(...childCentres)) / 2
+        : leftX + totalW / 2
+    } else {
+      coupleCentre = leftX + totalW / 2
+    }
+
+    // Position the couple. Father (male) → LEFT, mother (female) →
+    // RIGHT. For same-gender pairs the primary takes the left slot.
+    // This keeps the spouse line direction and the mother-anchor
+    // visually consistent across every couple in the tree.
+    if (!hasPartner) {
+      xPos.set(primaryId, coupleCentre - NODE_W / 2)
       return
     }
-    // Per-spouse extra lane width (matches subtreeWidth's calc) — only
-    // active for 2+ spouses so the single-spouse case keeps the tight
-    // original layout. Wife #1 with kids A,B and wife #2 with kid C
-    // each get their own slot wide enough for their subtree below.
-    const extras: number[] =
-      spousesToPlace.length >= 2
-        ? spousesToPlace.map(sp => spouseExclusiveLaneExtra(id, sp))
-        : spousesToPlace.map(() => 0)
-    const totalCoupleW =
-      NODE_W + spousesToPlace.length * (NODE_W + COUPLE_GAP)
-      + extras.reduce((s, e) => s + e, 0)
-    const coupleLeft = midX - totalCoupleW / 2
-    xPos.set(id, coupleLeft)
-    let spX = coupleLeft + NODE_W + COUPLE_GAP
-    for (let i = 0; i < spousesToPlace.length; i++) {
-      const sp = spousesToPlace[i]
-      // Place the spouse at the LEFT edge of their lane (the lane is
-      // NODE_W + extras[i] wide). The spouse's own children will
-      // center under this position in a follow-up pass.
-      xPos.set(sp, spX); placed.add(sp)
-      spX += NODE_W + extras[i] + COUPLE_GAP
+    const primaryMember = memberById.get(primaryId)!
+    const partnerMember = memberById.get(partner!)!
+    const primaryIsLeft =
+      primaryMember.gender === 'male' ? true :
+      partnerMember.gender === 'male' ? false :
+      true
+    const leftSlot = coupleCentre - COUPLE_GAP / 2 - NODE_W
+    const rightSlot = coupleCentre + COUPLE_GAP / 2
+    if (primaryIsLeft) {
+      xPos.set(primaryId, leftSlot)
+      xPos.set(partner!, rightSlot)
+    } else {
+      xPos.set(partner!, leftSlot)
+      xPos.set(primaryId, rightSlot)
     }
   }
 
-  function assign(id: string, leftX: number) {
-    if (placed.has(id)) return
-    placed.add(id)
-    const children = familyChildrenOf.get(id) ?? []
-    const spouses = spousesOf.get(id) ?? []
-    const spousesToPlace = spouses.filter(sp => !layoutRoots.includes(sp) && !placed.has(sp))
-
-    // Width needed for this node + its co-placed spouses (if any).
-    const coupleWidth = NODE_W + spousesToPlace.length * (NODE_W + COUPLE_GAP)
-
-    if (children.length === 0) {
-      // Leaf w/ optional spouse. Couple width IS the reserved width — place
-      // straight from leftX.
-      xPos.set(id, leftX)
-      let nextX = leftX + NODE_W + COUPLE_GAP
-      for (const sp of spousesToPlace) {
-        xPos.set(sp, nextX); placed.add(sp); nextX += NODE_W + COUPLE_GAP
-      }
-      return
-    }
-
-    const cluster = leafClusterCache.get(id)
-    if (cluster) {
-      const { nonLeaves, leaves } = splitChildren(children)
-      // ── Compute children block width so we know how much to indent when
-      //     the parent's couple is wider than the children (otherwise the
-      //     couple, being centered above children, spills outside the
-      //     parent-reserved slot and collides with the neighbouring subtree).
-      const nonLeavesW = nonLeaves.reduce((s, c) => s + subtreeWidth(c), 0)
-        + Math.max(0, nonLeaves.length - 1) * H_GAP
-      const sep = nonLeaves.length > 0 ? H_GAP : 0
-      const childrenBlockW = nonLeavesW + sep + cluster.width
-      const indent = Math.max(0, (coupleWidth - childrenBlockW) / 2)
-
-      // 1. Non-leaves on the left (indented to keep couple inside slot).
-      let cursorX = leftX + indent
-      for (const c of nonLeaves) {
-        assign(c, cursorX)
-        cursorX += subtreeWidth(c) + H_GAP
-      }
-      // 2. Leaves clustered to the right of the non-leaves.
-      // We previously placed leaves directly via xPos.set, bypassing
-      // `assign`. That meant their spouses (set up in `placeSpousesAround`
-      // inside `assign`) NEVER got positioned, and Framer animated them
-      // into the default x=0 — i.e. all spouses ended up snapped to the
-      // visual-right edge of the canvas. Fix: place each leaf and its
-      // spouses inline so the couple stays adjacent in cluster modes.
-      const leavesBase = cursorX
-      for (let i = 0; i < leaves.length; i++) {
-        const p = cluster.placements[i]
-        const leafId = leaves[i]
-        xPos.set(leafId, leavesBase + p.dx)
-        if (p.dy) yOffset.set(leafId, p.dy)
-        placed.add(leafId)
-        // Tuck the leaf's spouses immediately to its visual end. The
-        // cluster's `dx` already includes spacing for one node; we
-        // append spouses at increasing x so they remain glued to their
-        // partner regardless of the cluster's overall shape.
-        const leafSpouses = (spousesOf.get(leafId) ?? []).filter(
-          (sp) => !layoutRoots.includes(sp) && !placed.has(sp),
-        )
-        let spX = leavesBase + p.dx + NODE_W + COUPLE_GAP
-        for (const sp of leafSpouses) {
-          xPos.set(sp, spX)
-          if (p.dy) yOffset.set(sp, p.dy)
-          placed.add(sp)
-          spX += NODE_W + COUPLE_GAP
-        }
-      }
-      // 3. Parent centered above EVERYTHING (non-leaves + leaf cluster).
-      const allLeftEdges: number[] = []
-      const allRightEdges: number[] = []
-      for (const c of nonLeaves) {
-        const cx = xPos.get(c)!
-        allLeftEdges.push(cx)
-        allRightEdges.push(cx + NODE_W)
-      }
-      for (let i = 0; i < leaves.length; i++) {
-        const cx = xPos.get(leaves[i])!
-        allLeftEdges.push(cx)
-        allRightEdges.push(cx + NODE_W)
-      }
-      const firstCX = Math.min(...allLeftEdges)
-      const lastCX = Math.max(...allRightEdges)
-      const midX = (firstCX + lastCX) / 2
-      placeSpousesAround(id, midX, spousesToPlace)
-      return
-    }
-
-    // Classic horizontal layout (fallback).
-    const childrenBlockW =
-      children.reduce((s, c) => s + subtreeWidth(c), 0) +
-      Math.max(0, children.length - 1) * H_GAP
-    const indent = Math.max(0, (coupleWidth - childrenBlockW) / 2)
-    let childLeft = leftX + indent
-    for (const c of children) {
-      assign(c, childLeft)
-      childLeft += subtreeWidth(c) + H_GAP
-    }
-    // If a child was already placed by another subtree (shared-parent edge
-    // case), `assign` returns early without writing xPos. Collect the actual
-    // positioned children so we don't end up centering the parent on NaN.
-    const positionedXs: number[] = []
-    for (const c of children) {
-      const cx = xPos.get(c)
-      if (cx !== undefined) positionedXs.push(cx)
-    }
-    if (positionedXs.length === 0) {
-      // No child was actually placed in this slot (all were pre-placed
-      // elsewhere). Fall back to centering on the reserved couple slot.
-      placeSpousesAround(id, leftX + coupleWidth / 2, spousesToPlace)
-      return
-    }
-    const firstCX = Math.min(...positionedXs)
-    const lastCX = Math.max(...positionedXs)
-    const midX = (firstCX + lastCX + NODE_W) / 2
-    placeSpousesAround(id, midX, spousesToPlace)
+  let cursorX = 0
+  for (const root of layoutRoots) {
+    place(root, cursorX)
+    cursorX += subtreeWidth(root) + H_GAP * 2
   }
-
-  let startX = 0
-  for (const rootId of layoutRoots) {
-    assign(rootId, startX)
-    startX += subtreeWidth(rootId) + H_GAP * 2
-  }
-  members.forEach(m => {
-    if (!placed.has(m.id)) { xPos.set(m.id, startX); startX += NODE_W + H_GAP }
-  })
-
-  // ── Generation Y (cluster-aware) ──────────────────────────────────────
-  // Each generation must start LOW enough that the previous generation's
-  // cluster overflow (e.g. arc sag, zigzag 2nd row) and any secondary-
-  // partner indicators (ex/deceased circles below the card) cannot bleed
-  // into it. genOverflow[G] = max extra dy needed below generation G.
-  const genOverflow = new Map<number, number>()
-  for (const [id, dy] of yOffset) {
-    const g = genMap.get(id) ?? 0
-    if (dy > (genOverflow.get(g) ?? 0)) genOverflow.set(g, dy)
-  }
-  // Secondary partner block extends past the bottom of the card by
-  // (TOP_OFFSET - NODE_H) + SIZE + a safety gap.
-  const secondaryExtra =
-    SECONDARY_PARTNER_TOP_OFFSET - NODE_H + SECONDARY_PARTNER_SIZE + MIN_SIDE_GAP
-  for (const [id, partners] of secondaryPartnersOf) {
-    if (!partners.length) continue
-    const g = genMap.get(id) ?? 0
-    if (secondaryExtra > (genOverflow.get(g) ?? 0)) {
-      genOverflow.set(g, secondaryExtra)
-    }
-  }
-
-  let maxGen = 0
-  for (const g of genMap.values()) if (g > maxGen) maxGen = g
-
-  const genY = new Map<number, number>()
-  let yAccum = 0
-  for (let g = 0; g <= maxGen; g++) {
-    genY.set(g, yAccum)
-    // Next generation must clear this gen's card height + any cluster dy.
-    yAccum += NODE_H + (genOverflow.get(g) ?? 0) + V_GAP
-  }
-
-  // ─── Couple-adjacency pass ────────────────────────────────────────
-  // The user explicitly asked: "every wife should be adjacent to her
-  // husband as the default." The placement engine handles this for
-  // most cases, but in a top generation with multiple INDEPENDENT
-  // couples — each husband a separate root, his wife also a root,
-  // no parent-child links between the two couples — the user
-  // observed the wives drifting away from their husbands.
-  //
-  // This pass runs per generation: build couple groups (current-spouse
-  // pairs at the same generation), then re-tuck each spouse so they
-  // sit immediately next to their partner. We keep whichever partner
-  // was already on the LEFT in place, and slide the other partner to
-  // the slot directly to their right (NODE_W + COUPLE_GAP). This is
-  // intentionally aggressive — even when a partner has children
-  // recorded, we still tuck them adjacent. The descender to the child
-  // may zig-zag a bit after the move, but couple adjacency was the
-  // user's explicit priority over straight orthogonal lines.
-  //
-  // The subsequent near-collision sweep cleans up any side-effect
-  // overlaps the tuck introduces (e.g., when a spouse's new position
-  // crashes into a different couple's space).
-  const partnerOf = new Map<string, string>()
-  for (const r of relationships) {
-    if (r.type !== 'spouse') continue
-    if ((r.status ?? 'current') !== 'current') continue
-    if (!partnerOf.has(r.member_a_id)) partnerOf.set(r.member_a_id, r.member_b_id)
-    if (!partnerOf.has(r.member_b_id)) partnerOf.set(r.member_b_id, r.member_a_id)
-  }
-
-  const cardsByGen = new Map<number, string[]>()
   for (const m of members) {
-    if (!xPos.has(m.id)) continue
-    const g = genMap.get(m.id) ?? 0
-    if (!cardsByGen.has(g)) cardsByGen.set(g, [])
-    cardsByGen.get(g)!.push(m.id)
-  }
-  for (const ids of cardsByGen.values()) {
-    ids.sort((a, b) => (xPos.get(a) ?? 0) - (xPos.get(b) ?? 0))
-    const visited = new Set<string>()
-    for (const id of ids) {
-      if (visited.has(id)) continue
-      visited.add(id)
-      const partner = partnerOf.get(id)
-      if (!partner) continue
-      if (visited.has(partner)) continue
-      if (!xPos.has(partner)) continue
-      // Same generation? (cards are bucketed by gen, so partner being
-      // in `ids` is the canonical same-gen check.)
-      if (!ids.includes(partner)) continue
-      visited.add(partner)
-      // Tuck the partner immediately right of the left-most member of
-      // the couple. Whichever was already on the left keeps their x;
-      // the other moves to leftX + NODE_W + COUPLE_GAP.
-      const xA = xPos.get(id) ?? 0
-      const xB = xPos.get(partner) ?? 0
-      if (xA <= xB) xPos.set(partner, xA + NODE_W + COUPLE_GAP)
-      else          xPos.set(id,      xB + NODE_W + COUPLE_GAP)
-    }
+    if (xPos.has(m.id)) continue
+    xPos.set(m.id, cursorX)
+    cursorX += NODE_W + H_GAP
   }
 
-  // Defensive collision guard: per-generation sweep that detects any
-  // pair whose horizontal bounding boxes overlap (or come within
-  // MIN_SIDE_GAP of each other) and pushes the right-side card just
-  // far enough to clear. The previous guard only caught exact same
-  // rounded-x collisions; a member placed at e.g. x=100 and another at
-  // x=102 share generation but DIFFERENT rounded keys, yet still
-  // visually overlap (NODE_W=144). The user reported a top-row
-  // "שיינדל" sitting directly on top of another profile — exactly that
-  // near-collision scenario.
-  //
-  // Strategy: group cards by generation, sort by current x, sweep
-  // left → right, and slide any card that violates the minimum
-  // spacing to its predecessor's right-edge + MIN_SIDE_GAP. This is
-  // O(n log n) per generation and safe — it only ever moves cards to
-  // the right, never compressing legitimate spacing.
-  for (const ids of cardsByGen.values()) {
+  // ─── Step 8: anti-collision sweep per generation ──────────────────
+  const byGen = new Map<number, string[]>()
+  for (const m of members) {
+    const g = genOf.get(m.id) ?? 0
+    const list = byGen.get(g) ?? []
+    list.push(m.id)
+    byGen.set(g, list)
+  }
+  for (const [, ids] of byGen) {
     ids.sort((a, b) => (xPos.get(a) ?? 0) - (xPos.get(b) ?? 0))
     for (let i = 1; i < ids.length; i++) {
-      const prev = ids[i - 1]
-      const curr = ids[i]
-      const minStart = (xPos.get(prev) ?? 0) + NODE_W + MIN_SIDE_GAP
-      const currX = xPos.get(curr) ?? 0
-      if (currX < minStart) {
-        xPos.set(curr, minStart)
-        if (typeof console !== 'undefined') {
-          // eslint-disable-next-line no-console
-          console.warn(
-            `[treeLayout] near-collision @ gen ${genMap.get(curr) ?? 0}: ` +
-            `${memberById.get(curr)?.first_name ?? curr} was at ${currX.toFixed(1)}, ` +
-            `predecessor ${memberById.get(prev)?.first_name ?? prev} at ${(xPos.get(prev) ?? 0).toFixed(1)}; ` +
-            `nudged to ${minStart.toFixed(1)}`,
-          )
-        }
+      const prevRight = (xPos.get(ids[i - 1]) ?? 0) + NODE_W
+      const curLeft = xPos.get(ids[i]) ?? 0
+      if (curLeft < prevRight + MIN_SIDE_GAP) {
+        xPos.set(ids[i], prevRight + MIN_SIDE_GAP)
       }
     }
   }
 
-  const finalNodes: LayoutNode[] = members.map(m => {
-    const g = genMap.get(m.id) ?? 0
+  // ─── Step 9: Y per generation ──────────────────────────────────────
+  const maxGen = Math.max(0, ...Array.from(genOf.values()))
+  const yOfGen = new Map<number, number>()
+  for (let g = 0; g <= maxGen; g++) yOfGen.set(g, g * (NODE_H + V_GAP))
+
+  // ─── Step 10: emit LayoutNode list ────────────────────────────────
+  const out: LayoutNode[] = []
+  for (const m of members) {
+    const x = xPos.get(m.id)
+    if (x == null) continue
+    const g = genOf.get(m.id) ?? 0
+    const y = yOfGen.get(g) ?? 0
     const partners = secondaryPartnersOf.get(m.id)
-    return {
+    out.push({
       member: m,
-      x: xPos.get(m.id) ?? 0,
-      y: (genY.get(g) ?? 0) + (yOffset.get(m.id) ?? 0),
+      x,
+      y,
       generation: g,
-      secondaryPartners: partners && partners.length ? partners : undefined,
-    }
-  })
-
-  // ── Collision safety net ──────────────────────────────────────────────
-  // After layout, verify every pair of cards has ≥ MIN_SIDE_GAP either
-  // horizontally or vertically. This catches any regression that would
-  // cause visible touching/clipping. Only logs in dev-like environments
-  // (when import.meta.env.DEV is true, or when running via tsx/node).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const im = (typeof import.meta !== 'undefined' ? (import.meta as any) : {}) as { env?: { DEV?: boolean } }
-  const isDev = im.env?.DEV === true || typeof window === 'undefined'
-  if (isDev) assertNoCollisions(finalNodes)
-
-  return finalNodes
-}
-
-/**
- * Throws if any pair of cards has their bounding boxes overlapping or
- * within `MIN_SIDE_GAP` of each other. Used as a regression guard.
- */
-export function assertNoCollisions(nodes: LayoutNode[]): void {
-  const collisions: string[] = []
-  for (let i = 0; i < nodes.length; i++) {
-    const a = nodes[i]
-    const ax1 = a.x, ax2 = a.x + NODE_W
-    const ay1 = a.y, ay2 = a.y + NODE_H
-    for (let j = i + 1; j < nodes.length; j++) {
-      const b = nodes[j]
-      const bx1 = b.x, bx2 = b.x + NODE_W
-      const by1 = b.y, by2 = b.y + NODE_H
-      // Required gap: either horizontal or vertical separation ≥ MIN_SIDE_GAP.
-      const horizClear = ax2 + MIN_SIDE_GAP <= bx1 || bx2 + MIN_SIDE_GAP <= ax1
-      const vertClear = ay2 + MIN_SIDE_GAP <= by1 || by2 + MIN_SIDE_GAP <= ay1
-      if (!horizClear && !vertClear) {
-        collisions.push(
-          `${a.member.first_name} ${a.member.last_name} ↔ ${b.member.first_name} ${b.member.last_name}`,
-        )
-        if (collisions.length >= 6) break
-      }
-    }
-    if (collisions.length >= 6) break
+      secondaryPartners: partners && partners.length > 0 ? partners : undefined,
+    })
   }
-  if (collisions.length) {
-    // eslint-disable-next-line no-console
-    console.warn('[tree-layout] card collisions detected:\n  ' + collisions.join('\n  '))
-  }
+  return out
 }

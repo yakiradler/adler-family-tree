@@ -36,113 +36,131 @@ const LAYOUT_THEMES: Record<
   staggered: { pcStops: ['#8B5CF6', '#D946EF', '#22D3EE'], spStops: ['#EC4899', '#8B5CF6'], bgTint: 'rgba(139,92,246,0.05)' },
 }
 
-// ─── Connectors ───────────────────────────────────────────────────────────────
+// ─── Connectors ──────────────────────────────────────────────────────
+//
+// Clean rewrite paired with the new layout engine. Two kinds of lines:
+//
+//   1. Spouse line — horizontal segment between the two cards of a
+//      `current` couple, drawn at avatar-midline Y. The cards are
+//      always at the same generation (the engine enforces this), so
+//      the line is purely horizontal and never crosses a row.
+//
+//   2. Parent-child rail — a single SVG path per couple group:
+//        • short vertical from MOTHER's bottom-centre down to the rail
+//        • horizontal rail spanning all of her children's centres
+//          (extended toward the mother if needed so the elbow is
+//          continuous — no "floating" segments)
+//        • short vertical from the rail down to each child's top
+//      The mother is the anchor (with `connector_parent_id` override
+//      respected). Every segment terminates at a card edge — there
+//      are no orphan endpoints in mid-canvas.
+//
+// Both helpers consume LayoutNode positions verbatim and don't try
+// to second-guess the engine.
 
 function buildConnectors(nodes: LayoutNode[], relationships: Relationship[]) {
-  const posMap = new Map(nodes.map(n => [n.member.id, n]))
+  const byId = new Map(nodes.map((n) => [n.member.id, n]))
 
-  const parentGroups = new Map<string, string[]>()
-  for (const r of relationships) {
-    if (r.type !== 'parent-child') continue
-    if (!parentGroups.has(r.member_a_id)) parentGroups.set(r.member_a_id, [])
-    const ch = parentGroups.get(r.member_a_id)!
-    if (!ch.includes(r.member_b_id)) ch.push(r.member_b_id)
-  }
-
-  const childToParents = new Map<string, string[]>()
-  for (const [p, kids] of parentGroups) {
-    for (const k of kids) {
-      if (!childToParents.has(k)) childToParents.set(k, [])
-      childToParents.get(k)!.push(p)
-    }
-  }
-
-  // Map of current-status spouses for the "father's spouse → anchor"
-  // rule below. Only `current` couples count — exes don't get to be
-  // anchors for someone else's children.
-  const currentSpousesOf = new Map<string, string[]>()
+  // ── Spouse lines ───────────────────────────────────────────────────
+  interface SpouseLine { x1: number; x2: number; y: number }
+  const spouseLines: SpouseLine[] = []
+  const seenSpouse = new Set<string>()
   for (const r of relationships) {
     if (r.type !== 'spouse') continue
     if ((r.status ?? 'current') !== 'current') continue
-    const add = (a: string, b: string) => {
-      if (!currentSpousesOf.has(a)) currentSpousesOf.set(a, [])
-      if (!currentSpousesOf.get(a)!.includes(b)) currentSpousesOf.get(a)!.push(b)
-    }
-    add(r.member_a_id, r.member_b_id)
-    add(r.member_b_id, r.member_a_id)
-  }
-
-  interface LineD { d: string }
-  const lines: LineD[] = []
-
-  // Orthogonal elbow drawn from the *anchor parent* (NOT the midpoint).
-  // Anchor priority:
-  //   1. explicit `child.member.connector_parent_id`  — manual override
-  //   2. the child's mother (parent with gender 'female')
-  //   3. the recorded father's CURRENT spouse if she's in the layout —
-  //      handles the "I added the father first, then later attached a
-  //      wife beside him without re-linking her as parent of the kids"
-  //      case the user reported on the top generation
-  //   4. the first parent we have a layout node for
-  const CARD_TOP_OFFSET = AVATAR - 10
-  for (const [childId, pars] of childToParents) {
-    const child = posMap.get(childId)
-    if (!child) continue
-    const parents = pars.map(p => posMap.get(p)).filter(Boolean) as LayoutNode[]
-    if (parents.length === 0) continue
-
-    const explicit = child.member.connector_parent_id
-    const explicitAnchor = explicit && parents.find(p => p.member.id === explicit)
-    const motherAnchor = parents.find(p => p.member.gender === 'female')
-    // Look up the father's current spouse only when no mother is among
-    // the recorded parents — otherwise mother (rule 2) still wins.
-    let spouseAnchor: LayoutNode | undefined
-    if (!explicitAnchor && !motherAnchor) {
-      const father = parents.find(p => p.member.gender === 'male')
-      if (father) {
-        const spouseIds = currentSpousesOf.get(father.member.id) ?? []
-        for (const sid of spouseIds) {
-          const node = posMap.get(sid)
-          // Only adopt a spouse anchor when she's a layout-row peer of
-          // the father (same generation, rendered as his side-by-side
-          // partner). A spouse pulled in from elsewhere would draw the
-          // line diagonally across generations.
-          if (node && node.generation === father.generation) {
-            spouseAnchor = node
-            break
-          }
-        }
-      }
-    }
-    const anchor = explicitAnchor || motherAnchor || spouseAnchor || parents[0]
-
-    const childCX = Math.round(child.x + NODE_W / 2)
-    const childTopY = Math.round(child.y + CARD_TOP_OFFSET)
-
-    const parentCX = Math.round(anchor.x + NODE_W / 2)
-    const parentBottomY = Math.round(anchor.y + NODE_H + 2)
-
-    const gap = childTopY - parentBottomY
-    const midY = Math.round(parentBottomY + gap * 0.6)
-    const d = `M ${parentCX} ${parentBottomY} L ${parentCX} ${midY} L ${childCX} ${midY} L ${childCX} ${childTopY}`
-    lines.push({ d })
-  }
-
-  interface SpouseLine { x1: number; x2: number; y: number }
-  const spouseLines: SpouseLine[] = []
-  const seen = new Set<string>()
-  for (const r of relationships) {
-    if (r.type !== 'spouse') continue
     const key = [r.member_a_id, r.member_b_id].sort().join(':')
-    if (seen.has(key)) continue
-    seen.add(key)
-    const a = posMap.get(r.member_a_id)
-    const b = posMap.get(r.member_b_id)
+    if (seenSpouse.has(key)) continue
+    seenSpouse.add(key)
+    const a = byId.get(r.member_a_id)
+    const b = byId.get(r.member_b_id)
     if (!a || !b || a.generation !== b.generation) continue
-    const leftX = Math.min(a.x, b.x) + NODE_W
-    const rightX = Math.max(a.x, b.x)
-    if (rightX > leftX + 4) {
-      spouseLines.push({ x1: leftX - 6, x2: rightX + 6, y: a.y + AVATAR / 2 + 4 })
+    const leftX = Math.min(a.x, b.x) + NODE_W   // right edge of the left card
+    const rightX = Math.max(a.x, b.x)            // left edge of the right card
+    if (rightX <= leftX) continue
+    spouseLines.push({
+      x1: leftX,
+      x2: rightX,
+      y: a.y + AVATAR / 2 + 4,
+    })
+  }
+
+  // ── Parent-child rails ─────────────────────────────────────────────
+  // Anchor priority for each child:
+  //   1. explicit `member.connector_parent_id` override
+  //   2. mother (parent with gender 'female')
+  //   3. father (parent with gender 'male')
+  //   4. first parent we have a node for
+  const childToParents = new Map<string, string[]>()
+  for (const r of relationships) {
+    if (r.type !== 'parent-child') continue
+    if (!byId.has(r.member_a_id) || !byId.has(r.member_b_id)) continue
+    const list = childToParents.get(r.member_b_id) ?? []
+    if (!list.includes(r.member_a_id)) list.push(r.member_a_id)
+    childToParents.set(r.member_b_id, list)
+  }
+
+  const anchorOf = new Map<string, string>()  // childId → anchorId
+  for (const [childId, parents] of childToParents) {
+    const child = byId.get(childId)!
+    const explicit = child.member.connector_parent_id
+    if (explicit && parents.includes(explicit) && byId.has(explicit)) {
+      anchorOf.set(childId, explicit)
+      continue
+    }
+    const mother = parents.find((p) => byId.get(p)?.member.gender === 'female')
+    if (mother) { anchorOf.set(childId, mother); continue }
+    const father = parents.find((p) => byId.get(p)?.member.gender === 'male')
+    if (father) { anchorOf.set(childId, father); continue }
+    anchorOf.set(childId, parents[0])
+  }
+
+  // Group children by their anchor so one rail covers a whole sibling
+  // set rather than one stair-stepped path per child.
+  const childrenByAnchor = new Map<string, string[]>()
+  for (const [childId, anchorId] of anchorOf) {
+    const list = childrenByAnchor.get(anchorId) ?? []
+    list.push(childId)
+    childrenByAnchor.set(anchorId, list)
+  }
+
+  interface PathLine { d: string }
+  const lines: PathLine[] = []
+
+  for (const [anchorId, childIds] of childrenByAnchor) {
+    const anchor = byId.get(anchorId)
+    if (!anchor) continue
+    const children = childIds
+      .map((id) => byId.get(id))
+      .filter((n): n is LayoutNode => n != null)
+    if (children.length === 0) continue
+
+    // Y coordinates: rail sits half-way between mother's bottom and the
+    // children's top. Children are guaranteed by the engine to share
+    // the same Y, but we take the minimum to be safe.
+    const anchorBottomY = Math.round(anchor.y + NODE_H)
+    const childTopY = Math.round(Math.min(...children.map((c) => c.y)))
+    if (childTopY <= anchorBottomY + 2) continue
+    const railY = Math.round((anchorBottomY + childTopY) / 2)
+
+    const anchorCx = Math.round(anchor.x + NODE_W / 2)
+    const childCxs = children.map((c) => Math.round(c.x + NODE_W / 2))
+
+    // 1. Short vertical from anchor's bottom to the rail.
+    lines.push({ d: `M ${anchorCx} ${anchorBottomY} L ${anchorCx} ${railY}` })
+
+    // 2. Horizontal rail. It must reach from the leftmost endpoint
+    //    (either the leftmost child or the anchor if she's further left)
+    //    to the rightmost endpoint, so the elbow under the anchor is
+    //    continuous with the rail above the children.
+    const railLeft = Math.min(anchorCx, ...childCxs)
+    const railRight = Math.max(anchorCx, ...childCxs)
+    if (railRight > railLeft) {
+      lines.push({ d: `M ${railLeft} ${railY} L ${railRight} ${railY}` })
+    }
+
+    // 3. Short vertical from the rail down to each child's top.
+    for (const cx of childCxs) {
+      lines.push({ d: `M ${cx} ${railY} L ${cx} ${childTopY}` })
     }
   }
 
@@ -1174,20 +1192,13 @@ function QuickAddButtons({
   onAdd: (direction: RelativeDirection) => void
 }) {
   const { t } = useLang()
-  // Plain `title` attribute instead of <Tooltip> wrappers: the
-  // Tooltip span used to take over the position:relative containing
-  // block (it wraps the child in <span class="relative inline-flex">),
-  // which made every "+" button anchor against the tiny span instead
-  // of the card. Result: all four buttons collapsed into a single row
-  // below the card. Native `title` gives the same hover hint without
-  // hijacking the layout.
-  //
-  // We also wrap the four buttons in a position:absolute overlay
-  // sized to match the MemberNode card (inset-0 stretched, but we
-  // exclude pointer-events so the underlying card stays tappable).
-  // The buttons themselves re-enable pointer-events so clicks land.
+  // Compact, semi-transparent buttons that read as "part of the card"
+  // rather than chunky bright stickers. Soft white background with a
+  // blue glyph (matches the card's Apple-blue accent), subtle ring,
+  // small shadow. Full opacity only when the user hovers / taps,
+  // otherwise 78% so the cards stay the visual focus.
   const cls =
-    'absolute w-7 h-7 rounded-full bg-[#007AFF] text-white shadow-lg flex items-center justify-center text-base font-bold active:scale-90 transition z-20 border-2 border-white pointer-events-auto'
+    'absolute w-6 h-6 rounded-full bg-white/95 text-[#007AFF] shadow-sm ring-1 ring-[#007AFF]/25 flex items-center justify-center text-[15px] leading-none font-bold opacity-80 hover:opacity-100 hover:scale-110 active:scale-95 transition-all duration-150 z-20 pointer-events-auto'
   return (
     <div
       className="absolute inset-0 pointer-events-none"
@@ -1199,7 +1210,7 @@ function QuickAddButtons({
         aria-label={t.addParent}
         onClick={(e) => { e.stopPropagation(); onAdd('parent') }}
         className={cls}
-        style={{ top: -14, left: '50%', transform: 'translateX(-50%)' }}
+        style={{ top: -12, left: '50%', transform: 'translateX(-50%)' }}
       >+</button>
       <button
         type="button"
@@ -1207,7 +1218,7 @@ function QuickAddButtons({
         aria-label={t.addChild}
         onClick={(e) => { e.stopPropagation(); onAdd('child') }}
         className={cls}
-        style={{ bottom: -14, left: '50%', transform: 'translateX(-50%)' }}
+        style={{ bottom: -12, left: '50%', transform: 'translateX(-50%)' }}
       >+</button>
       <button
         type="button"
@@ -1215,7 +1226,7 @@ function QuickAddButtons({
         aria-label={t.addSibling}
         onClick={(e) => { e.stopPropagation(); onAdd('sibling') }}
         className={cls}
-        style={{ insetInlineStart: -14, top: '40%' }}
+        style={{ insetInlineStart: -12, top: '50%', transform: 'translateY(-50%)' }}
       >+</button>
       <button
         type="button"
@@ -1223,7 +1234,7 @@ function QuickAddButtons({
         aria-label={t.addSpouse}
         onClick={(e) => { e.stopPropagation(); onAdd('spouse') }}
         className={cls}
-        style={{ insetInlineEnd: -14, top: '40%' }}
+        style={{ insetInlineEnd: -12, top: '50%', transform: 'translateY(-50%)' }}
       >+</button>
     </div>
   )
