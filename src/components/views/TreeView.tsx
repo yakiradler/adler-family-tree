@@ -392,7 +392,14 @@ export default function TreeView({
   const lastShapeRef = useRef<string>('')
   useEffect(() => {
     if (!wrapRef.current || nodes.length === 0) return
-    const shape = `${nodes.length}|${Math.round(canvasW)}|${Math.round(canvasH)}|${layoutMode}`
+    // Tree id is part of the shape signature — switching between two
+    // trees that happen to have the same member count (or any other
+    // dimension that previously fed the signature) used to leave the
+    // viewport snapped to the previous tree's centre, so half of the
+    // new tree rendered off-screen until the user manually panned.
+    // Including activeTreeId guarantees auto-fit fires on every tree
+    // switch.
+    const shape = `${activeTreeId ?? 'null'}|${nodes.length}|${Math.round(canvasW)}|${Math.round(canvasH)}|${layoutMode}`
     const prev = lastShapeRef.current
     lastShapeRef.current = shape
 
@@ -425,7 +432,7 @@ export default function TreeView({
     // button on phones with a status-bar safe-area inset.
     setTreeViewport({ scale: s, tx: (w - canvasW * s) / 2, ty: 100, initialised: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes.length, canvasW, canvasH, layoutMode])
+  }, [nodes.length, canvasW, canvasH, layoutMode, activeTreeId])
 
   // Track the wrapper's pixel size in state so the minimap can read
   // it without poking at the ref during render (a react-hooks/refs
@@ -1167,46 +1174,57 @@ function QuickAddButtons({
   onAdd: (direction: RelativeDirection) => void
 }) {
   const { t } = useLang()
+  // Plain `title` attribute instead of <Tooltip> wrappers: the
+  // Tooltip span used to take over the position:relative containing
+  // block (it wraps the child in <span class="relative inline-flex">),
+  // which made every "+" button anchor against the tiny span instead
+  // of the card. Result: all four buttons collapsed into a single row
+  // below the card. Native `title` gives the same hover hint without
+  // hijacking the layout.
+  //
+  // We also wrap the four buttons in a position:absolute overlay
+  // sized to match the MemberNode card (inset-0 stretched, but we
+  // exclude pointer-events so the underlying card stays tappable).
+  // The buttons themselves re-enable pointer-events so clicks land.
   const cls =
-    'absolute w-7 h-7 rounded-full bg-[#007AFF] text-white shadow-lg flex items-center justify-center text-base font-bold active:scale-90 transition z-20 border-2 border-white'
+    'absolute w-7 h-7 rounded-full bg-[#007AFF] text-white shadow-lg flex items-center justify-center text-base font-bold active:scale-90 transition z-20 border-2 border-white pointer-events-auto'
   return (
-    <>
-      <Tooltip content={t.addParent} placement="top">
-        <button
-          type="button"
-          aria-label={t.addParent}
-          onClick={(e) => { e.stopPropagation(); onAdd('parent') }}
-          className={cls}
-          style={{ top: -14, left: '50%', transform: 'translateX(-50%)' }}
-        >+</button>
-      </Tooltip>
-      <Tooltip content={t.addChild} placement="bottom">
-        <button
-          type="button"
-          aria-label={t.addChild}
-          onClick={(e) => { e.stopPropagation(); onAdd('child') }}
-          className={cls}
-          style={{ bottom: -14, left: '50%', transform: 'translateX(-50%)' }}
-        >+</button>
-      </Tooltip>
-      <Tooltip content={t.addSibling} placement="left">
-        <button
-          type="button"
-          aria-label={t.addSibling}
-          onClick={(e) => { e.stopPropagation(); onAdd('sibling') }}
-          className={cls}
-          style={{ insetInlineStart: -14, top: '40%' }}
-        >+</button>
-      </Tooltip>
-      <Tooltip content={t.addSpouse} placement="right">
-        <button
-          type="button"
-          aria-label={t.addSpouse}
-          onClick={(e) => { e.stopPropagation(); onAdd('spouse') }}
-          className={cls}
-          style={{ insetInlineEnd: -14, top: '40%' }}
-        >+</button>
-      </Tooltip>
-    </>
+    <div
+      className="absolute inset-0 pointer-events-none"
+      aria-hidden={false}
+    >
+      <button
+        type="button"
+        title={t.addParent}
+        aria-label={t.addParent}
+        onClick={(e) => { e.stopPropagation(); onAdd('parent') }}
+        className={cls}
+        style={{ top: -14, left: '50%', transform: 'translateX(-50%)' }}
+      >+</button>
+      <button
+        type="button"
+        title={t.addChild}
+        aria-label={t.addChild}
+        onClick={(e) => { e.stopPropagation(); onAdd('child') }}
+        className={cls}
+        style={{ bottom: -14, left: '50%', transform: 'translateX(-50%)' }}
+      >+</button>
+      <button
+        type="button"
+        title={t.addSibling}
+        aria-label={t.addSibling}
+        onClick={(e) => { e.stopPropagation(); onAdd('sibling') }}
+        className={cls}
+        style={{ insetInlineStart: -14, top: '40%' }}
+      >+</button>
+      <button
+        type="button"
+        title={t.addSpouse}
+        aria-label={t.addSpouse}
+        onClick={(e) => { e.stopPropagation(); onAdd('spouse') }}
+        className={cls}
+        style={{ insetInlineEnd: -14, top: '40%' }}
+      >+</button>
+    </div>
   )
 }
