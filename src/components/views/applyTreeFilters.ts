@@ -177,18 +177,32 @@ export function applyTreeFilters(
         continue
       }
 
-      // No anchors at all (case (a)). Preserve standalone founders
-      // unless the user is actively narrowing the tree with hides.
-      if (allHidden.size === 0) continue
-      // Belt-and-braces: even in the no-direct-children branch, a
-      // member might still have visible great-grandchildren (e.g.
-      // every direct child was hidden but a deeper descendant isn't).
-      // Don't prune them either.
+      // No anchors at all (case (a)). Belt-and-braces: even in the
+      // no-direct-children branch, a member might still have visible
+      // great-grandchildren (e.g. every direct child was hidden but a
+      // deeper descendant isn't). Don't prune them either.
       if (hasVisibleDescendant(id)) continue
       const hasAnyParent = relationships.some(
         r => r.type === 'parent-child' && r.member_b_id === id,
       )
+      // Standalone founder (no parents anywhere in the DB, no visible
+      // children, no current spouse): keep them — they're a deliberate
+      // standalone node, not noise.
       if (!hasAnyParent) continue
+      // At this point: has parents in DB but none visible, no visible
+      // children, no current spouse. They may still be a non-current
+      // (ex / deceased) spouse of someone in-tree — in which case
+      // they're a "married-in ex" with all their ties dead, and the
+      // layout engine would otherwise render them as a free-floating
+      // root subtree at the canvas edge ("נתנאל" the ex bug).
+      const hasNonCurrentSpouse = relationships.some(
+        r => r.type === 'spouse' && (r.status ?? 'current') !== 'current'
+             && (r.member_a_id === id || r.member_b_id === id),
+      )
+      // Preserve standalone members that aren't ex-spouses of anyone
+      // when no manual hides are active — they're legitimately
+      // unconnected founders waiting to be linked.
+      if (allHidden.size === 0 && !hasNonCurrentSpouse) continue
       allowed.delete(id)
       removedAny = true
     }

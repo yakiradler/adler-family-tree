@@ -462,12 +462,41 @@ export function buildLayout(
   const swCache = new Map<string, number>()
   const leafClusterCache = new Map<string, ClusterResult>() // parent id → cluster
 
+  // ── Multi-spouse lane width helper ─────────────────────────────────
+  // Returns the EXTRA horizontal width (beyond a bare spouse card)
+  // needed for spouse `sp` to fit their own exclusive descendants
+  // directly beneath them, when `id` has 2+ co-placed spouses. With
+  // just one spouse the existing "centered above shared children"
+  // logic already works — only the multi-spouse case needs the lane
+  // padding so wife #1's subtree doesn't overlap wife #2's.
+  //
+  // We use ownerChildrenOf (post-primaryParent assignment) rather than
+  // raw parent-child rows, so a child is counted under one spouse only
+  // — matching how the layout actually places them downstream.
+  function spouseExclusiveLaneExtra(ownerId: string, spouseId: string): number {
+    const ownedByOwner = new Set(ownerChildrenOf.get(ownerId) ?? [])
+    const spOwn = (ownerChildrenOf.get(spouseId) ?? []).filter(c => !ownedByOwner.has(c))
+    if (spOwn.length === 0) return 0
+    const spOwnW = spOwn.reduce((s, c) => s + subtreeWidth(c), 0)
+      + Math.max(0, spOwn.length - 1) * H_GAP
+    return Math.max(0, spOwnW - NODE_W)
+  }
+
   function subtreeWidth(id: string): number {
     if (swCache.has(id)) return swCache.get(id)!
     const children = familyChildrenOf.get(id) ?? []
     const spouses = spousesOf.get(id) ?? []
     const placedSpouses = spouses.filter(sp => !layoutRoots.includes(sp))
-    const coupleWidth = NODE_W + placedSpouses.length * (NODE_W + COUPLE_GAP)
+    // Base couple width: every spouse contributes one node-slot plus a
+    // gap. When 2+ spouses each have their own (non-shared) subtree,
+    // bump the reserved width by the per-spouse extra lane so the
+    // children of each marriage don't overlap.
+    let extraLane = 0
+    if (placedSpouses.length >= 2) {
+      for (const sp of placedSpouses) extraLane += spouseExclusiveLaneExtra(id, sp)
+    }
+    const coupleWidth =
+      NODE_W + placedSpouses.length * (NODE_W + COUPLE_GAP) + extraLane
 
     let childrenWidth = 0
     if (children.length > 0) {
@@ -498,16 +527,31 @@ export function buildLayout(
   const placed = new Set<string>()
 
   function placeSpousesAround(id: string, midX: number, spousesToPlace: string[]) {
-    if (spousesToPlace.length > 0) {
-      const totalCoupleW = NODE_W + spousesToPlace.length * (NODE_W + COUPLE_GAP)
-      const coupleLeft = midX - totalCoupleW / 2
-      xPos.set(id, coupleLeft)
-      let spX = coupleLeft + NODE_W + COUPLE_GAP
-      for (const sp of spousesToPlace) {
-        xPos.set(sp, spX); placed.add(sp); spX += NODE_W + COUPLE_GAP
-      }
-    } else {
+    if (spousesToPlace.length === 0) {
       xPos.set(id, midX - NODE_W / 2)
+      return
+    }
+    // Per-spouse extra lane width (matches subtreeWidth's calc) — only
+    // active for 2+ spouses so the single-spouse case keeps the tight
+    // original layout. Wife #1 with kids A,B and wife #2 with kid C
+    // each get their own slot wide enough for their subtree below.
+    const extras: number[] =
+      spousesToPlace.length >= 2
+        ? spousesToPlace.map(sp => spouseExclusiveLaneExtra(id, sp))
+        : spousesToPlace.map(() => 0)
+    const totalCoupleW =
+      NODE_W + spousesToPlace.length * (NODE_W + COUPLE_GAP)
+      + extras.reduce((s, e) => s + e, 0)
+    const coupleLeft = midX - totalCoupleW / 2
+    xPos.set(id, coupleLeft)
+    let spX = coupleLeft + NODE_W + COUPLE_GAP
+    for (let i = 0; i < spousesToPlace.length; i++) {
+      const sp = spousesToPlace[i]
+      // Place the spouse at the LEFT edge of their lane (the lane is
+      // NODE_W + extras[i] wide). The spouse's own children will
+      // center under this position in a follow-up pass.
+      xPos.set(sp, spX); placed.add(sp)
+      spX += NODE_W + extras[i] + COUPLE_GAP
     }
   }
 
