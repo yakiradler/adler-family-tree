@@ -640,24 +640,30 @@ export default function TreeView({
               <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
             </filter>
           </defs>
+          {/* Parent-child rails — solid stroke (the old gradient was
+              defined on objectBoundingBox, which collapses to a
+              single point on pure-vertical paths and renders nothing).
+              theme.pcStops[1] is the layout-mode accent middle tone. */}
           {lines.map((l, i) => (
             <path
               key={`pc-${i}`}
               d={l.d}
-              stroke="url(#pc-grad)"
-              strokeWidth="2.75"
+              stroke={theme.pcStops[1]}
+              strokeOpacity="0.85"
+              strokeWidth="3"
               fill="none"
               strokeLinecap="round"
               strokeLinejoin="round"
-              filter="url(#pc-glow)"
             />
           ))}
+          {/* Spouse line — solid stroke, dashed, mid pink-violet. */}
           {spouseLines.map((l, i) => (
             <line
               key={`sp-${i}`}
               x1={l.x1} y1={l.y} x2={l.x2} y2={l.y}
-              stroke="url(#sp-grad)"
-              strokeWidth="2.25"
+              stroke={theme.spStops[0]}
+              strokeOpacity="0.85"
+              strokeWidth="2.5"
               strokeLinecap="round"
               strokeDasharray="6 5"
             />
