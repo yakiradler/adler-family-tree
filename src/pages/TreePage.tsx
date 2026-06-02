@@ -10,6 +10,7 @@ import Navigation from '../components/Navigation'
 import AddMemberModal from '../components/AddMemberModal'
 import TreeSearchModal from '../components/TreeSearchModal'
 import TreeSwitcher from '../components/TreeSwitcher'
+import EditModeToggle from '../components/EditModeToggle'
 import { useEffect, useMemo, useState } from 'react'
 import AdvancedFilter, { DEFAULT_FILTERS, type FilterState } from '../components/views/AdvancedFilter'
 import { useBrowserZoom } from '../hooks/useBrowserZoom'
@@ -495,6 +496,11 @@ export default function TreePage({ demoMode }: Props) {
           <Navigation />
         </div>
       )}
+      {/* Floating edit-mode toggle. Only shows on the tree view —
+          schematic/timeline have their own interaction models and
+          per-card "+" buttons would be misplaced there. Hidden in
+          fullscreen + focused mode to keep the canvas clean. */}
+      {!hideChrome && viewMode === 'tree' && <EditModeToggle />}
 
       {/* Interactive tree-page tutorial. Auto-launches on the user's
           very first visit to the tree (different localStorage key

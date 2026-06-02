@@ -294,6 +294,25 @@ export const translations = {
     panelParents: 'הורים',
     panelEdit: 'ערוך פרופיל',
 
+    // Edit-mode toggle + per-card quick-add
+    editMode: 'מצב עריכה',
+    exitEditMode: 'יציאה ממצב עריכה',
+    tipEditMode: 'הפעלת מצב עריכה — כפתורי הוספה יופיעו ליד כל פרופיל',
+    addParent: 'הוסף הורה',
+    addSibling: 'הוסף אח/אחות',
+    addSpouse: 'הוסף בן/בת זוג',
+    addChild: 'הוסף ילד/ה',
+    quickAddTitle: 'הוספה מהירה',
+    quickAddFirstName: 'שם פרטי',
+    quickAddLastName: 'שם משפחה',
+    quickAddGender: 'מין',
+    quickAddMale: 'זכר',
+    quickAddFemale: 'נקבה',
+    quickAddSave: 'הוסף',
+    quickAddCancel: 'ביטול',
+    parentTypeFather: 'אבא',
+    parentTypeMother: 'אמא',
+
     // Notes tab (comments + memories)
     notesTab: 'זיכרונות',
     notesNoneYet: 'עדיין אין זיכרונות. שתפו זיכרון יפה ראשון.',
@@ -955,6 +974,25 @@ export const translations = {
     panelNoPhotos: 'No photos yet',
     panelParents: 'Parents',
     panelEdit: 'Edit Profile',
+
+    // Edit-mode toggle + per-card quick-add
+    editMode: 'Edit Mode',
+    exitEditMode: 'Exit Edit Mode',
+    tipEditMode: 'Turn on edit mode — quick-add buttons appear next to every card',
+    addParent: 'Add Parent',
+    addSibling: 'Add Sibling',
+    addSpouse: 'Add Partner',
+    addChild: 'Add Child',
+    quickAddTitle: 'Quick Add',
+    quickAddFirstName: 'First name',
+    quickAddLastName: 'Last name',
+    quickAddGender: 'Gender',
+    quickAddMale: 'Male',
+    quickAddFemale: 'Female',
+    quickAddSave: 'Add',
+    quickAddCancel: 'Cancel',
+    parentTypeFather: 'Father',
+    parentTypeMother: 'Mother',
 
     // Notes tab (comments + memories)
     notesTab: 'Memories',

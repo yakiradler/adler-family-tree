@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang, isRTL, type Translations } from '../../i18n/useT'
 import MemberNode from '../MemberNode'
-import type { Relationship } from '../../types'
+import QuickAddRelativeModal, { type RelativeDirection } from '../QuickAddRelativeModal'
+import type { Member, Relationship } from '../../types'
 import {
   AVATAR, NODE_W, NODE_H,
   type LayoutMode, type LayoutNode,
@@ -131,7 +132,15 @@ export default function TreeView({
     treeFullscreen, setTreeFullscreen,
     openTreePopover, setOpenTreePopover,
     isFocusedMode, setIsFocusedMode,
+    isEditMode,
   } = useFamilyStore()
+  // Quick-add popover state. Lives at the TreeView level rather than
+  // per-card so opening one closes any other (the modal is a singleton)
+  // and the wrapping AnimatePresence transitions cleanly.
+  const [quickAdd, setQuickAdd] = useState<{
+    anchor: Member
+    direction: RelativeDirection
+  } | null>(null)
   const activeTree = activeTreeId == null ? null : trees.find((tr) => tr.id === activeTreeId) ?? null
   // Narrow the population to the currently active tree. `null` means
   // the default/main tree which is everyone without a tree_id; an
@@ -623,9 +632,27 @@ export default function TreeView({
               onSecondarySelect={(id) => setSelectedMemberId(id)}
               dataMemberId={member.id}
             />
+            {/* Edit-mode quick-add buttons. Four "+" buttons appear
+                around each card pointing at the four relations
+                (parent above, sibling at start, spouse at end,
+                child below). Sit OUTSIDE the MemberNode <button>
+                because nesting <button> tags is invalid HTML; we
+                stopPropagation on each so a "+" tap doesn't also
+                fire the card's select. */}
+            {isEditMode && (
+              <QuickAddButtons
+                onAdd={(direction) => setQuickAdd({ anchor: member, direction })}
+              />
+            )}
           </motion.div>
         ))}
       </div>
+      <QuickAddRelativeModal
+        open={quickAdd !== null}
+        onClose={() => setQuickAdd(null)}
+        anchor={quickAdd?.anchor ?? null}
+        direction={quickAdd?.direction ?? 'parent'}
+      />
 
       {/* Layout picker used to render here as its own floating pill;
           it now lives INSIDE the black navigation island at the
@@ -1085,5 +1112,66 @@ function ExportMenu({
         </Tooltip>
       </div>
     </div>
+  )
+}
+
+/**
+ * Four "+" buttons that surround a member card in edit mode. Each
+ * targets a different relation (parent above, child below, spouse at
+ * the end, sibling at the start — RTL-aware via logical positioning).
+ *
+ * Buttons live OUTSIDE the MemberNode <button> (it's invalid to nest
+ * <button>s) and stopPropagation on click so a "+" tap doesn't also
+ * select the underlying card. Absolutely positioned relative to the
+ * member's wrapper <motion.div>, so they follow the card's spring
+ * animation when the layout updates.
+ */
+function QuickAddButtons({
+  onAdd,
+}: {
+  onAdd: (direction: RelativeDirection) => void
+}) {
+  const { t } = useLang()
+  const cls =
+    'absolute w-7 h-7 rounded-full bg-[#007AFF] text-white shadow-lg flex items-center justify-center text-base font-bold active:scale-90 transition z-20 border-2 border-white'
+  return (
+    <>
+      <Tooltip content={t.addParent} placement="top">
+        <button
+          type="button"
+          aria-label={t.addParent}
+          onClick={(e) => { e.stopPropagation(); onAdd('parent') }}
+          className={cls}
+          style={{ top: -14, left: '50%', transform: 'translateX(-50%)' }}
+        >+</button>
+      </Tooltip>
+      <Tooltip content={t.addChild} placement="bottom">
+        <button
+          type="button"
+          aria-label={t.addChild}
+          onClick={(e) => { e.stopPropagation(); onAdd('child') }}
+          className={cls}
+          style={{ bottom: -14, left: '50%', transform: 'translateX(-50%)' }}
+        >+</button>
+      </Tooltip>
+      <Tooltip content={t.addSibling} placement="left">
+        <button
+          type="button"
+          aria-label={t.addSibling}
+          onClick={(e) => { e.stopPropagation(); onAdd('sibling') }}
+          className={cls}
+          style={{ insetInlineStart: -14, top: '40%' }}
+        >+</button>
+      </Tooltip>
+      <Tooltip content={t.addSpouse} placement="right">
+        <button
+          type="button"
+          aria-label={t.addSpouse}
+          onClick={(e) => { e.stopPropagation(); onAdd('spouse') }}
+          className={cls}
+          style={{ insetInlineEnd: -14, top: '40%' }}
+        >+</button>
+      </Tooltip>
+    </>
   )
 }

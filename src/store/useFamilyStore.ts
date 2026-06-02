@@ -156,6 +156,14 @@ interface FamilyState {
   // stale hamburger sits above the focused view and confuses people.
   isFocusedMode: boolean
   setIsFocusedMode: (v: boolean) => void
+  // ── Tree edit mode (per-card + buttons) ───────────────────────────
+  // When true, MemberNode renders four small "+" buttons around each
+  // card (top=parent, end=spouse, bottom=child, start=sibling) that
+  // open a quick-add popover. Default off so casual browsing isn't
+  // crowded with editing chrome. Persisted to localStorage so
+  // switching between tabs (/home → /tree) keeps the mode active.
+  isEditMode: boolean
+  setEditMode: (v: boolean) => void
   /** All notes across all members. Per-member filtering is done in the
    *  consumer (MemberNotesTab) so we keep one canonical list and don't
    *  duplicate state. Persisted via the same localStorage layer as
@@ -887,6 +895,21 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   // exits focus mode.
   isFocusedMode: false,
   setIsFocusedMode: (isFocusedMode) => set({ isFocusedMode }),
+
+  // ── Edit-mode toggle ─────────────────────────────────────────────
+  // Hydrated from localStorage so a tab switch (/home ↔ /tree)
+  // doesn't drop the user back to view-only.
+  isEditMode:
+    typeof window !== 'undefined'
+      ? window.localStorage.getItem('ft-edit-mode') === '1'
+      : false,
+  setEditMode: (isEditMode) => {
+    try {
+      if (isEditMode) window.localStorage.setItem('ft-edit-mode', '1')
+      else window.localStorage.removeItem('ft-edit-mode')
+    } catch { /* ignore quota */ }
+    set({ isEditMode })
+  },
 }))
 
 // Debug-only: expose the store on window so devtools can audit state
