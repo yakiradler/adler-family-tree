@@ -62,6 +62,13 @@ function buildConnectors(nodes: LayoutNode[], relationships: Relationship[]) {
   const byId = new Map(nodes.map((n) => [n.member.id, n]))
 
   // ── Spouse lines ───────────────────────────────────────────────────
+  // A horizontal segment between the partner avatars at avatar-mid Y.
+  // We endpoint at the EDGE OF EACH AVATAR (not the edge of the card)
+  // so the line reads as connecting the two faces directly. NODE_W is
+  // the logical card slot width (136); the avatar itself (64) sits
+  // centred inside it, so the right-edge of the left avatar is at
+  // x = leftNode.x + (NODE_W + AVATAR) / 2, and the left-edge of the
+  // right avatar is at x = rightNode.x + (NODE_W - AVATAR) / 2.
   interface SpouseLine { x1: number; x2: number; y: number }
   const spouseLines: SpouseLine[] = []
   const seenSpouse = new Set<string>()
@@ -74,13 +81,12 @@ function buildConnectors(nodes: LayoutNode[], relationships: Relationship[]) {
     const a = byId.get(r.member_a_id)
     const b = byId.get(r.member_b_id)
     if (!a || !b || a.generation !== b.generation) continue
-    const leftX = Math.min(a.x, b.x) + NODE_W   // right edge of the left card
-    const rightX = Math.max(a.x, b.x)            // left edge of the right card
-    if (rightX <= leftX) continue
+    const leftNode = a.x < b.x ? a : b
+    const rightNode = a.x < b.x ? b : a
     spouseLines.push({
-      x1: leftX,
-      x2: rightX,
-      y: a.y + AVATAR / 2 + 4,
+      x1: leftNode.x + (NODE_W + AVATAR) / 2,
+      x2: rightNode.x + (NODE_W - AVATAR) / 2,
+      y: leftNode.y + AVATAR / 2,
     })
   }
 
