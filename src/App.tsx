@@ -128,11 +128,16 @@ export default function App() {
     // restructured. Demo mode bucket also bumps to ft-state-v4 so a
     // returning demo visitor sees the new nuclear seed immediately
     // rather than the legacy 84-member fixture they cached.
+    // v6 bumps after the layout-engine rewrite: any snapshot captured
+    // under the old engine could still contain stale relationship rows
+    // from now-deleted trees ("טסט יקיר" etc.) — the new engine treats
+    // every relationship row as authoritative, so we force-flush so the
+    // store rehydrates strictly from what RLS returns.
     const STORAGE_KEY = demoMode
-      ? 'ft-state-v4'
-      : `ft-state-v5-${session?.user?.id ?? 'anon'}`
+      ? 'ft-state-v5'
+      : `ft-state-v6-${session?.user?.id ?? 'anon'}`
     const LEGACY_KEYS = demoMode
-      ? ['ft-state-v3', 'ft-demo-state-v2', 'ft-demo-state-v1']
+      ? ['ft-state-v4', 'ft-state-v3', 'ft-demo-state-v2', 'ft-demo-state-v1']
       : []
 
     // Migrate / hydrate.
