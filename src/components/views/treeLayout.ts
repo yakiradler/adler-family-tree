@@ -430,28 +430,46 @@ export function buildLayoutFull(
       const childRowY = firstChild.rowY
       const railY = (parentBottomY + childRowY) / 2
 
-      // Per-child stem endpoint Y. For a child whose family is a
-      // COUPLE, the stem must end at the SPOUSE LINE Y (the bar that
-      // joins the two cards), because there's no card at the union
-      // centre X — only the gap between partners. For a single-child
-      // family the stem ends at the top of the lone card.
-      const railLeftX = Math.min(...fam.children.map((c) => c.unionCentreX))
-      const railRightX = Math.max(...fam.children.map((c) => c.unionCentreX))
+      // Anchor for the drop stem: the MOTHER (per the project rule
+      // "the line always comes from the mother, not from the father").
+      // partnerB is the right-hand slot which is always the mother
+      // for opposite-gender couples (engine guarantees father=left,
+      // mother=right). For same-gender pairs or singles we fall
+      // back to partnerB if present, else partnerA.
+      const motherMember = fam.partnerB ?? fam.partnerA
+      const motherLeftX = xPosOfMember.get(motherMember.id)!
+      const motherCx = motherLeftX + NODE_W / 2
+
+      // Per-child stem endpoint Y. Couple-children → spouse line.
+      // Single children → top of card. AVATAR_PAD = 36 puts us in
+      // line with the avatar centre, which is where the spouse bar
+      // sits.
+      const childCentres = fam.children.map((c) => c.unionCentreX)
+      // The rail must reach from the mother's column to wherever
+      // the children sit. With symmetric placement these are usually
+      // equal, but a single child stays at its own column and the
+      // mother sits offset to the right of the union centre, so we
+      // must include both endpoints.
+      const railLeftX = Math.min(motherCx, ...childCentres)
+      const railRightX = Math.max(motherCx, ...childCentres)
 
       plan.rail = {
         dropTopY: parentBottomY,
         dropBottomY: railY,
-        dropX: fam.unionCentreX,
+        dropX: motherCx,                  // mother's centre, not union mid
         railLeftX,
         railRightX,
         railY,
         childStems: fam.children.map((c) => {
           const x = c.unionCentreX
           const isCouple = c.partnerB != null
-          // spouseLineY = top of card + AVATAR_PAD + AVATAR/2 (avatar centre)
+          // For a couple child, end at the spouse-line Y (avatar
+          // centre). For a single, end at the top of the avatar
+          // ring — small 4px overlap so the line visibly touches
+          // the ring rather than stopping at the bbox edge.
           const stemBottomY = isCouple
             ? childRowY + AVATAR_PAD + AVATAR / 2
-            : childRowY
+            : childRowY + 4
           return { x, topY: stemBottomY }
         }),
       }
