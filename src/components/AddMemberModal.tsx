@@ -1,8 +1,9 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang } from '../i18n/useT'
 import type { Gender, Lineage } from '../types'
+import { linkRelative, type RelativeDirection } from '../lib/relatives'
 
 interface Props {
   open: boolean
@@ -10,18 +11,73 @@ interface Props {
 }
 
 export default function AddMemberModal({ open, onClose }: Props) {
-  const { addMember, profile, activeTreeId } = useFamilyStore()
-  const { t } = useLang()
+  const {
+    addMember, addRelationship, relationships,
+    members, selectedMemberId, profile, activeTreeId,
+  } = useFamilyStore()
+  const { t, lang } = useLang()
   const [form, setForm] = useState({ first_name: '', last_name: '', maiden_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '' as Gender | '', birth_order: '', lineage: '' as Lineage | '' })
   const [loading, setLoading] = useState(false)
   const photoInputRef = useRef<HTMLInputElement>(null)
 
+  // ── Relationship wiring ───────────────────────────────────────────
+  // Every member must connect to the tree so nobody ends up "floating".
+  // The only exception is the very first member of an (otherwise empty)
+  // tree — they're the founding root. When the active tree already has
+  // members, the user must pick an existing relative + a relation type,
+  // and we wire it up via the same linkRelative() helper the per-card
+  // "+" buttons use.
+  const treeMembers = useMemo(
+    () =>
+      activeTreeId == null
+        ? members.filter((m) => !m.tree_id)
+        : members.filter((m) => m.tree_id === activeTreeId),
+    [members, activeTreeId],
+  )
+  const needsRelation = treeMembers.length > 0
+  const [relDirection, setRelDirection] = useState<RelativeDirection | ''>('')
+  const [anchorId, setAnchorId] = useState<string>('')
+  const [relSearch, setRelSearch] = useState('')
+  // Default the anchor to the currently-selected member (if it's in this
+  // tree); an explicit pick overrides it.
+  const effectiveAnchorId =
+    anchorId ||
+    (selectedMemberId && treeMembers.some((m) => m.id === selectedMemberId) ? selectedMemberId : '')
+  const anchorMember = treeMembers.find((m) => m.id === effectiveAnchorId) ?? null
+  // A "sibling" only connects if the anchor has at least one parent (the
+  // new member inherits them). Without that the sibling would float, so
+  // we treat the relation as incomplete and steer the user elsewhere.
+  const anchorHasParents = relationships.some(
+    (r) => r.type === 'parent-child' && r.member_b_id === effectiveAnchorId,
+  )
+  const siblingWouldFloat = relDirection === 'sibling' && !anchorHasParents
+  const relComplete =
+    !needsRelation || (relDirection !== '' && anchorMember != null && !siblingWouldFloat)
+  const anchorResults = useMemo(() => {
+    const q = relSearch.trim().toLowerCase()
+    const pool = q
+      ? treeMembers.filter((m) => `${m.first_name} ${m.last_name ?? ''}`.toLowerCase().includes(q))
+      : treeMembers
+    return pool.slice(0, 8)
+  }, [treeMembers, relSearch])
+
+  const resetAndClose = () => {
+    setForm({ first_name: '', last_name: '', maiden_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '', birth_order: '', lineage: '' })
+    setRelDirection('')
+    setAnchorId('')
+    setRelSearch('')
+    onClose()
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!profile) return
+    // Guard against a disconnected add: in a non-empty tree a relation
+    // is mandatory so the new member can never end up floating.
+    if (needsRelation && (!relComplete || !anchorMember || relDirection === '')) return
     setLoading(true)
     const parsedOrder = form.birth_order.trim() === '' ? undefined : parseInt(form.birth_order, 10)
-    await addMember({
+    const created = await addMember({
       first_name: form.first_name,
       last_name: form.last_name,
       maiden_name: form.maiden_name.trim() || undefined,
@@ -39,9 +95,12 @@ export default function AddMemberModal({ open, onClose }: Props) {
       // filter hides them from any non-main tree the user is viewing.
       tree_id: activeTreeId ?? undefined,
     })
+    // Wire the new member into the tree so it isn't a floating node.
+    if (created && needsRelation && anchorMember && relDirection !== '') {
+      await linkRelative({ created, anchor: anchorMember, direction: relDirection, addRelationship, relationships })
+    }
     setLoading(false)
-    setForm({ first_name: '', last_name: '', maiden_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '', birth_order: '', lineage: '' })
-    onClose()
+    resetAndClose()
   }
 
   return (
@@ -50,7 +109,7 @@ export default function AddMemberModal({ open, onClose }: Props) {
         <>
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={onClose}
+            onClick={resetAndClose}
             className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[95]"
           />
           {/* Centering wrapper.  We previously used `top-1/2
@@ -72,7 +131,7 @@ export default function AddMemberModal({ open, onClose }: Props) {
             <div className="glass-strong rounded-3xl p-5 shadow-glass-lg">
               <div className="flex items-center justify-between mb-5">
                 <h3 className="text-sf-title3 text-[#1C1C1E]">{t.addMemberTitle}</h3>
-                <motion.button whileTap={{ scale: 0.9 }} onClick={onClose} className="w-8 h-8 rounded-full bg-[#F2F2F7] flex items-center justify-center">
+                <motion.button whileTap={{ scale: 0.9 }} onClick={resetAndClose} className="w-8 h-8 rounded-full bg-[#F2F2F7] flex items-center justify-center">
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                     <path d="M2 2l8 8M10 2L2 10" stroke="#636366" strokeWidth="1.5" strokeLinecap="round" />
                   </svg>
@@ -189,7 +248,83 @@ export default function AddMemberModal({ open, onClose }: Props) {
                   </div>
                 </div>
 
-                <motion.button type="submit" disabled={loading} whileTap={{ scale: 0.97 }} className="btn-primary w-full flex items-center justify-center gap-2 mt-1">
+                {/* Relationship — mandatory once the tree has members so a
+                    new person can never be added as a floating, unconnected
+                    node. Skipped only for the very first member of a tree. */}
+                {needsRelation && (
+                  <div className="rounded-2xl bg-[#F2F2F7]/70 p-3 space-y-2">
+                    <label className="text-sf-caption font-semibold text-[#1C1C1E] block">
+                      {lang === 'he' ? 'איך הוא/היא מתחבר/ת למשפחה?' : 'How do they connect?'}
+                    </label>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {([
+                        ['parent', t.addParent],
+                        ['child', t.addChild],
+                        ['spouse', t.addSpouse],
+                        ['sibling', t.addSibling],
+                      ] as const).map(([dir, label]) => (
+                        <button
+                          key={dir}
+                          type="button"
+                          onClick={() => setRelDirection(dir)}
+                          className={`py-2 rounded-xl text-sf-caption font-semibold transition-colors ${
+                            relDirection === dir ? 'bg-[#007AFF] text-white' : 'bg-white text-[#636366]'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      type="text"
+                      value={relSearch}
+                      onChange={(e) => setRelSearch(e.target.value)}
+                      placeholder={lang === 'he' ? 'חפש בן/בת משפחה…' : 'Search member…'}
+                      className="input-field py-2"
+                      dir="auto"
+                    />
+                    <div className="max-h-32 overflow-y-auto rounded-xl bg-white divide-y divide-[#F2F2F7]">
+                      {anchorResults.map((m) => {
+                        const sel = m.id === effectiveAnchorId
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => setAnchorId(m.id)}
+                            className={`w-full flex items-center gap-2 px-3 py-2 text-start transition ${
+                              sel ? 'bg-[#007AFF]/10' : 'hover:bg-[#F2F2F7]'
+                            }`}
+                          >
+                            <span
+                              className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-white text-[10px] font-bold"
+                              style={{ background: m.gender === 'female' ? 'linear-gradient(135deg,#FF5EAE,#B46BFF)' : 'linear-gradient(135deg,#2B6BFF,#19C6FF)' }}
+                            >
+                              {m.first_name.charAt(0)}
+                            </span>
+                            <span className="text-[13px] font-medium text-[#1C1C1E] truncate">
+                              {m.first_name} {m.last_name}
+                            </span>
+                            {sel && <span className="ms-auto text-[#007AFF] text-xs">✓</span>}
+                          </button>
+                        )
+                      })}
+                      {anchorResults.length === 0 && (
+                        <div className="px-3 py-2 text-[12px] text-[#8E8E93]">
+                          {lang === 'he' ? 'לא נמצאו בני משפחה' : 'No matches'}
+                        </div>
+                      )}
+                    </div>
+                    {siblingWouldFloat && (
+                      <p className="text-[11px] text-[#FF3B30]">
+                        {lang === 'he'
+                          ? 'לבן המשפחה שבחרת אין הורים רשומים — בחר/י קשר אחר (הורה/בן-זוג/ילד) כדי לחבר.'
+                          : 'The selected member has no recorded parents — pick another relation (parent/spouse/child) to connect.'}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <motion.button type="submit" disabled={loading || !relComplete} whileTap={{ scale: 0.97 }} className="btn-primary w-full flex items-center justify-center gap-2 mt-1 disabled:opacity-50">
                   {loading ? (
                     <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
                       <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.3" />

@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useLang, isRTL } from '../i18n/useT'
 import { useFamilyStore } from '../store/useFamilyStore'
 import type { Member, Gender } from '../types'
+import { linkRelative, type RelativeDirection } from '../lib/relatives'
 
-export type RelativeDirection = 'parent' | 'sibling' | 'spouse' | 'child'
+export type { RelativeDirection } from '../lib/relatives'
 
 interface Props {
   open: boolean
@@ -90,42 +91,7 @@ export default function QuickAddRelativeModal({ open, onClose, anchor, direction
         // The store already surfaces the error toast; just bail.
         return
       }
-      if (direction === 'parent') {
-        await addRelationship({
-          type: 'parent-child',
-          member_a_id: created.id,
-          member_b_id: anchor.id,
-        })
-      } else if (direction === 'child') {
-        await addRelationship({
-          type: 'parent-child',
-          member_a_id: anchor.id,
-          member_b_id: created.id,
-        })
-      } else if (direction === 'spouse') {
-        await addRelationship({
-          type: 'spouse',
-          member_a_id: anchor.id,
-          member_b_id: created.id,
-          status: 'current',
-        })
-      } else if (direction === 'sibling') {
-        // Mirror the anchor's parents onto the new member so the
-        // sibling sits in the right generation. If the anchor has
-        // no parents in-tree we leave the new member parent-less —
-        // they'll show up as a standalone founder, and the user
-        // can wire parents via the relationship manager if needed.
-        const parents = relationships
-          .filter((r) => r.type === 'parent-child' && r.member_b_id === anchor.id)
-          .map((r) => r.member_a_id)
-        for (const pid of parents) {
-          await addRelationship({
-            type: 'parent-child',
-            member_a_id: pid,
-            member_b_id: created.id,
-          })
-        }
-      }
+      await linkRelative({ created, anchor, direction, addRelationship, relationships })
       handleClose()
     } finally {
       setBusy(false)

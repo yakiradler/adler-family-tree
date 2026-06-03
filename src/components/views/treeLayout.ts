@@ -227,9 +227,23 @@ export function buildLayout(
   }
 
   // ─── Step 5: layout roots ──────────────────────────────────────────
+  // A member with no parent-child edge AND no current spouse is an
+  // "orphan" — it has no defined place in the tree. Keep orphans OUT of
+  // the normal root flow; Step 10 drops them into a tidy row directly
+  // beneath the tree so they're clearly visible to be connected, instead
+  // of being flung off to the far side as a "floating" node.
+  const orphanIds = new Set<string>()
+  for (const m of members) {
+    const noParents = (parentsOf.get(m.id) ?? []).length === 0
+    const noKids = (childrenOf.get(m.id) ?? []).length === 0
+    const noSpouse = !currentSpouseOf.has(m.id)
+    if (noParents && noKids && noSpouse) orphanIds.add(m.id)
+  }
+
   const layoutRoots: string[] = []
   for (const m of members) {
     if (primaryOf.get(m.id) !== m.id) continue
+    if (orphanIds.has(m.id)) continue
     const partner = partnerOfPrimary.get(m.id)
     const aHasParent = (parentsOf.get(m.id) ?? []).length > 0
     const bHasParent = partner ? (parentsOf.get(partner) ?? []).length > 0 : false
@@ -323,15 +337,27 @@ export function buildLayout(
     place(root, cursorX)
     cursorX += subtreeWidth(root) + H_GAP * 2
   }
+  // Defensive: place any connected member the recursion somehow missed.
   for (const m of members) {
-    if (xPos.has(m.id)) continue
+    if (xPos.has(m.id) || orphanIds.has(m.id)) continue
     xPos.set(m.id, cursorX)
     cursorX += NODE_W + H_GAP
   }
+  // Orphans get their own compact row starting at x = 0 (Y assigned in
+  // Step 10), so they never inherit the far-right cursor of a wide tree.
+  let orphanX = 0
+  for (const m of members) {
+    if (!orphanIds.has(m.id)) continue
+    xPos.set(m.id, orphanX)
+    orphanX += NODE_W + H_GAP
+  }
 
   // ─── Step 8: anti-collision sweep per generation ──────────────────
+  // Orphans are excluded — they live in their own compact bottom row and
+  // must not perturb (or be perturbed by) the connected tree's sweep.
   const byGen = new Map<number, string[]>()
   for (const m of members) {
+    if (orphanIds.has(m.id)) continue
     const g = genOf.get(m.id) ?? 0
     const list = byGen.get(g) ?? []
     list.push(m.id)
@@ -349,17 +375,25 @@ export function buildLayout(
   }
 
   // ─── Step 9: Y per generation ──────────────────────────────────────
-  const maxGen = Math.max(0, ...Array.from(genOf.values()))
+  // Only connected members define the generation span; orphans sit in a
+  // dedicated row one generation below the deepest connected one.
+  const connectedGens = members
+    .filter((m) => !orphanIds.has(m.id))
+    .map((m) => genOf.get(m.id) ?? 0)
+  const maxGen = Math.max(0, ...connectedGens)
   const yOfGen = new Map<number, number>()
   for (let g = 0; g <= maxGen; g++) yOfGen.set(g, g * (NODE_H + V_GAP))
+  const orphanRowGen = maxGen + 1
+  const orphanRowY = orphanRowGen * (NODE_H + V_GAP)
 
   // ─── Step 10: emit LayoutNode list ────────────────────────────────
   const out: LayoutNode[] = []
   for (const m of members) {
     const x = xPos.get(m.id)
     if (x == null) continue
-    const g = genOf.get(m.id) ?? 0
-    const y = yOfGen.get(g) ?? 0
+    const isOrphan = orphanIds.has(m.id)
+    const g = isOrphan ? orphanRowGen : (genOf.get(m.id) ?? 0)
+    const y = isOrphan ? orphanRowY : (yOfGen.get(g) ?? 0)
     const partners = secondaryPartnersOf.get(m.id)
     out.push({
       member: m,
