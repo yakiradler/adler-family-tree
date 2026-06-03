@@ -53,13 +53,17 @@
 import type { Member, Relationship, SpouseStatus } from '../../types'
 
 // ─── Dimensions ──────────────────────────────────────────────────────
+// NODE_W matches MemberNode's `cardWidth = avatarSize + 72` so the
+// layout's x-coordinates line up exactly with the rendered cards.
+// Mismatch caused the spouse line and the children rail to land in
+// empty space instead of on card edges.
 export const AVATAR        = 64                    // photo ring diameter
-export const NODE_W        = 152                   // card outer width
+export const NODE_W        = 136                   // card outer width — matches MemberNode
 export const NODE_H        = 132                   // card outer height
-export const SPOUSE_GAP    = 14                    // gap inside a couple
-export const SIBLING_GAP   = 36                    // gap between sibling subtrees
-export const GENERATION_GAP = 120                  // gap between rows
-export const AVATAR_PAD    = (NODE_W - AVATAR) / 2 // distance from card edge to avatar edge
+export const SPOUSE_GAP    = 24                    // gap inside a couple
+export const SIBLING_GAP   = 40                    // gap between sibling subtrees
+export const GENERATION_GAP = 110                  // gap between rows
+export const AVATAR_PAD    = (NODE_W - AVATAR) / 2 // = 36, distance from card edge to avatar edge
 export const RAIL_OFFSET   = GENERATION_GAP / 2
 
 // Public LayoutMode kept for API back-compat. Only 'classic' has an
@@ -423,14 +427,16 @@ export function buildLayoutFull(
     if (fam.children.length > 0) {
       const parentBottomY = fam.rowY + NODE_H
       const firstChild = fam.children[0]
-      const childTopY = firstChild.rowY
-      const railY = (parentBottomY + childTopY) / 2
+      const childRowY = firstChild.rowY
+      const railY = (parentBottomY + childRowY) / 2
 
-      // Children's centre Xs (each child family is centred on its own
-      // unionCentreX, which equals the centre of its couple/single).
-      const childCentres = fam.children.map((c) => c.unionCentreX)
-      const railLeftX = Math.min(...childCentres)
-      const railRightX = Math.max(...childCentres)
+      // Per-child stem endpoint Y. For a child whose family is a
+      // COUPLE, the stem must end at the SPOUSE LINE Y (the bar that
+      // joins the two cards), because there's no card at the union
+      // centre X — only the gap between partners. For a single-child
+      // family the stem ends at the top of the lone card.
+      const railLeftX = Math.min(...fam.children.map((c) => c.unionCentreX))
+      const railRightX = Math.max(...fam.children.map((c) => c.unionCentreX))
 
       plan.rail = {
         dropTopY: parentBottomY,
@@ -439,7 +445,15 @@ export function buildLayoutFull(
         railLeftX,
         railRightX,
         railY,
-        childStems: childCentres.map((cx) => ({ x: cx, topY: childTopY })),
+        childStems: fam.children.map((c) => {
+          const x = c.unionCentreX
+          const isCouple = c.partnerB != null
+          // spouseLineY = top of card + AVATAR_PAD + AVATAR/2 (avatar centre)
+          const stemBottomY = isCouple
+            ? childRowY + AVATAR_PAD + AVATAR / 2
+            : childRowY
+          return { x, topY: stemBottomY }
+        }),
       }
     }
 
