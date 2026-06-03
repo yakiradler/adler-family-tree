@@ -218,6 +218,12 @@ export async function exportTreeAsPNG(opts: ExportTreeOptions): Promise<void> {
   // layout positions (x, y) drop in unchanged.
   ctx.translate(PAD, TITLE_H + PAD)
 
+  // Connectors are stored in raw layout coordinates; the cards below
+  // are drawn at `node.x + offsetX`, so shift the connectors by the
+  // same offsetX to keep the lines touching the cards.
+  ctx.save()
+  ctx.translate(offsetX, 0)
+
   // Parent-child connectors — gradient stroke matching the live
   // tree's connector palette.
   ctx.lineWidth = 2.2
@@ -233,11 +239,9 @@ export async function exportTreeAsPNG(opts: ExportTreeOptions): Promise<void> {
     }
   }
 
-  // Spouse lines — dashed accent.
-  ctx.save()
+  // Spouse lines — solid accent.
   ctx.strokeStyle = '#FF5EAE'
   ctx.lineWidth = 1.8
-  ctx.setLineDash([6, 5])
   for (const sp of spouseLines) {
     ctx.beginPath()
     ctx.moveTo(sp.x1, sp.y)

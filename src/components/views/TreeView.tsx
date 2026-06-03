@@ -91,11 +91,13 @@ function buildConnectors(nodes: LayoutNode[], relationships: Relationship[]) {
   }
 
   // ── Parent-child rails ─────────────────────────────────────────────
-  // Anchor priority for each child:
-  //   1. explicit `member.connector_parent_id` override
-  //   2. mother (parent with gender 'female')
-  //   3. father (parent with gender 'male')
-  //   4. first parent we have a node for
+  // Per the layout spec, the connector to a sibling-set originates at
+  // the MIDPOINT of the parents' couple (the centre of the spouse
+  // line), drops to a horizontal rail half-way down to the children,
+  // and the rail feeds a short vertical into each child's top-centre.
+  // A lone parent drops from their own bottom-centre instead. Children
+  // are grouped by their full parent set so one rail serves a whole
+  // sibling group.
   const childToParents = new Map<string, string[]>()
   for (const r of relationships) {
     if (r.type !== 'parent-child') continue
@@ -105,66 +107,66 @@ function buildConnectors(nodes: LayoutNode[], relationships: Relationship[]) {
     childToParents.set(r.member_b_id, list)
   }
 
-  const anchorOf = new Map<string, string>()  // childId → anchorId
+  // Group children whose parent set is identical (same couple, or the
+  // same lone parent) so they share one rail.
+  const groupKeyToChildren = new Map<string, string[]>()
+  const groupKeyToParents = new Map<string, string[]>()
   for (const [childId, parents] of childToParents) {
-    const child = byId.get(childId)!
-    const explicit = child.member.connector_parent_id
-    if (explicit && parents.includes(explicit) && byId.has(explicit)) {
-      anchorOf.set(childId, explicit)
-      continue
-    }
-    const mother = parents.find((p) => byId.get(p)?.member.gender === 'female')
-    if (mother) { anchorOf.set(childId, mother); continue }
-    const father = parents.find((p) => byId.get(p)?.member.gender === 'male')
-    if (father) { anchorOf.set(childId, father); continue }
-    anchorOf.set(childId, parents[0])
-  }
-
-  // Group children by their anchor so one rail covers a whole sibling
-  // set rather than one stair-stepped path per child.
-  const childrenByAnchor = new Map<string, string[]>()
-  for (const [childId, anchorId] of anchorOf) {
-    const list = childrenByAnchor.get(anchorId) ?? []
-    list.push(childId)
-    childrenByAnchor.set(anchorId, list)
+    const rendered = parents.filter((p) => byId.has(p))
+    if (rendered.length === 0) continue
+    const key = [...rendered].sort().join('|')
+    const kids = groupKeyToChildren.get(key) ?? []
+    kids.push(childId)
+    groupKeyToChildren.set(key, kids)
+    if (!groupKeyToParents.has(key)) groupKeyToParents.set(key, rendered)
   }
 
   interface PathLine { d: string }
   const lines: PathLine[] = []
 
-  for (const [anchorId, childIds] of childrenByAnchor) {
-    const anchor = byId.get(anchorId)
-    if (!anchor) continue
+  for (const [key, childIds] of groupKeyToChildren) {
+    const parents = (groupKeyToParents.get(key) ?? [])
+      .map((id) => byId.get(id))
+      .filter((n): n is LayoutNode => n != null)
+    if (parents.length === 0) continue
     const children = childIds
       .map((id) => byId.get(id))
       .filter((n): n is LayoutNode => n != null)
     if (children.length === 0) continue
 
-    // Y coordinates: rail sits half-way between mother's bottom and the
-    // children's top. Children are guaranteed by the engine to share
-    // the same Y, but we take the minimum to be safe.
-    const anchorBottomY = Math.round(anchor.y + NODE_H)
-    const childTopY = Math.round(Math.min(...children.map((c) => c.y)))
-    if (childTopY <= anchorBottomY + 2) continue
-    const railY = Math.round((anchorBottomY + childTopY) / 2)
+    // Source: the couple's midpoint (centre of the spouse line) when the
+    // two parents share a row, so the line visibly leaves the marriage
+    // line and drops through the gap between the cards. A lone parent
+    // (or a non-couple pair) drops from the bottom-centre instead.
+    const parentCentres = parents.map((p) => p.x + NODE_W / 2)
+    const sourceX = Math.round(
+      parentCentres.reduce((s, x) => s + x, 0) / parentCentres.length,
+    )
+    const sameRow = parents.every((p) => p.y === parents[0].y)
+    const isCouple = parents.length >= 2 && sameRow
+    const parentBottomY = Math.round(Math.max(...parents.map((p) => p.y + NODE_H)))
+    const dropTopY = isCouple
+      ? Math.round(Math.min(...parents.map((p) => p.y)) + AVATAR / 2)
+      : parentBottomY
 
-    const anchorCx = Math.round(anchor.x + NODE_W / 2)
+    const childTopY = Math.round(Math.min(...children.map((c) => c.y)))
+    if (childTopY <= parentBottomY + 2) continue
+    const railY = Math.round((parentBottomY + childTopY) / 2)
+
     const childCxs = children.map((c) => Math.round(c.x + NODE_W / 2))
 
-    // 1. Short vertical from anchor's bottom to the rail.
-    lines.push({ d: `M ${anchorCx} ${anchorBottomY} L ${anchorCx} ${railY}` })
+    // 1. Vertical from the source (couple midpoint) down to the rail.
+    lines.push({ d: `M ${sourceX} ${dropTopY} L ${sourceX} ${railY}` })
 
-    // 2. Horizontal rail. It must reach from the leftmost endpoint
-    //    (either the leftmost child or the anchor if she's further left)
-    //    to the rightmost endpoint, so the elbow under the anchor is
-    //    continuous with the rail above the children.
-    const railLeft = Math.min(anchorCx, ...childCxs)
-    const railRight = Math.max(anchorCx, ...childCxs)
+    // 2. Horizontal rail spanning the source and every child centre so
+    //    the elbow stays continuous with the drop.
+    const railLeft = Math.min(sourceX, ...childCxs)
+    const railRight = Math.max(sourceX, ...childCxs)
     if (railRight > railLeft) {
       lines.push({ d: `M ${railLeft} ${railY} L ${railRight} ${railY}` })
     }
 
-    // 3. Short vertical from the rail down to each child's top.
+    // 3. Short vertical from the rail into each child's top-centre.
     for (const cx of childCxs) {
       lines.push({ d: `M ${cx} ${railY} L ${cx} ${childTopY}` })
     }
@@ -646,34 +648,40 @@ export default function TreeView({
               <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
             </filter>
           </defs>
-          {/* Parent-child rails — solid stroke (the old gradient was
-              defined on objectBoundingBox, which collapses to a
-              single point on pure-vertical paths and renders nothing).
-              theme.pcStops[1] is the layout-mode accent middle tone. */}
-          {lines.map((l, i) => (
-            <path
-              key={`pc-${i}`}
-              d={l.d}
-              stroke={theme.pcStops[1]}
-              strokeOpacity="0.85"
-              strokeWidth="3"
-              fill="none"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          ))}
-          {/* Spouse line — solid stroke, dashed, mid pink-violet. */}
-          {spouseLines.map((l, i) => (
-            <line
-              key={`sp-${i}`}
-              x1={l.x1} y1={l.y} x2={l.x2} y2={l.y}
-              stroke={theme.spStops[0]}
-              strokeOpacity="0.85"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeDasharray="6 5"
-            />
-          ))}
+          {/* All connectors are shifted by offsetX to match the cards,
+              which are positioned at `x + offsetX` (the layout engine
+              can emit negative x, so the canvas is padded). Without this
+              the whole connector network floated offsetX px to the left
+              of the cards and the lines never touched them. */}
+          <g transform={`translate(${offsetX} 0)`}>
+            {/* Parent-child rails — solid stroke (the old gradient was
+                defined on objectBoundingBox, which collapses to a
+                single point on pure-vertical paths and renders nothing).
+                theme.pcStops[1] is the layout-mode accent middle tone. */}
+            {lines.map((l, i) => (
+              <path
+                key={`pc-${i}`}
+                d={l.d}
+                stroke={theme.pcStops[1]}
+                strokeOpacity="0.85"
+                strokeWidth="3"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            ))}
+            {/* Spouse line — solid stroke, mid pink-violet. */}
+            {spouseLines.map((l, i) => (
+              <line
+                key={`sp-${i}`}
+                x1={l.x1} y1={l.y} x2={l.x2} y2={l.y}
+                stroke={theme.spStops[0]}
+                strokeOpacity="0.85"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+              />
+            ))}
+          </g>
         </svg>
 
         {nodes.map(({ member, x, y, secondaryPartners }) => (
