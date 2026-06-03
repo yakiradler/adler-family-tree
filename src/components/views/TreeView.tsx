@@ -4,11 +4,11 @@ import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang, isRTL, type Translations } from '../../i18n/useT'
 import MemberNode from '../MemberNode'
 import QuickAddRelativeModal, { type RelativeDirection } from '../QuickAddRelativeModal'
-import type { Member } from '../../types'
+import type { Member, Relationship } from '../../types'
 import {
   AVATAR, NODE_W, NODE_H,
-  type LayoutMode, type LayoutNode, type ConnectorPlan,
-  buildLayoutFull,
+  type LayoutMode, type LayoutNode,
+  buildLayout,
 } from './treeLayout'
 import { getParentMap, resolveLineage } from '../../lib/lineage'
 import type { FilterState } from './AdvancedFilter'
@@ -38,43 +38,135 @@ const LAYOUT_THEMES: Record<
 
 // ─── Connectors ──────────────────────────────────────────────────────
 //
-// The layout engine emits a `ConnectorPlan` per family with EXACT
-// geometry — spouse line endpoints, drop-stem coordinates, horizontal
-// rail span, and the centre X of every child stem. The renderer just
-// translates each plan into SVG primitives. No graph walking, no
-// anchor selection, no contour math here — the engine already did it.
+// Clean rewrite paired with the new layout engine. Two kinds of lines:
 //
-// We collapse the structured plans into two flat arrays the existing
-// SVG render loop expects:
-//   • lines (parent-child rail) — flattened paths
-//   • spouseLines               — horizontal segments
+//   1. Spouse line — horizontal segment between the two cards of a
+//      `current` couple, drawn at avatar-midline Y. The cards are
+//      always at the same generation (the engine enforces this), so
+//      the line is purely horizontal and never crosses a row.
+//
+//   2. Parent-child rail — a single SVG path per couple group:
+//        • short vertical from MOTHER's bottom-centre down to the rail
+//        • horizontal rail spanning all of her children's centres
+//          (extended toward the mother if needed so the elbow is
+//          continuous — no "floating" segments)
+//        • short vertical from the rail down to each child's top
+//      The mother is the anchor (with `connector_parent_id` override
+//      respected). Every segment terminates at a card edge — there
+//      are no orphan endpoints in mid-canvas.
+//
+// Both helpers consume LayoutNode positions verbatim and don't try
+// to second-guess the engine.
 
-function plansToConnectors(plans: ConnectorPlan[]) {
-  interface PathLine { d: string }
+function buildConnectors(nodes: LayoutNode[], relationships: Relationship[]) {
+  const byId = new Map(nodes.map((n) => [n.member.id, n]))
+
+  // ── Spouse lines ───────────────────────────────────────────────────
+  // A horizontal segment between the partner avatars at avatar-mid Y.
+  // We endpoint at the EDGE OF EACH AVATAR (not the edge of the card)
+  // so the line reads as connecting the two faces directly. NODE_W is
+  // the logical card slot width (136); the avatar itself (64) sits
+  // centred inside it, so the right-edge of the left avatar is at
+  // x = leftNode.x + (NODE_W + AVATAR) / 2, and the left-edge of the
+  // right avatar is at x = rightNode.x + (NODE_W - AVATAR) / 2.
   interface SpouseLine { x1: number; x2: number; y: number }
-  const lines: PathLine[] = []
   const spouseLines: SpouseLine[] = []
+  const seenSpouse = new Set<string>()
+  for (const r of relationships) {
+    if (r.type !== 'spouse') continue
+    if ((r.status ?? 'current') !== 'current') continue
+    const key = [r.member_a_id, r.member_b_id].sort().join(':')
+    if (seenSpouse.has(key)) continue
+    seenSpouse.add(key)
+    const a = byId.get(r.member_a_id)
+    const b = byId.get(r.member_b_id)
+    if (!a || !b || a.generation !== b.generation) continue
+    const leftNode = a.x < b.x ? a : b
+    const rightNode = a.x < b.x ? b : a
+    spouseLines.push({
+      x1: leftNode.x + (NODE_W + AVATAR) / 2,
+      x2: rightNode.x + (NODE_W - AVATAR) / 2,
+      y: leftNode.y + AVATAR / 2,
+    })
+  }
 
-  for (const plan of plans) {
-    if (plan.spouse) {
-      spouseLines.push({
-        x1: plan.spouse.x1, x2: plan.spouse.x2, y: plan.spouse.y,
-      })
+  // ── Parent-child rails ─────────────────────────────────────────────
+  // Anchor priority for each child:
+  //   1. explicit `member.connector_parent_id` override
+  //   2. mother (parent with gender 'female')
+  //   3. father (parent with gender 'male')
+  //   4. first parent we have a node for
+  const childToParents = new Map<string, string[]>()
+  for (const r of relationships) {
+    if (r.type !== 'parent-child') continue
+    if (!byId.has(r.member_a_id) || !byId.has(r.member_b_id)) continue
+    const list = childToParents.get(r.member_b_id) ?? []
+    if (!list.includes(r.member_a_id)) list.push(r.member_a_id)
+    childToParents.set(r.member_b_id, list)
+  }
+
+  const anchorOf = new Map<string, string>()  // childId → anchorId
+  for (const [childId, parents] of childToParents) {
+    const child = byId.get(childId)!
+    const explicit = child.member.connector_parent_id
+    if (explicit && parents.includes(explicit) && byId.has(explicit)) {
+      anchorOf.set(childId, explicit)
+      continue
     }
-    if (plan.rail) {
-      const { dropTopY, dropBottomY, dropX, railLeftX, railRightX, railY, childStems } = plan.rail
-      // 1. Drop stem — vertical from couple's union centre to rail.
-      lines.push({ d: `M ${dropX} ${dropTopY} L ${dropX} ${dropBottomY}` })
-      // 2. Horizontal rail spanning all child centres. Skip when
-      //    there's only one child (the rail collapses to the same x
-      //    as the drop stem and the single child stem).
-      if (railRightX > railLeftX) {
-        lines.push({ d: `M ${railLeftX} ${railY} L ${railRightX} ${railY}` })
-      }
-      // 3. Child stems — vertical from rail down to each child top.
-      for (const stem of childStems) {
-        lines.push({ d: `M ${stem.x} ${railY} L ${stem.x} ${stem.topY}` })
-      }
+    const mother = parents.find((p) => byId.get(p)?.member.gender === 'female')
+    if (mother) { anchorOf.set(childId, mother); continue }
+    const father = parents.find((p) => byId.get(p)?.member.gender === 'male')
+    if (father) { anchorOf.set(childId, father); continue }
+    anchorOf.set(childId, parents[0])
+  }
+
+  // Group children by their anchor so one rail covers a whole sibling
+  // set rather than one stair-stepped path per child.
+  const childrenByAnchor = new Map<string, string[]>()
+  for (const [childId, anchorId] of anchorOf) {
+    const list = childrenByAnchor.get(anchorId) ?? []
+    list.push(childId)
+    childrenByAnchor.set(anchorId, list)
+  }
+
+  interface PathLine { d: string }
+  const lines: PathLine[] = []
+
+  for (const [anchorId, childIds] of childrenByAnchor) {
+    const anchor = byId.get(anchorId)
+    if (!anchor) continue
+    const children = childIds
+      .map((id) => byId.get(id))
+      .filter((n): n is LayoutNode => n != null)
+    if (children.length === 0) continue
+
+    // Y coordinates: rail sits half-way between mother's bottom and the
+    // children's top. Children are guaranteed by the engine to share
+    // the same Y, but we take the minimum to be safe.
+    const anchorBottomY = Math.round(anchor.y + NODE_H)
+    const childTopY = Math.round(Math.min(...children.map((c) => c.y)))
+    if (childTopY <= anchorBottomY + 2) continue
+    const railY = Math.round((anchorBottomY + childTopY) / 2)
+
+    const anchorCx = Math.round(anchor.x + NODE_W / 2)
+    const childCxs = children.map((c) => Math.round(c.x + NODE_W / 2))
+
+    // 1. Short vertical from anchor's bottom to the rail.
+    lines.push({ d: `M ${anchorCx} ${anchorBottomY} L ${anchorCx} ${railY}` })
+
+    // 2. Horizontal rail. It must reach from the leftmost endpoint
+    //    (either the leftmost child or the anchor if she's further left)
+    //    to the rightmost endpoint, so the elbow under the anchor is
+    //    continuous with the rail above the children.
+    const railLeft = Math.min(anchorCx, ...childCxs)
+    const railRight = Math.max(anchorCx, ...childCxs)
+    if (railRight > railLeft) {
+      lines.push({ d: `M ${railLeft} ${railY} L ${railRight} ${railY}` })
+    }
+
+    // 3. Short vertical from the rail down to each child's top.
+    for (const cx of childCxs) {
+      lines.push({ d: `M ${cx} ${railY} L ${cx} ${childTopY}` })
     }
   }
 
@@ -177,18 +269,12 @@ export default function TreeView({
   const filteredCount = filtered.members.length
   useEffect(() => { onMatchedCount?.(filteredCount) }, [filteredCount, onMatchedCount])
 
-  // buildLayoutFull returns both the LayoutNode list (positions per
-  // member) and the per-family ConnectorPlan list (exact geometry the
-  // renderer should draw). We memo the whole result so both arrays
-  // share one computation.
-  const layoutResult = useMemo(
-    () => buildLayoutFull(filtered.members, filtered.relationships, layoutMode, {
+  const fullNodes = useMemo(
+    () => buildLayout(filtered.members, filtered.relationships, layoutMode, {
       showFormerSpouses: filters.showFormerSpouses,
     }),
     [filtered, layoutMode, filters.showFormerSpouses],
   )
-  const fullNodes = layoutResult.nodes
-  const fullConnectorPlans = layoutResult.connectorPlans
 
   // ── Compact / Wide density ──────────────────────────────────────────
   // "Compact" trims the rendered population to a small window of
@@ -283,53 +369,9 @@ export default function TreeView({
     return visible.map((n) => ({ ...n, y: n.y + yShift }))
   }, [fullNodes, density, windowMin, windowMax, centerGen, extraUp, extraDown])
 
-  // Filter the connector plans to those whose endpoints are still in
-  // the visible window. Each plan's geometry is already correct; we
-  // only need to skip plans whose family members were trimmed out.
-  // The y shift applied to `nodes` for compact mode also needs to be
-  // applied to the plans so the rails line up.
-  const visibleIds = useMemo(() => new Set(nodes.map((n) => n.member.id)), [nodes])
-  const yShiftForPlans = useMemo(() => {
-    if (fullNodes.length === 0 || nodes.length === 0) return 0
-    // Find a member that appears in both lists to derive the shift.
-    const sample = nodes[0]
-    const fullSample = fullNodes.find((n) => n.member.id === sample.member.id)
-    return fullSample ? sample.y - fullSample.y : 0
-  }, [nodes, fullNodes])
-  const visiblePlans = useMemo(() => {
-    return fullConnectorPlans
-      // Density filtering happens via the y-bounds check at the end.
-      .map((plan) => ({
-        spouse: plan.spouse
-          ? { x1: plan.spouse.x1, x2: plan.spouse.x2, y: plan.spouse.y + yShiftForPlans }
-          : undefined,
-        rail: plan.rail
-          ? {
-              ...plan.rail,
-              dropTopY: plan.rail.dropTopY + yShiftForPlans,
-              dropBottomY: plan.rail.dropBottomY + yShiftForPlans,
-              railY: plan.rail.railY + yShiftForPlans,
-              childStems: plan.rail.childStems.map((s) => ({ x: s.x, topY: s.topY + yShiftForPlans })),
-            }
-          : undefined,
-      }))
-      .filter((plan) => {
-        // Drop plans whose entire geometry is outside the visible y
-        // band of `nodes`. We're generous (only drop if obviously
-        // off-screen) so a partial overlap still draws.
-        if (nodes.length === 0) return false
-        const minY = Math.min(...nodes.map((n) => n.y)) - 200
-        const maxY = Math.max(...nodes.map((n) => n.y + NODE_H)) + 200
-        const ys: number[] = []
-        if (plan.spouse) ys.push(plan.spouse.y)
-        if (plan.rail) ys.push(plan.rail.dropTopY, plan.rail.dropBottomY, plan.rail.railY)
-        return ys.some((y) => y >= minY && y <= maxY)
-      }) as ConnectorPlan[]
-  }, [fullConnectorPlans, nodes, yShiftForPlans, visibleIds])
-
   const { lines, spouseLines } = useMemo(
-    () => plansToConnectors(visiblePlans),
-    [visiblePlans],
+    () => buildConnectors(nodes, filtered.relationships),
+    [nodes, filtered.relationships],
   )
   // Reuse the full-population lineage map for per-card rendering — it
   // already covers everyone, including filtered-out parents whose Kohen
