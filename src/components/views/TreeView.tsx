@@ -155,20 +155,32 @@ function buildConnectors(nodes: LayoutNode[], relationships: Relationship[]) {
 
     const childCxs = children.map((c) => Math.round(c.x + NODE_W / 2))
 
-    // 1. Vertical from the source (couple midpoint) down to the rail.
-    lines.push({ d: `M ${sourceX} ${dropTopY} L ${sourceX} ${railY}` })
-
-    // 2. Horizontal rail spanning the source and every child centre so
-    //    the elbow stays continuous with the drop.
-    const railLeft = Math.min(sourceX, ...childCxs)
-    const railRight = Math.max(sourceX, ...childCxs)
-    if (railRight > railLeft) {
-      lines.push({ d: `M ${railLeft} ${railY} L ${railRight} ${railY}` })
-    }
-
-    // 3. Short vertical from the rail into each child's top-centre.
+    // One rounded-corner path per child: down the trunk from the couple
+    // midpoint, a soft elbow into the rail, across to the child's
+    // column, a soft elbow, then down into the child's top-centre.
+    // Children share the trunk x exactly, so the overlapping strokes
+    // read as one continuous comb with rounded corners (per the spec's
+    // rounded-corner mockup). A centred child is a single clean vertical.
+    const CORNER = 10
     for (const cx of childCxs) {
-      lines.push({ d: `M ${cx} ${railY} L ${cx} ${childTopY}` })
+      if (cx === sourceX) {
+        lines.push({ d: `M ${sourceX} ${dropTopY} L ${cx} ${childTopY}` })
+        continue
+      }
+      const dir = cx > sourceX ? 1 : -1
+      const r = Math.max(
+        0,
+        Math.min(CORNER, Math.abs(cx - sourceX) / 2, (railY - dropTopY) / 2, (childTopY - railY) / 2),
+      )
+      lines.push({
+        d:
+          `M ${sourceX} ${dropTopY} ` +
+          `L ${sourceX} ${railY - r} ` +
+          `Q ${sourceX} ${railY} ${sourceX + dir * r} ${railY} ` +
+          `L ${cx - dir * r} ${railY} ` +
+          `Q ${cx} ${railY} ${cx} ${railY + r} ` +
+          `L ${cx} ${childTopY}`,
+      })
     }
   }
 
