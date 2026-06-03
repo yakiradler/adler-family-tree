@@ -47,6 +47,27 @@ function reportSupabaseFailure(op: string, err: unknown, kind: 'read' | 'write' 
   )
 }
 
+// Inserts guarded by member_visible_to() occasionally hit a transient
+// RLS visibility race: a member committed moments earlier isn't yet
+// visible to the policy check on the very next insert, so it's rejected
+// even though the same insert succeeds a beat later. The add-relative
+// flow (create member → immediately link it) is the classic trigger,
+// and a single retry wasn't always enough — the link silently failed
+// and vanished on the next refresh. Retry a few times with growing
+// backoff before giving up.
+async function insertWithRetry<T>(
+  attempt: () => PromiseLike<{ data: T | null; error: unknown }>,
+  delays: number[] = [250, 600, 1200, 2000],
+): Promise<{ data: T | null; error: unknown }> {
+  let res = await attempt()
+  let i = 0
+  while (res.error && i < delays.length) {
+    await new Promise((r) => setTimeout(r, delays[i++]))
+    res = await attempt()
+  }
+  return res
+}
+
 // ─── Relationship tombstones ──────────────────────────────────────────
 // IDs of relationships the user has explicitly deleted in this session
 // (via `deleteRelationship`). `fetchRelationships` consults this set
@@ -366,20 +387,16 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     const localId = `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     const optimistic: Member = { ...payload, id: localId } as Member
     set((s) => ({ members: [...s.members, optimistic] }))
-    // Retry once after a short delay on RLS-flake — same reasoning as
-    // addRelationship: when several members + relationships are added
-    // back-to-back (seedSkeletonFamily), the visibility-check helper
-    // can race the previous tuple's commit and reject.
+    // Demo mode — keep the optimistic row, there's no backend to sync to.
+    if (!isSupabaseConfigured) return optimistic
+
+    // Same transient RLS visibility race as addRelationship: when members
+    // are added back-to-back the visibility-check helper can race the
+    // previous tuple's commit and reject. Retry with growing backoff.
     const tryInsert = () => supabase.from('members').insert(payload).select().single()
     try {
-      let { data, error } = await tryInsert()
-      if (error) {
-        await new Promise((r) => setTimeout(r, 250))
-        const retry = await tryInsert()
-        data = retry.data
-        error = retry.error
-        if (error) reportSupabaseFailure('addMember', error)
-      }
+      const { data, error } = await insertWithRetry(tryInsert)
+      if (error) reportSupabaseFailure('addMember', error)
       if (data) {
         set((s) => ({ members: s.members.map((m) => (m.id === localId ? (data as Member) : m)) }))
         return data as Member
@@ -466,28 +483,26 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     const localId = `rel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     const optimistic: Relationship = { ...rel, id: localId }
     set((s) => ({ relationships: [...s.relationships, optimistic] }))
-    // The relationships RLS calls member_visible_to(uid, member_x) which
-    // queries the members table.  When seedSkeletonFamily fires several
-    // members + relationships in immediate succession, the relationship
-    // INSERT can race ahead of the read-snapshot the visibility helper
-    // sees, returning false even though the members are committed.  We
-    // retry once after a short delay before surfacing the failure — in
-    // practice this rescues the seed flow without changing the RLS.
-    const tryInsert = async () => {
-      return supabase.from('relationships').insert(rel).select().single()
-    }
+    // Demo mode has no backend — the optimistic edge is the source of
+    // truth, so don't attempt (and pointlessly retry) a network insert.
+    if (!isSupabaseConfigured) return
+
+    const rollback = () =>
+      set((s) => ({ relationships: s.relationships.filter((r) => r.id !== localId) }))
+
+    const tryInsert = async () => supabase.from('relationships').insert(rel).select().single()
     try {
-      let { data, error } = await tryInsert()
+      const { data, error } = await insertWithRetry(tryInsert)
       if (error) {
-        await new Promise((r) => setTimeout(r, 250))
-        const retry = await tryInsert()
-        data = retry.data
-        error = retry.error
-        if (error) {
-          // eslint-disable-next-line no-console
-          console.error('[addRelationship] failed after retry:', error, rel)
-          reportSupabaseFailure('addRelationship', error)
-        }
+        // eslint-disable-next-line no-console
+        console.error('[addRelationship] failed after retries:', error, rel)
+        // Roll back the optimistic edge. Leaving it would show a "saved"
+        // link that never reached the server — it vanishes on the next
+        // refresh and silently breaks the tree. Rolling back + the error
+        // toast tells the user the link didn't save so they can retry.
+        rollback()
+        reportSupabaseFailure('addRelationship', error)
+        return
       }
       if (data) {
         set((s) => ({
@@ -496,7 +511,10 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
           ),
         }))
       }
-    } catch (err) { reportSupabaseFailure('addRelationship', err) }
+    } catch (err) {
+      rollback()
+      reportSupabaseFailure('addRelationship', err)
+    }
   },
 
   updateRelationship: async (id, updates) => {
