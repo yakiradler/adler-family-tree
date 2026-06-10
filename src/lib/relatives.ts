@@ -16,7 +16,13 @@ interface LinkRelativeArgs {
  * buttons) and AddMemberModal (the main "+") so both create identical
  * relationships and never leave the new member disconnected.
  *
- *   parent  → the new member is a parent of the anchor
+ *   parent  → the new member is a parent of the anchor. If the anchor
+ *             already has exactly ONE other parent and that parent has
+ *             no current spouse, the two parents are also married
+ *             automatically — adding "אבא" then "אמא" should produce a
+ *             couple, not two disconnected single parents. (Edge cases
+ *             like a second parent after divorce keep manual control:
+ *             with two or more existing parents nothing is auto-married.)
  *   child   → the new member is a child of the anchor
  *   spouse  → the new member is the anchor's current spouse
  *   sibling → the new member inherits all of the anchor's in-tree parents
@@ -33,6 +39,29 @@ export async function linkRelative({
 }: LinkRelativeArgs): Promise<void> {
   if (direction === 'parent') {
     await addRelationship({ type: 'parent-child', member_a_id: created.id, member_b_id: anchor.id })
+    // Auto-marry the two parents of the anchor (common case: the user
+    // adds father, then mother — they expect a couple).
+    const otherParents = relationships
+      .filter((r) => r.type === 'parent-child' && r.member_b_id === anchor.id && r.member_a_id !== created.id)
+      .map((r) => r.member_a_id)
+    const uniqueOthers = [...new Set(otherParents)]
+    if (uniqueOthers.length === 1) {
+      const other = uniqueOthers[0]
+      const otherHasCurrentSpouse = relationships.some(
+        (r) =>
+          r.type === 'spouse' &&
+          (r.status ?? 'current') === 'current' &&
+          (r.member_a_id === other || r.member_b_id === other),
+      )
+      if (!otherHasCurrentSpouse) {
+        await addRelationship({
+          type: 'spouse',
+          member_a_id: other,
+          member_b_id: created.id,
+          status: 'current',
+        })
+      }
+    }
   } else if (direction === 'child') {
     await addRelationship({ type: 'parent-child', member_a_id: anchor.id, member_b_id: created.id })
   } else if (direction === 'spouse') {

@@ -50,7 +50,22 @@ function expiryToIso(choice: ExpiryChoice): string | null {
 
 export default function InviteCodeManager() {
   const { t, lang } = useLang()
-  const [invites, setInvites] = useState<TreeInvite[]>([])
+  // Demo mode (no Supabase) seeds one practise invite at init so the
+  // admin can exercise the flow; live mode starts empty and loads below.
+  const [invites, setInvites] = useState<TreeInvite[]>(() =>
+    SUPABASE_CONFIGURED
+      ? []
+      : [
+          {
+            id: 'demo-1',
+            code: 'ADLER-DEMO1',
+            created_at: new Date(Date.now() - 86_400_000 * 2).toISOString(),
+            expires_at: new Date(Date.now() + 86_400_000 * 28).toISOString(),
+            uses_left: 5,
+            note: lang === 'he' ? 'הזמנה לדוגמה' : 'Demo invite',
+          },
+        ],
+  )
   const [loading, setLoading] = useState(false)
   const [creating, setCreating] = useState(false)
   const [note, setNote] = useState('')
@@ -58,34 +73,19 @@ export default function InviteCodeManager() {
   const [expiry, setExpiry] = useState<ExpiryChoice>('30d')
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
-  // Initial load
+  // Initial load (live mode only — demo mode is seeded at init above).
   useEffect(() => {
-    if (!SUPABASE_CONFIGURED) {
-      // Seed with one demo invite so the admin can practise the flow.
-      setInvites([
-        {
-          id: 'demo-1',
-          code: 'ADLER-DEMO1',
-          created_at: new Date(Date.now() - 86_400_000 * 2).toISOString(),
-          expires_at: new Date(Date.now() + 86_400_000 * 28).toISOString(),
-          uses_left: 5,
-          note: lang === 'he' ? 'הזמנה לדוגמה' : 'Demo invite',
-        },
-      ])
-      return
-    }
-    void load()
+    if (!SUPABASE_CONFIGURED) return
+    void (async () => {
+      setLoading(true)
+      const { data } = await supabase
+        .from('tree_invites')
+        .select('id, code, created_at, expires_at, uses_left, note')
+        .order('created_at', { ascending: false })
+      setInvites((data ?? []) as TreeInvite[])
+      setLoading(false)
+    })()
   }, [])
-
-  async function load() {
-    setLoading(true)
-    const { data } = await supabase
-      .from('tree_invites')
-      .select('id, code, created_at, expires_at, uses_left, note')
-      .order('created_at', { ascending: false })
-    setInvites((data ?? []) as TreeInvite[])
-    setLoading(false)
-  }
 
   const createInvite = async () => {
     setCreating(true)

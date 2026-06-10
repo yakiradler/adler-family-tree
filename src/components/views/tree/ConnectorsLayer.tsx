@@ -41,10 +41,10 @@ export default function ConnectorsLayer({
             <path
               key={`sec-${e.parentId}-${e.childId}`}
               d={e.d}
-              stroke="#8E8E93"
-              strokeOpacity="0.75"
-              strokeWidth="2"
-              strokeDasharray="6 4"
+              stroke="#6C47FF"
+              strokeOpacity="0.55"
+              strokeWidth="2.5"
+              strokeDasharray="7 5"
               fill="none"
               strokeLinecap="round"
               strokeLinejoin="round"

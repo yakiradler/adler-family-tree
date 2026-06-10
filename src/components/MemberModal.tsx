@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang } from '../i18n/useT'
@@ -13,10 +13,16 @@ export default function MemberModal() {
   const [form, setForm] = useState<Partial<Member>>({})
   const photoInputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
+  // Reset the form + leave edit mode whenever a different member object
+  // arrives. Done during render (React's "adjust state during render"
+  // pattern) instead of an effect, so there is no extra committed frame
+  // with the stale form.
+  const [prevMember, setPrevMember] = useState(member)
+  if (member !== prevMember) {
+    setPrevMember(member)
     if (member) setForm(member)
     setEditing(false)
-  }, [member])
+  }
 
   if (!member) return null
 

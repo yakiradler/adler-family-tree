@@ -90,15 +90,15 @@ export interface ParseResult {
 // ─── Lexer helpers ───────────────────────────────────────────────────
 
 const RX_YEAR = /\b(1[89]\d{2}|20\d{2})\b/
-const RX_PAREN = /[\(（](.+?)[\)）]/
+const RX_PAREN = /[(（](.+?)[)）]/
 
 /** Heuristic surname locality — Hebrew "לבית X" / "מבית X" / English "née X". */
-const RX_MAIDEN_HE = /(?:לבית|מבית)\s+([֐-׿\w'\-]+)/
-const RX_MAIDEN_EN = /\bn[eé]e\s+([A-Za-z'\-]+)\b/i
+const RX_MAIDEN_HE = /(?:לבית|מבית)\s+([֐-׿\w'-]+)/
+const RX_MAIDEN_EN = /\bn[eé]e\s+([A-Za-z'-]+)\b/i
 
 /** Match all-Hebrew / all-Latin name-ish tokens. We keep apostrophes
  *  and hyphens so names like "אבן-ארי" / "O'Brien" survive. */
-const RX_NAME_TOKEN = /[֐-׿A-Za-z][֐-׿A-Za-z'\-]+/g
+const RX_NAME_TOKEN = /[֐-׿A-Za-z][֐-׿A-Za-z'-]+/g
 
 /** Words that hint at the surrounding member's role/relation. */
 const ROLE_HINTS = {
@@ -291,7 +291,7 @@ function attachSpouseFromLine(
   ws: Workspace,
 ): void {
   // Hebrew: "נשוי/ה ל-ROMI" or "+ ROMI"
-  const heMarried = line.match(/נשוי\s+ל[־\-]?\s*(.+)|נשואה\s+ל[־\-]?\s*(.+)/)
+  const heMarried = line.match(/נשוי\s+ל[־-]?\s*(.+)|נשואה\s+ל[־-]?\s*(.+)/)
   const heCouple = line.match(/\+\s*(.+)/)
   const enMarried = line.match(/married\s+to\s+(.+)/i)
   const m = heMarried?.[1] ?? heMarried?.[2] ?? heCouple?.[1] ?? enMarried?.[1]

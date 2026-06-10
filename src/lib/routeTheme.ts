@@ -86,18 +86,23 @@ export function useRouteTheme(): RouteTheme {
   return themeForPath(pathname)
 }
 
+/** CSSProperties plus the theme's custom CSS variables — React.CSSProperties
+ *  has no index signature for `--*` keys, so we widen it explicitly. */
+type ThemeStyleVars = React.CSSProperties &
+  Record<'--accent' | '--accent-soft' | '--bg-from' | '--bg-via' | '--bg-to' | '--glow', string>
+
 /** Returns the CSS-variable style object to spread onto the theme wrapper. */
 export function themeStyleVars(theme: RouteTheme): React.CSSProperties {
-  return {
-    // Custom CSS variables — TS doesn't know about these, so cast.
-    ['--accent' as any]: theme.accent,
-    ['--accent-soft' as any]: theme.accentSoft,
-    ['--bg-from' as any]: theme.bgFrom,
-    ['--bg-via' as any]: theme.bgVia,
-    ['--bg-to' as any]: theme.bgTo,
-    ['--glow' as any]: theme.glow,
+  const style: ThemeStyleVars = {
+    '--accent': theme.accent,
+    '--accent-soft': theme.accentSoft,
+    '--bg-from': theme.bgFrom,
+    '--bg-via': theme.bgVia,
+    '--bg-to': theme.bgTo,
+    '--glow': theme.glow,
     background: `linear-gradient(160deg, ${theme.bgFrom} 0%, ${theme.bgVia} 50%, ${theme.bgTo} 100%)`,
     transition:
       'background 600ms cubic-bezier(0.22, 1, 0.36, 1), color 400ms ease',
   }
+  return style
 }

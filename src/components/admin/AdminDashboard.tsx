@@ -6,7 +6,8 @@ import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang, isRTL, type Translations } from '../../i18n/useT'
 import EditMemberModal from '../EditMemberModal'
 import InviteCodeManager from './InviteCodeManager'
-import { getRingGradient, getFallbackGradient, PersonAvatarIcon } from '../MemberNode'
+import { PersonAvatarIcon } from '../MemberNode'
+import { getRingGradient, getFallbackGradient } from '../memberVisuals'
 import type { EditRequest, Member, Profile, UserRole, MasterPermissions, AccessRequest } from '../../types'
 import type { PermissionKey } from '../../lib/permissions'
 
@@ -255,47 +256,50 @@ export default function AdminDashboard() {
     }
   }
 
+  // Store actions are stable zustand references — listing them keeps
+  // exhaustive-deps honest without changing the run-once behaviour.
   useEffect(() => {
     fetchEditRequests()
     if (SUPABASE_CONFIGURED) fetchAccessRequests()
-  }, [])
+  }, [fetchEditRequests, fetchAccessRequests])
 
   const pendingAccess = useMemo(
     () => accessRequests.filter(r => r.status === 'pending'),
     [accessRequests],
   )
 
-  // Fetch users from profiles table (or demo fallback)
+  // Fetch users from profiles table (or demo fallback). The whole body
+  // lives in the async IIFE so no setState runs synchronously inside the
+  // effect (react-hooks/set-state-in-effect).
   useEffect(() => {
-    if (!SUPABASE_CONFIGURED) {
-      // Demo: just the current profile, filtered against any
-      // previously-deleted user ids stored in localStorage so the
-      // delete action actually persists across reloads.
-      if (profile) {
-        let removed: string[] = []
-        try {
-          const raw = window.localStorage.getItem('ft-admin-removed-users')
-          if (raw) removed = JSON.parse(raw) as string[]
-        } catch { /* fall through with empty list */ }
-        if (removed.includes(profile.id)) {
-          setUsers([])
-        } else {
-          setUsers([{
-            ...profile,
-            email: 'demo@familytree.local',
-            created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
-          }])
-        }
-      }
-      return
-    }
     ;(async () => {
+      if (!SUPABASE_CONFIGURED) {
+        // Demo: just the current profile, filtered against any
+        // previously-deleted user ids stored in localStorage so the
+        // delete action actually persists across reloads.
+        if (profile) {
+          let removed: string[] = []
+          try {
+            const raw = window.localStorage.getItem('ft-admin-removed-users')
+            if (raw) removed = JSON.parse(raw) as string[]
+          } catch { /* fall through with empty list */ }
+          if (removed.includes(profile.id)) {
+            setUsers([])
+          } else {
+            setUsers([{
+              ...profile,
+              email: 'demo@familytree.local',
+              created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
+            }])
+          }
+        }
+        return
+      }
       setUsersLoading(true)
       const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
       if (error) {
         // Surface the underlying failure (RLS blocks, missing table)
         // so admins can act on it instead of staring at an empty list.
-        // eslint-disable-next-line no-console
         console.warn('[admin] profiles fetch failed:', error.message)
         setBackendError(error.message)
       } else {
@@ -1180,7 +1184,7 @@ function SpecialAdminControls({
       localStorage.clear()
       sessionStorage.clear()
       if (SUPABASE_CONFIGURED) {
-        try { await supabase.auth.signOut() } catch {}
+        try { await supabase.auth.signOut() } catch { /* best-effort — reload follows anyway */ }
       }
     } finally {
       window.location.reload()

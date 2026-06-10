@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
-import { getRingGradient, getFallbackGradient, PersonAvatarIcon } from './MemberNode'
+import { PersonAvatarIcon } from './MemberNode'
+import { getRingGradient, getFallbackGradient } from './memberVisuals'
 import type { Member, Gender, Lineage } from '../types'
 
 interface Props {
@@ -80,10 +81,14 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
   const profileInputRef = useRef<HTMLInputElement>(null)
   const galleryInputRef = useRef<HTMLInputElement>(null)
 
-  // Reset form each time a new member is opened
-  useEffect(() => {
+  // Reset form each time a new member is opened — done during render
+  // (React's "adjust state during render" pattern) instead of an effect,
+  // so the old member's values never reach a committed frame.
+  const [prevReset, setPrevReset] = useState<{ open: boolean; member: Member }>({ open, member })
+  if (prevReset.open !== open || prevReset.member !== member) {
+    setPrevReset({ open, member })
     if (open) setForm(fromMember(member))
-  }, [open, member])
+  }
 
   const patch = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm(f => ({ ...f, [key]: value }))

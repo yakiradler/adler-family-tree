@@ -21,7 +21,6 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
     navigator.serviceWorker
       .register(swUrl, { scope: import.meta.env.BASE_URL })
       .catch((err) => {
-        // eslint-disable-next-line no-console
         console.warn('[sw] registration failed:', err)
       })
   })

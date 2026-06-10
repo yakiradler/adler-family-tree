@@ -70,6 +70,19 @@ const blank: AnswerState = {
 
 const TOTAL_STEPS = 4
 
+/** Merge the profile's full_name into the answers (split on the first
+ *  space — user can edit either field). Keeps anything already typed. */
+function prefillFromProfile(s: AnswerState, profile: { full_name?: string | null } | null): AnswerState {
+  if (!profile) return s
+  const fullName = profile.full_name ?? ''
+  const [first, ...rest] = fullName.trim().split(/\s+/)
+  return {
+    ...s,
+    firstName: s.firstName || first || '',
+    lastName: s.lastName || rest.join(' '),
+  }
+}
+
 export default function OnboardingWizard() {
   const {
     profile, completeOnboarding, submitAccessRequest,
@@ -78,23 +91,22 @@ export default function OnboardingWizard() {
   const { t, lang } = useLang()
   const navigate = useNavigate()
   const [step, setStep] = useState<Step>(1)
-  const [a, setA] = useState<AnswerState>(blank)
+  // Name prefill happens at init (and re-applies during render if the
+  // profile changes) — the async email lookup stays in the effect below.
+  const [a, setA] = useState<AnswerState>(() => prefillFromProfile(blank, profile))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  // Pre-fill name + email from existing auth state. Splitting full_name on
-  // the first space is a sensible default — user can edit either field.
+  const [prevProfile, setPrevProfile] = useState(profile)
+  if (profile !== prevProfile) {
+    setPrevProfile(profile)
+    setA((s) => prefillFromProfile(s, profile))
+  }
+
   // Email comes from the auth user record (read-only in the UI).
   useEffect(() => {
     if (!profile) return
-    const fullName = profile.full_name ?? ''
-    const [first, ...rest] = fullName.trim().split(/\s+/)
-    setA((s) => ({
-      ...s,
-      firstName: s.firstName || first || '',
-      lastName: s.lastName || rest.join(' '),
-    }))
     void supabase.auth.getUser().then(({ data }) => {
       const e = data.user?.email
       if (e) setA((s) => ({ ...s, email: s.email || e }))

@@ -32,7 +32,6 @@ function reportSupabaseFailure(op: string, err: unknown, kind: 'read' | 'write' 
     err instanceof Error ? err.message
     : typeof err === 'object' && err && 'message' in err ? String((err as { message: unknown }).message)
     : 'unknown'
-  // eslint-disable-next-line no-console
   console.warn(`[supabase ${kind} ${op}]`, err)
 
   if (kind === 'read') return                   // read failure — log only
@@ -439,7 +438,6 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     // (a) Self-edges are always nonsense — refuse them early so a
     //     misclick doesn't poison the relationships table.
     if (rel.member_a_id === rel.member_b_id) {
-      // eslint-disable-next-line no-console
       console.warn('[addRelationship] refusing self-edge', rel)
       return
     }
@@ -467,7 +465,6 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
         }
       }
       if (cycle) {
-        // eslint-disable-next-line no-console
         console.warn(
           '[addRelationship] refusing parent-child edge that would create a cycle',
           rel,
@@ -492,7 +489,6 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     try {
       const { data, error } = await insertWithRetry(tryInsert)
       if (error) {
-        // eslint-disable-next-line no-console
         console.error('[addRelationship] failed after retries:', error, rel)
         // Roll back the optimistic edge. Leaving it would show a "saved"
         // link that never reached the server — it vanishes on the next

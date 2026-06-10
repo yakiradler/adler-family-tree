@@ -38,6 +38,8 @@ export function computeLayout(input: LayoutInput, options: LayoutOptions = {}): 
       bounds: { width: 0, height: 0 },
       generationRows: [],
       issues: [],
+      satelliteUnitIds: [],
+      coupleGaps: {},
     }
   }
 
@@ -108,6 +110,8 @@ export function computeLayout(input: LayoutInput, options: LayoutOptions = {}): 
     },
     generationRows: connectors.generationRows,
     issues,
+    satelliteUnitIds: graph.satellites.map((s) => s.unitId).sort(),
+    coupleGaps: placement.coupleGaps,
   }
 }
 

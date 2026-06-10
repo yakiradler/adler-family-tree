@@ -239,8 +239,44 @@ export function buildFamilyGraph(input: LayoutInput, options: LayoutOptions = {}
     childUnitsOf.set(parentUnit, list)
   }
 
+  // ── In-law satellites ("menorah" placement) ───────────────────────
+  // A parent unit that is itself a ROOT (no parents above it) and whose
+  // tie to the tree is a married-in child gets promoted to a satellite:
+  // it will be placed directly ABOVE that child's card and connected
+  // with a normal solid family rail, instead of floating as a distant
+  // root with a dashed link. One anchor child per unit (first by
+  // sibling order, deterministic); additional married-in children of
+  // the same unit keep dashed links.
+  const satellites: FamilyGraph['satellites'] = []
+  const satelliteAnchorKey = new Set<string>() // `${parentUnit}>${childId}` pairs covered by a rail
+  for (const unit of units) {
+    if (parentUnitOf.has(unit.id)) continue // has its own parents — placed normally
+    const marriedInChildren: Member[] = []
+    for (const pm of unit.members) {
+      for (const c of childrenOf.get(pm.id) ?? []) {
+        if (placementParentOf.get(c) !== pm.id && !unit.members.some((m) => m.id === placementParentOf.get(c))) continue
+        const childUnit = unitById.get(unitOfMember.get(c)!)!
+        if (childUnit.primary.id === c) continue // blood-anchored child — normal rail
+        if (!marriedInChildren.some((m) => m.id === c)) {
+          const cm = memberById.get(c)
+          if (cm) marriedInChildren.push(cm)
+        }
+      }
+    }
+    if (marriedInChildren.length === 0) continue
+    marriedInChildren.sort(compareSiblings)
+    const anchor = marriedInChildren[0]
+    satellites.push({
+      unitId: unit.id,
+      hostUnitId: unitOfMember.get(anchor.id)!,
+      anchorMemberId: anchor.id,
+    })
+    satelliteAnchorKey.add(`${unit.id}>${anchor.id}`)
+  }
+
   // Every raw parent link that the placement tree does NOT cover
   // becomes a dashed secondary edge (deduped to one per parent-unit).
+  // Satellite anchors are excluded — they get a real family rail.
   for (const [childId, ps] of parentsOf) {
     const childUnit = unitById.get(unitOfMember.get(childId)!)!
     const childIsPrimary = childUnit.primary.id === childId
@@ -248,6 +284,7 @@ export function buildFamilyGraph(input: LayoutInput, options: LayoutOptions = {}
     for (const p of [...ps].sort()) {
       const pUnit = unitOfMember.get(p)!
       if (childIsPrimary && pUnit === placementUnit) continue // covered by the family rail
+      if (satelliteAnchorKey.has(`${pUnit}>${childId}`)) continue // covered by a satellite rail
       const key = `${pUnit}>${childId}`
       if (secondaryDedup.has(key)) continue
       secondaryDedup.add(key)
@@ -290,6 +327,7 @@ export function buildFamilyGraph(input: LayoutInput, options: LayoutOptions = {}
     parentUnitOf,
     secondaryParentEdges,
     secondaryPartnersOf,
+    satellites,
     orphanUnitIds,
     issues,
   }

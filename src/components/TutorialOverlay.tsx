@@ -72,12 +72,18 @@ export default function TutorialOverlay({ open, steps, onClose }: Props) {
   const [captionPos, setCaptionPos] = useState<{ top: number; left: number; width: number } | null>(null)
   const captionRef = useRef<HTMLDivElement>(null)
 
-  // Reset to step 0 every time we open + fire onEnter for step 0.
+  // Reset to step 0 every time we open (or the steps array changes) —
+  // adjusted during render; the onEnter side effect stays in the effect
+  // below with the exact same trigger.
+  const [prevReset, setPrevReset] = useState({ open, steps })
+  if (prevReset.open !== open || prevReset.steps !== steps) {
+    setPrevReset({ open, steps })
+    if (open) setStepIndex(0)
+  }
+
+  // Fire onEnter for step 0 on each open.
   useEffect(() => {
-    if (open) {
-      setStepIndex(0)
-      steps[0]?.onEnter?.()
-    }
+    if (open) steps[0]?.onEnter?.()
   }, [open, steps])
 
   // Fire onEnter when stepIndex changes (after the initial open).

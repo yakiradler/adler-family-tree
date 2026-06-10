@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
-import { getRingGradient, getFallbackGradient, PersonAvatarIcon } from './MemberNode'
+import { PersonAvatarIcon } from './MemberNode'
+import { getRingGradient, getFallbackGradient } from './memberVisuals'
 import type { Member } from '../types'
 
 /**
@@ -32,10 +33,18 @@ export default function TreeSearchModal({
   const inputRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
 
-  // Reset + focus on each open.
+  // Reset the query on each open — adjusted during render so the old
+  // query never flashes; the focus timer + Escape listener stay in the
+  // effect below (real external side effects).
+  const [prevOpen, setPrevOpen] = useState(open)
+  if (open !== prevOpen) {
+    setPrevOpen(open)
+    if (open) setQuery('')
+  }
+
+  // Focus on each open.
   useEffect(() => {
     if (!open) return
-    setQuery('')
     const tid = setTimeout(() => inputRef.current?.focus(), 60)
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()

@@ -16,7 +16,7 @@ interface TimelineEvent {
 }
 
 export default function TimelineView() {
-  const { members, relationships, setSelectedMemberId } = useFamilyStore()
+  const { members, setSelectedMemberId } = useFamilyStore()
   const { t, lang } = useLang()
 
   const events = useMemo<TimelineEvent[]>(() => {
@@ -32,13 +32,11 @@ export default function TimelineView() {
       }
     })
     return evts.sort((a, b) => a.year - b.year || (a.month ?? 0) - (b.month ?? 0))
-  }, [members, relationships, t])
+  }, [members, t])
 
   if (events.length === 0) {
     return <div className="flex items-center justify-center h-full pt-20 text-[#8E8E93] text-sf-subhead px-6 text-center">{t.timelineEmpty}</div>
   }
-
-  let lastYear = 0
 
   return (
     <div className="px-5 pt-6 pb-4">
@@ -46,8 +44,10 @@ export default function TimelineView() {
         <div className="absolute left-[28px] top-0 bottom-0 w-px bg-gradient-to-b from-[#007AFF]/40 via-[#5856D6]/30 to-transparent" />
         <div className="space-y-1">
           {events.map((evt, i) => {
-            const showYear = evt.year !== lastYear
-            lastYear = evt.year
+            // Year header renders once per group — events are sorted by
+            // year, so "first event of its year" is exactly the old
+            // mutable lastYear bookkeeping, minus the render-time write.
+            const showYear = i === 0 || evt.year !== events[i - 1].year
             return (
               <motion.div key={`${evt.member.id}-${evt.type}`}>
                 {showYear && (

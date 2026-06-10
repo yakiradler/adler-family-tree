@@ -57,6 +57,11 @@ export function solveGenerations(graph: FamilyGraph): GenerationSolution {
     const cu = graph.unitOfMember.get(childId)
     if (pu && cu) pushEdge(pu, cu, false)
   }
+  // Satellites constrain rows exactly like a real parent link: the
+  // in-law parents must sit one row above their married-in child.
+  for (const { unitId, hostUnitId } of graph.satellites) {
+    pushEdge(unitId, hostUnitId, false)
+  }
 
   // ── Cycle detection (iterative DFS, deterministic order) ──────────
   const childrenByUnit = new Map<UnitId, ConstraintEdge[]>()

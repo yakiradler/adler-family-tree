@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL, type Translations } from '../i18n/useT'
-import { getRingGradient, getFallbackGradient, PersonAvatarIcon } from '../components/MemberNode'
+import { PersonAvatarIcon } from '../components/MemberNode'
+import { getRingGradient, getFallbackGradient } from '../components/memberVisuals'
 import type { Member } from '../types'
 
 interface Props { demoMode: boolean }

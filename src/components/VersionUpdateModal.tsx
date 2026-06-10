@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useVersionCheck } from '../hooks/useVersionCheck'
 import { useLang } from '../i18n/useT'
@@ -86,15 +86,19 @@ export default function VersionUpdateModal() {
   const [open, setOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
 
-  useEffect(() => {
-    if (!updateAvailable || !serverVersion) return
-    if (isDismissed(serverVersion)) return
-    setOpen(true)
-  }, [updateAvailable, serverVersion])
+  // Pop the modal when the version check flips to "update available" —
+  // adjusted during render instead of an effect. useVersionCheck starts
+  // at (false, null), so the transition is always observed.
+  const [prevCheck, setPrevCheck] = useState({ updateAvailable, serverVersion })
+  if (prevCheck.updateAvailable !== updateAvailable || prevCheck.serverVersion !== serverVersion) {
+    setPrevCheck({ updateAvailable, serverVersion })
+    if (updateAvailable && serverVersion && !isDismissed(serverVersion)) setOpen(true)
+  }
 
-  // Generate confetti once per open; memoise on the server version so
-  // a re-render mid-celebration doesn't re-shuffle the falling bits.
-  const confetti = useMemo(() => generateConfetti(28), [serverVersion])
+  // Generate confetti once per mount — generateConfetti ignores its
+  // surroundings, and a re-render mid-celebration must not re-shuffle
+  // the falling bits.
+  const [confetti] = useState(() => generateConfetti(28))
 
   const dismiss = () => {
     if (serverVersion) rememberDismissal(serverVersion)
