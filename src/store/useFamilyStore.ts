@@ -1,9 +1,10 @@
 import { create } from 'zustand'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { canApproveEditRequests, isAdmin } from '../lib/permissions'
+import { gateAddMember, gateAddTree, SIGNUP_GIFT_LEAVES, TRIAL_DAYS } from '../lib/plans'
 import type {
   Member, Relationship, EditRequest, ViewMode, Profile,
-  AccessRequest, UserRole, FamilyTree, MemberNote, FeedbackItem,
+  AccessRequest, UserRole, FamilyTree, MemberNote, FeedbackItem, UserPlan,
 } from '../types'
 
 // Surface Supabase failures to the UI. The "נשמר מקומית — סנכרון
@@ -191,6 +192,13 @@ interface FamilyState {
   addNote: (note: Omit<MemberNote, 'id' | 'created_at'>) => Promise<MemberNote | null>
   updateNote: (id: string, patch: Partial<MemberNote>) => Promise<void>
   deleteNote: (id: string) => Promise<void>
+
+  // ── Subscription plan + leaves (Phase A — see lib/plans.ts) ────────
+  myPlan: UserPlan | null
+  fetchMyPlan: () => Promise<void>
+  /** Atomic leaf charge; true when it went through. */
+  spendLeaves: (cost: number, reason: string) => Promise<boolean>
+  startFamilyTrial: () => Promise<boolean>
 
   // ── Feedback (help "?" → bug report / question to the admin) ───────
   /** Admin-facing list; regular users only ever append via addFeedback. */
@@ -386,6 +394,27 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       reportSupabaseFailure('addMember', new Error('No active tree — pick or create one first'))
       return null
     }
+    // ── Plan gate (non-admins) ───────────────────────────────────────
+    // Free tier: each member beyond the cap costs a leaf; with no
+    // leaves left the add is refused and a global upsell toast fires
+    // (PlanGateToast listens for ft-plan-gate). Admin accounts are
+    // exempt — the owner curates demo/family data without burning
+    // tokens.
+    if (!isAdmin(get().profile)) {
+      const gate = gateAddMember(get().myPlan, get().members.length)
+      if (!gate.allowed) {
+        window.dispatchEvent(new CustomEvent('ft-plan-gate', { detail: { kind: 'members' } }))
+        return null
+      }
+      if (gate.leafCost > 0) {
+        const charged = await get().spendLeaves(gate.leafCost, 'extra-member')
+        if (!charged) {
+          window.dispatchEvent(new CustomEvent('ft-plan-gate', { detail: { kind: 'members' } }))
+          return null
+        }
+      }
+    }
+
     const payload: Omit<Member, 'id'> = { ...member, tree_id: effectiveTreeId }
 
     // Optimistic insert. If Supabase responds with a row we reconcile
@@ -811,6 +840,11 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     set({ activeTreeId: id })
   },
   addTree: async (tree) => {
+    // Plan gate: the free tier includes a single tree (admins exempt).
+    if (!isAdmin(get().profile) && !gateAddTree(get().myPlan, get().trees.length)) {
+      window.dispatchEvent(new CustomEvent('ft-plan-gate', { detail: { kind: 'trees' } }))
+      return null
+    }
     const localId = `tree-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     const optimistic: FamilyTree = { ...tree, id: localId }
     set((s) => ({ trees: [...s.trees, optimistic] }))
@@ -908,6 +942,88 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     set((s) => ({ notes: s.notes.filter((n) => n.id !== id) }))
     try { await supabase.from('member_notes').delete().eq('id', id) } catch (err) {
       reportSupabaseFailure('deleteNote', err)
+    }
+  },
+
+  // ── Subscription plan + leaves ──────────────────────────────────────
+  // Live: all self-service mutations go through SECURITY DEFINER RPCs
+  // (migration 013) so a user can never self-grant a tier or leaves.
+  // Demo: a local plan object, persisted by the App.tsx snapshot.
+  myPlan: null,
+  fetchMyPlan: async () => {
+    if (!isSupabaseConfigured) {
+      if (!get().myPlan) {
+        set({
+          myPlan: {
+            user_id: get().profile?.id ?? 'demo',
+            plan: 'free',
+            leaves: SIGNUP_GIFT_LEAVES,
+            trial_ends_at: null,
+          },
+        })
+      }
+      return
+    }
+    try {
+      const { data, error } = await supabase.rpc('get_my_plan')
+      if (error) {
+        reportSupabaseFailure('fetchMyPlan', error, 'read')
+        return
+      }
+      if (data) set({ myPlan: data as UserPlan })
+    } catch (err) { reportSupabaseFailure('fetchMyPlan', err, 'read') }
+  },
+  spendLeaves: async (cost, reason) => {
+    const cur = get().myPlan
+    if (!isSupabaseConfigured) {
+      if (!cur || cur.leaves < cost) return false
+      set({ myPlan: { ...cur, leaves: cur.leaves - cost } })
+      return true
+    }
+    try {
+      const { data, error } = await supabase.rpc('spend_leaves', { cost, why: reason })
+      if (error) {
+        reportSupabaseFailure('spendLeaves', error)
+        return false
+      }
+      if (typeof data === 'number' && data >= 0) {
+        if (cur) set({ myPlan: { ...cur, leaves: data } })
+        return true
+      }
+      return false // -1 = insufficient balance
+    } catch (err) {
+      reportSupabaseFailure('spendLeaves', err)
+      return false
+    }
+  },
+  startFamilyTrial: async () => {
+    const cur = get().myPlan
+    if (!isSupabaseConfigured) {
+      // Demo: one trial ever — a non-null trial_ends_at means it was used.
+      if (!cur || cur.plan !== 'free' || cur.trial_ends_at) return false
+      set({
+        myPlan: {
+          ...cur,
+          plan: 'family',
+          trial_ends_at: new Date(Date.now() + TRIAL_DAYS * 86_400_000).toISOString(),
+        },
+      })
+      return true
+    }
+    try {
+      const { data, error } = await supabase.rpc('start_family_trial')
+      if (error) {
+        reportSupabaseFailure('startFamilyTrial', error)
+        return false
+      }
+      if (data) {
+        set({ myPlan: data as UserPlan })
+        return true
+      }
+      return false
+    } catch (err) {
+      reportSupabaseFailure('startFamilyTrial', err)
+      return false
     }
   },
 

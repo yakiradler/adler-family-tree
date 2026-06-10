@@ -14,6 +14,8 @@ import BrandMark from '../components/BrandMark'
 import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
 import JoinTreeModal from '../components/JoinTreeModal'
 import SecuritySettingsModal from '../components/security/SecuritySettingsModal'
+import PlanCard from '../components/plan/PlanCard'
+import { LEAF_COSTS } from '../lib/plans'
 import TreeCardActionMenu from '../components/TreeCardActionMenu'
 import { shouldAutoShowTutorial, recordTutorialShown } from '../lib/tutorialState'
 import type { Member, Relationship } from '../types'
@@ -140,6 +142,25 @@ export default function Dashboard({ demoMode }: Props) {
   const [joinTreeOpen, setJoinTreeOpen] = useState(false)
   // Account-security modal (opt-in two-factor) — real backend only.
   const [securityOpen, setSecurityOpen] = useState(false)
+
+  // AI actions cost leaves (subscription Phase A; admins exempt):
+  // confirm the price → atomic charge → open the tool. A failed charge
+  // means an empty balance, surfaced inline.
+  const spendLeaves = useFamilyStore((s) => s.spendLeaves)
+  const openAiAction = async (kind: 'scan' | 'treeFromText') => {
+    const cost = kind === 'scan' ? LEAF_COSTS.aiScan : LEAF_COSTS.aiTreeFromText
+    const open = () => (kind === 'scan' ? setAiScanOpen(true) : setAiTreeFromTextOpen(true))
+    if (isAdmin(profile)) {
+      open()
+      return
+    }
+    if (!window.confirm(t.aiCostConfirm.replace('{n}', String(cost)))) return
+    if (await spendLeaves(cost, kind === 'scan' ? 'ai-scan' : 'ai-tree-from-text')) {
+      open()
+    } else {
+      window.alert(t.aiNoLeaves.replace('{n}', String(cost)))
+    }
+  }
   useEffect(() => {
     if (!shouldAutoShowTutorial(TUTORIAL_KEY)) return
     // small delay so the page paints first
@@ -431,6 +452,9 @@ export default function Dashboard({ demoMode }: Props) {
       </motion.div>
 
       <div className="px-4 space-y-5 max-w-lg mx-auto">
+        {/* ─── MY PLAN (subscription Phase A) ─── */}
+        <PlanCard />
+
         {/* ─── INCOMPLETE-PROFILE BANNER ─── */}
         {!demoMode && profile && !isOnboarded(profile) && (
           <motion.button
@@ -715,14 +739,14 @@ export default function Dashboard({ demoMode }: Props) {
               icon="✨"
               label={t.aiScanTitle}
               gradient="from-[#5E5CE6] to-[#BF5AF2]"
-              onClick={() => setAiScanOpen(true)}
+              onClick={() => openAiAction('scan')}
             />
             <AppTile
               index={3}
               icon="📝"
               label={t.aiTreeFromTextLabel}
               gradient="from-[#FF9F0A] to-[#FF375F]"
-              onClick={() => setAiTreeFromTextOpen(true)}
+              onClick={() => openAiAction('treeFromText')}
               tooltip={t.btfSubtitle}
             />
             <AppTile

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
@@ -208,7 +209,12 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
 
   const dir = rtl ? 'rtl' : 'ltr'
 
-  return (
+  // Portal to <body>: the manager opens from inside MemberPanel, whose
+  // glass styling (backdrop-filter) makes the panel a CONTAINING BLOCK
+  // for fixed-position descendants — so "fixed inset-0" used to mean
+  // "the panel's little box", clipping the picker with no way to scroll
+  // to its confirm button (owner bug report with screenshot).
+  return createPortal(
     <AnimatePresence>
       <motion.div
         key="rel-backdrop"
@@ -224,7 +230,16 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
           exit={{ y: 40, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 420, damping: 32 }}
           onClick={e => e.stopPropagation()}
-          className="relative w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
+          // While the picker overlay is open the sheet needs a FIXED
+          // height: the overlay is absolute inset-0, so its box equals
+          // the sheet's — and the sheet normally sizes to the (short)
+          // tab content BEHIND the overlay. With a short tab the picker's
+          // form spilled past the sheet's overflow-hidden edge and the
+          // confirm button was unreachable, with no scrollbar (owner
+          // bug report with screenshot, desktop).
+          className={`relative w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] ${
+            picker ? 'h-[min(640px,92vh)]' : ''
+          }`}
         >
           {/* Saved-toast — fades in/out for ~2.2s after each successful
               relationship mutation. Anchored at the top so it floats over
@@ -589,7 +604,8 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
           </AnimatePresence>
         </motion.div>
       </motion.div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   )
 }
 

@@ -8,7 +8,7 @@ import EditMemberModal from '../EditMemberModal'
 import InviteCodeManager from './InviteCodeManager'
 import { PersonAvatarIcon } from '../MemberNode'
 import { getRingGradient, getFallbackGradient } from '../memberVisuals'
-import type { EditRequest, Member, Profile, UserRole, MasterPermissions, AccessRequest } from '../../types'
+import type { EditRequest, Member, Profile, UserRole, MasterPermissions, AccessRequest, UserPlan, PlanId } from '../../types'
 import type { PermissionKey } from '../../lib/permissions'
 
 type Tab = 'overview' | 'users' | 'members' | 'requests' | 'access' | 'reports' | 'invites' | 'system'
@@ -91,6 +91,10 @@ export default function AdminDashboard() {
   const [inviteName, setInviteName] = useState('')
   const [inviteRole, setInviteRole] = useState<UserRole>('user')
   const [inviting, setInviting] = useState(false)
+  // Subscription Phase A: per-user plan + leaf balance, editable here
+  // because there's no payment provider yet — the admin IS the
+  // billing system.
+  const [userPlans, setUserPlans] = useState<Record<string, UserPlan>>({})
 
   // ─── CRM actions (work in demo via local state; in live via Supabase) ──
   //
@@ -264,8 +268,56 @@ export default function AdminDashboard() {
     if (SUPABASE_CONFIGURED) {
       fetchAccessRequests()
       fetchFeedback()
+      // Plan rows for the users tab (admin RLS sees all).
+      ;(async () => {
+        const { data } = await supabase.from('user_plans').select('*')
+        if (Array.isArray(data)) {
+          const map: Record<string, UserPlan> = {}
+          for (const row of data as UserPlan[]) map[row.user_id] = row
+          setUserPlans(map)
+        }
+      })()
     }
   }, [fetchEditRequests, fetchAccessRequests, fetchFeedback])
+
+  // Admin-applied tier change (Phase A "billing"): upsert only the
+  // plan column so the leaf balance is untouched.
+  const setUserPlanTier = async (userId: string, plan: PlanId) => {
+    const prev = userPlans
+    setUserPlans((m) => ({
+      ...m,
+      [userId]: { ...(m[userId] ?? { user_id: userId, leaves: 0 }), plan, trial_ends_at: null },
+    }))
+    const { error } = await supabase
+      .from('user_plans')
+      .upsert({ user_id: userId, plan, trial_ends_at: null, updated_at: new Date().toISOString() })
+    if (error) {
+      setUserPlans(prev)
+      reportRlsBlock('update')
+    }
+  }
+
+  const grantLeaves = async (userId: string, amount: number) => {
+    if (!userPlans[userId]) {
+      // No row yet (user never opened the app since the feature
+      // shipped) — create their free row first.
+      await setUserPlanTier(userId, 'free')
+    }
+    const base = userPlans[userId]?.leaves ?? 0
+    setUserPlans((m) => ({
+      ...m,
+      [userId]: { ...(m[userId] ?? { user_id: userId, plan: 'free' as PlanId }), leaves: base + amount },
+    }))
+    const { error } = await supabase
+      .from('user_plans')
+      .update({ leaves: base + amount, updated_at: new Date().toISOString() })
+      .eq('user_id', userId)
+    if (error) {
+      reportRlsBlock('update')
+      return
+    }
+    await supabase.from('leaf_transactions').insert({ user_id: userId, amount, reason: 'admin-grant' })
+  }
 
   const pendingAccess = useMemo(
     () => accessRequests.filter(r => r.status === 'pending'),
@@ -632,19 +684,51 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
               ) : (
                 <div className="space-y-2">
                   {users.map(u => (
-                    <UserRow
-                      key={u.id}
-                      user={u}
-                      t={t}
-                      rtl={rtl}
-                      demo={!SUPABASE_CONFIGURED}
-                      lang={lang}
-                      onRoleChange={changeUserRole}
-                      onToggleActive={toggleUserActive}
-                      onRemove={removeUser}
-                      onRestore={restoreUser}
-                      onMasterPermChange={changeMasterPerm}
-                    />
+                    <div key={u.id} className="space-y-1">
+                      <UserRow
+                        user={u}
+                        t={t}
+                        rtl={rtl}
+                        demo={!SUPABASE_CONFIGURED}
+                        lang={lang}
+                        onRoleChange={changeUserRole}
+                        onToggleActive={toggleUserActive}
+                        onRemove={removeUser}
+                        onRestore={restoreUser}
+                        onMasterPermChange={changeMasterPerm}
+                      />
+                      {/* Subscription controls — the manual "billing
+                          desk" of Phase A. */}
+                      {SUPABASE_CONFIGURED && (
+                        <div className="flex items-center gap-1.5 flex-wrap px-3 py-2 rounded-2xl bg-white/50 border border-white/60">
+                          <span className="text-[10.5px] font-bold text-[#8E8E93]">{t.adminPlanLabel}:</span>
+                          {(['free', 'family', 'premium'] as const).map((p) => (
+                            <button
+                              key={p}
+                              type="button"
+                              onClick={() => setUserPlanTier(u.id, p)}
+                              className={`px-2 py-0.5 rounded-lg text-[10.5px] font-bold transition ${
+                                (userPlans[u.id]?.plan ?? 'free') === p
+                                  ? 'bg-[#007AFF] text-white'
+                                  : 'bg-[#F2F2F7] text-[#636366]'
+                              }`}
+                            >
+                              {p === 'free' ? t.planFree : p === 'family' ? t.planFamily : t.planPremium}
+                            </button>
+                          ))}
+                          <span className="ms-auto text-[10.5px] font-bold text-[#34C759]">
+                            🍃 {userPlans[u.id]?.leaves ?? 0} {t.planLeaves}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => grantLeaves(u.id, 50)}
+                            className="px-2 py-0.5 rounded-lg text-[10.5px] font-bold bg-[#34C759]/12 text-[#34C759]"
+                          >
+                            {t.adminGrantLeaves}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
               )}
