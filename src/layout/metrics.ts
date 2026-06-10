@@ -19,15 +19,26 @@
 export const CARD = {
   /** Card/slot width in px. */
   W: 136,
-  /** Card/slot height in px (avatar ring top → card bottom edge). */
-  H: 126,
+  /**
+   * Card/slot height in px (avatar ring top → card bottom edge).
+   * 134 = ring outer (74) − avatar/card overlap (24) + fixed white-card
+   * body height (84). MemberNode enforces the same numbers, so the
+   * `bottom` anchor is exact for every card regardless of content.
+   */
+  H: 134,
   /** Avatar photo diameter. */
   AVATAR: 64,
   /** Gradient ring thickness around the avatar. */
   RING: 3,
   /** White padding between ring and photo. */
   INNER_PAD: 2,
+  /** How much the avatar ring overlaps the white card below it. */
+  OVERLAP: 24,
 } as const
+
+/** Fixed pixel height of the white card body under the avatar ring. */
+export const CARD_BODY_H =
+  CARD.H - (CARD.AVATAR + 2 * (CARD.RING + CARD.INNER_PAD) - CARD.OVERLAP) // 84
 
 export const GAPS = {
   /** Horizontal gap between sibling subtrees. */

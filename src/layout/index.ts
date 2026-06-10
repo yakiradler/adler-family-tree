@@ -112,7 +112,7 @@ export function computeLayout(input: LayoutInput, options: LayoutOptions = {}): 
 }
 
 // Re-exports: everything a consumer needs comes from 'src/layout'.
-export { CARD, GAPS, AVATAR_CENTER_Y, RING_OUTER_HALF, anchor } from './metrics'
+export { CARD, CARD_BODY_H, GAPS, AVATAR_CENTER_Y, RING_OUTER_HALF, anchor } from './metrics'
 export type { AnchorKind, Point } from './metrics'
 export type {
   FamilyEdge,

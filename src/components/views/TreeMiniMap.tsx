@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import type { LayoutNode } from './treeLayout'
+import { CARD, AVATAR_CENTER_Y, type PlacedNode } from '../../layout'
 
 /**
  * Bird's-eye overview of the tree, parked in the bottom corner.
@@ -34,7 +34,7 @@ const MM_WIDTH_COMPACT = 110
 const MM_MAX_HEIGHT_COMPACT = 80
 
 export interface TreeMiniMapProps {
-  nodes: LayoutNode[]
+  nodes: PlacedNode[]
   canvasW: number
   canvasH: number
   /** Current pan offsets (px) of the main canvas. */
@@ -209,15 +209,13 @@ export default function TreeMiniMap({
           display: 'block',
         }}
       >
-        {/* Dots — one per member. Centre-of-card position so the dot
-            sits where the avatar actually renders. We approximate the
-            avatar centre as NODE_W/2, AVATAR/2 from the layout origin —
-            but the dots are tiny enough that ±a few px doesn't matter. */}
+        {/* Dots — one per member, at the avatar's TRUE centre (shared
+            geometry from src/layout/metrics — no approximation). */}
         {nodes.map((n) => (
           <circle
             key={n.member.id}
-            cx={(n.x + 50) * mmScale}
-            cy={(n.y + 50) * mmScale}
+            cx={(n.x + CARD.W / 2) * mmScale}
+            cy={(n.y + AVATAR_CENTER_Y) * mmScale}
             r={1.6}
             fill={n.member.gender === 'female' ? '#FF7AA8' : '#3D8BFD'}
             opacity={0.85}

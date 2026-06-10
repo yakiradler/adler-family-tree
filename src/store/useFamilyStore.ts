@@ -149,8 +149,6 @@ interface FamilyState {
   // island now exposes a "פריסה" picker that needs to read + write the
   // same value, so it had to come up here. Hydrated from localStorage
   // on first read so a user's preferred layout survives page loads.
-  layoutMode: 'classic' | 'grid' | 'arc' | 'staggered'
-  setLayoutMode: (m: 'classic' | 'grid' | 'arc' | 'staggered') => void
 
   // ── Tree-view floating-controls visibility ─────────────────────────
   // The Focused-Centric / Filters / Density chips at the top of the
@@ -769,7 +767,23 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   // ── Tree viewport implementation ──────────────────────────────────
   treeViewport: { tx: 0, ty: 0, scale: 1, initialised: false },
   setTreeViewport: (patch) =>
-    set((s) => ({ treeViewport: { ...s.treeViewport, ...patch } })),
+    set((s) => {
+      const next = { ...s.treeViewport, ...patch }
+      // Refuse non-finite values — a NaN scale used to freeze the tree.
+      if (![next.tx, next.ty, next.scale].every(Number.isFinite)) return s
+      // Drop epsilon-identical writes so effect→store→effect feedback
+      // loops are structurally impossible.
+      const cur = s.treeViewport
+      if (
+        next.initialised === cur.initialised &&
+        Math.abs(next.tx - cur.tx) < 0.01 &&
+        Math.abs(next.ty - cur.ty) < 0.01 &&
+        Math.abs(next.scale - cur.scale) < 0.0001
+      ) {
+        return s
+      }
+      return { treeViewport: next }
+    }),
   resetTreeViewport: () =>
     set({ treeViewport: { tx: 0, ty: 0, scale: 1, initialised: false } }),
 
@@ -889,19 +903,6 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     try { await supabase.from('member_notes').delete().eq('id', id) } catch (err) {
       reportSupabaseFailure('deleteNote', err)
     }
-  },
-
-  // ── Layout mode (hydrated from localStorage) ───────────────────────
-  layoutMode:
-    typeof window !== 'undefined'
-      ? (() => {
-          const v = window.localStorage.getItem('ft-tree-layout-mode')
-          return v === 'grid' || v === 'arc' || v === 'staggered' ? v : 'classic'
-        })()
-      : 'classic',
-  setLayoutMode: (m) => {
-    try { window.localStorage.setItem('ft-tree-layout-mode', m) } catch { /* ignore */ }
-    set({ layoutMode: m })
   },
 
   // ── Tree-view floating-controls visibility ─────────────────────────

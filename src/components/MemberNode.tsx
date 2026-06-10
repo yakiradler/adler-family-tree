@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import type { Member } from '../types'
 import type { LineageInfo } from '../lib/lineage'
-import type { SecondaryPartner } from './views/treeLayout'
+import { CARD, CARD_BODY_H, type SecondaryPartner } from '../layout'
 import LineageBadge from './LineageBadge'
 import { useLang } from '../i18n/useT'
 // `t` flows through useLang() (which also exposes `lang`); used for the
@@ -158,14 +158,21 @@ export default function MemberNode({
     : member.last_name
 
   const compact = variant === 'compact'
-  const ringThickness = 3
-  const innerPad = 2
+  const ringThickness = CARD.RING
+  const innerPad = CARD.INNER_PAD
   const avatarSize = size
 
   // The card sits partly underneath the avatar, photo overlaps the top edge.
   // Wider card gives each name breathing room so siblings never collide.
   const cardWidth = compact ? avatarSize + 36 : avatarSize + 72
   const overlap = Math.round(avatarSize * 0.38) // how much avatar overlaps card
+
+  // On the main tree (default variant at the engine's avatar size) the
+  // white card body gets an EXACT fixed height so the whole node is
+  // exactly CARD.H tall — the layout engine's `bottom` anchor depends
+  // on it. Other sizes (focused view's compact cards) keep auto height.
+  const fixedBodyHeight =
+    !compact && avatarSize === CARD.AVATAR ? CARD_BODY_H : undefined
 
   return (
     <motion.button
@@ -238,6 +245,7 @@ export default function MemberNode({
           marginTop: -overlap,
           paddingTop: overlap + 8,
           width: cardWidth,
+          height: fixedBodyHeight,
           background: 'linear-gradient(180deg, #FFFFFF 0%, #FAFBFF 100%)',
           boxShadow:
             '0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(17,34,64,0.08), 0 2px 6px rgba(17,34,64,0.05)',

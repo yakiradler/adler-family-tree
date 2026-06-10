@@ -23,16 +23,17 @@
  */
 
 import type { Member } from '../types'
-import type { LayoutNode } from '../components/views/treeLayout'
-import { NODE_W, AVATAR } from '../components/views/treeLayout'
+import type { LayoutResult } from '../layout'
+import { CARD } from '../layout'
+
+const NODE_W = CARD.W
+const AVATAR = CARD.AVATAR
 
 export interface ExportTreeOptions {
-  nodes: LayoutNode[]
-  lines: { d: string }[]
-  spouseLines: { x1: number; x2: number; y: number }[]
-  canvasW: number
-  canvasH: number
-  offsetX: number
+  /** Engine output — nodes, edges and bounds share one coordinate
+   *  space, so the exported lines touch the exported cards exactly
+   *  like they do on screen. */
+  result: LayoutResult
   title?: string
   filename?: string
 }
@@ -169,14 +170,14 @@ function roundRect(
 
 export async function exportTreeAsPNG(opts: ExportTreeOptions): Promise<void> {
   const {
-    nodes, lines, spouseLines,
-    canvasW, canvasH, offsetX,
+    result,
     title = 'InfiniTree',
     filename,
   } = opts
+  const { nodes, edges, bounds } = result
 
-  const W = canvasW + PAD * 2
-  const H = canvasH + PAD * 2 + TITLE_H
+  const W = bounds.width + PAD * 2
+  const H = bounds.height + PAD * 2 + TITLE_H
 
   const canvas = document.createElement('canvas')
   canvas.width = Math.round(W * SCALE)
@@ -214,41 +215,35 @@ export async function exportTreeAsPNG(opts: ExportTreeOptions): Promise<void> {
     TITLE_H - 12,
   )
 
-  // Shift origin into the tree's coordinate space so the cached
-  // layout positions (x, y) drop in unchanged.
+  // Shift origin into the tree's coordinate space so the engine's
+  // positions (x, y) drop in unchanged. Cards and connectors live in
+  // the SAME space — no extra compensation of any kind.
   ctx.translate(PAD, TITLE_H + PAD)
 
-  // Connectors are stored in raw layout coordinates; the cards below
-  // are drawn at `node.x + offsetX`, so shift the connectors by the
-  // same offsetX to keep the lines touching the cards.
-  ctx.save()
-  ctx.translate(offsetX, 0)
-
-  // Parent-child connectors — gradient stroke matching the live
-  // tree's connector palette.
-  ctx.lineWidth = 2.2
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
-  ctx.strokeStyle = '#5E5CE6'
-  for (const line of lines) {
+  for (const edge of edges) {
     try {
-      const path = new Path2D(line.d)
+      const path = new Path2D(edge.d)
+      if (edge.kind === 'spouse') {
+        ctx.strokeStyle = '#FF5EAE'
+        ctx.lineWidth = 1.8
+        ctx.setLineDash([])
+      } else if (edge.kind === 'secondary-parent') {
+        ctx.strokeStyle = '#8E8E93'
+        ctx.lineWidth = 1.6
+        ctx.setLineDash([6, 4])
+      } else {
+        ctx.strokeStyle = '#5E5CE6'
+        ctx.lineWidth = 2.2
+        ctx.setLineDash([])
+      }
       ctx.stroke(path)
     } catch {
       // Malformed path? Skip silently rather than abort the export.
     }
   }
-
-  // Spouse lines — solid accent.
-  ctx.strokeStyle = '#FF5EAE'
-  ctx.lineWidth = 1.8
-  for (const sp of spouseLines) {
-    ctx.beginPath()
-    ctx.moveTo(sp.x1, sp.y)
-    ctx.lineTo(sp.x2, sp.y)
-    ctx.stroke()
-  }
-  ctx.restore()
+  ctx.setLineDash([])
 
   // Load every photo in parallel BEFORE we start drawing cards.
   // Doing it serially per-card would be O(n) network round trips.
@@ -261,9 +256,7 @@ export async function exportTreeAsPNG(opts: ExportTreeOptions): Promise<void> {
   const photos = new Map(photoEntries)
 
   for (const node of nodes) {
-    const x = node.x + offsetX
-    const y = node.y
-    drawCard(ctx, node.member, x, y, photos.get(node.member.id) ?? null)
+    drawCard(ctx, node.member, node.x, node.y, photos.get(node.member.id) ?? null)
   }
 
   // Footer credit — tiny + grey, doesn't compete with the tree.

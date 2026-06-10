@@ -93,16 +93,14 @@ export default function TreePage({ demoMode }: Props) {
         { selector: 'tree-add', title: '➕ הוסף חבר משפחה', body: 'לחיצה תפתח טופס מהיר להוספת חבר משפחה חדש לעץ הפעיל.', side: 'bottom', onEnter: closeChips },
         { selector: 'tree-search', title: '🔍 חיפוש בעץ', body: 'מחפש בן או בת משפחה לפי שם בתוך כל העץ — גם אם הם מחוץ למסך כרגע.', side: 'bottom', onEnter: closeChips },
         { selector: 'tree-switcher', title: '🌿 מעבר בין עצים', body: 'אם יש לכם כמה עצי משפחה (אבא, אמא, בני זוג), אפשר לעבור ביניהם מכאן.', side: 'bottom', onEnter: closeChips },
-        { selector: 'tree-hamburger', title: '☰ אפשרויות תצוגה', body: 'הכפתור הזה פותח שלושה כלים חזקים: סינון מתקדם, מיקוד דינמי, ותצוגה ממוקדת. נראה אותם עכשיו.', side: 'bottom', onEnter: closeChips },
+        { selector: 'tree-hamburger', title: '☰ אפשרויות תצוגה', body: 'הכפתור הזה פותח שני כלים חזקים: סינון מתקדם ומיקוד דינמי. נראה אותם עכשיו.', side: 'bottom', onEnter: closeChips },
         // Steps that highlight the chips REQUIRE the hamburger open.
         { selector: 'tree-chip-filter', title: '🔍 סינון מתקדם', body: 'מסנן את העץ לפי שושלת (כהן/לוי), חיפוש שם, מיקוד באדם, הצגת גרושים/נפטרים ועוד. הסינון תקף גם בתרשים ובציר הזמן.', side: 'bottom', onEnter: openChips },
         { selector: 'tree-chip-focus', title: '🎯 מיקוד דינמי', body: 'תצוגה ממוקדת על אדם אחד ומשפחתו הקרובה (הורים, בני זוג, אחים, ילדים) — נהדר להבין דור אחד.', side: 'bottom', onEnter: openChips },
-        { selector: 'tree-chip-density', title: '▤ תצוגה ממוקדת/מלאה', body: 'ממוקדת מראה רק 3 דורות (הורים+אגו+ילדים) עם חצים להרחיב למעלה/למטה. מלאה מראה את הכל בבת אחת.', side: 'bottom', onEnter: openChips },
-        { selector: 'tree-zoom', title: '🔎 זום + מסך מלא', body: 'הגדלה והקטנה עם הכפתורים — או, חשוב מאוד, עם **שתי אצבעות במגע** (pinch). כפתור הריבועים נכנס למסך מלא.', side: 'left', onEnter: closeChips },
+        { selector: 'tree-zoom', title: '🔎 זום + מסך מלא', body: 'הגדלה והקטנה עם הכפתורים — או, חשוב מאוד, עם **שתי אצבעות במגע** (pinch). כפתור העיגול ממרכז את העץ למסך, וכפתור הריבועים נכנס למסך מלא.', side: 'left', onEnter: closeChips },
         { selector: 'tree-nav-tab-tree', title: '🌳 תצוגת עץ', body: 'התצוגה הגרפית של עץ המשפחה — מה שאתם רואים כרגע. כאן רוב הפעולות.', side: 'top', onEnter: closeChips },
         { selector: 'tree-nav-tab-schematic', title: '📊 תרשים', body: 'תצוגה סכמטית בלוקים — שימושית להבנת מבנה הענפים והעברה ביניהם.', side: 'top', onEnter: closeChips },
         { selector: 'tree-nav-tab-timeline', title: '⏳ ציר זמן', body: 'אירועי המשפחה (לידות, נישואין, פטירות) על ציר כרונולוגי.', side: 'top', onEnter: closeChips },
-        { selector: 'tree-nav-layout', title: '🎨 פריסת העץ', body: 'איך העץ מצויר: קלאסי (אנכי), גריד, קשת, מדורג. כל פריסה מתאימה למצב אחר.', side: 'top', onEnter: closeChips },
       ]
     }
     return [
@@ -110,15 +108,13 @@ export default function TreePage({ demoMode }: Props) {
       { selector: 'tree-add', title: '➕ Add a member', body: 'Opens a quick form to add a new family member.', side: 'bottom', onEnter: closeChips },
       { selector: 'tree-search', title: '🔍 Search', body: 'Find anyone by name — even members off-screen right now.', side: 'bottom', onEnter: closeChips },
       { selector: 'tree-switcher', title: '🌿 Switch trees', body: 'Toggle between linked family trees you belong to.', side: 'bottom', onEnter: closeChips },
-      { selector: 'tree-hamburger', title: '☰ View options', body: 'Opens three power tools: advanced filter, focused mode, density. Let\'s look at them.', side: 'bottom', onEnter: closeChips },
+      { selector: 'tree-hamburger', title: '☰ View options', body: 'Opens two power tools: advanced filter and focused mode. Let\'s look at them.', side: 'bottom', onEnter: closeChips },
       { selector: 'tree-chip-filter', title: '🔍 Advanced filter', body: 'Filter by lineage (Kohen/Levi), name search, focus on a person, hide deceased / former spouses, and more. Applies to schematic + timeline too.', side: 'bottom', onEnter: openChips },
       { selector: 'tree-chip-focus', title: '🎯 Focused mode', body: 'Zooms into one person and their immediate family (parents, spouses, siblings, children).', side: 'bottom', onEnter: openChips },
-      { selector: 'tree-chip-density', title: '▤ Compact / full', body: 'Compact shows just 3 generations with ▲/▼ to grow. Full shows everything at once.', side: 'bottom', onEnter: openChips },
-      { selector: 'tree-zoom', title: '🔎 Zoom + fullscreen', body: 'Zoom with the buttons — or, importantly, with **two-finger pinch** on touch. The arrows-icon opens fullscreen.', side: 'left', onEnter: closeChips },
+      { selector: 'tree-zoom', title: '🔎 Zoom + fullscreen', body: 'Zoom with the buttons — or, importantly, with **two-finger pinch** on touch. The circle icon fits the tree to the screen; the arrows-icon opens fullscreen.', side: 'left', onEnter: closeChips },
       { selector: 'tree-nav-tab-tree', title: '🌳 Tree view', body: 'The visual family tree — what you\'re looking at now. Most actions live here.', side: 'top', onEnter: closeChips },
       { selector: 'tree-nav-tab-schematic', title: '📊 Schematic', body: 'Block-style schematic — great for understanding branch structure.', side: 'top', onEnter: closeChips },
       { selector: 'tree-nav-tab-timeline', title: '⏳ Timeline', body: 'Family events (births, marriages, deaths) on a chronological axis.', side: 'top', onEnter: closeChips },
-      { selector: 'tree-nav-layout', title: '🎨 Layout', body: 'Pick how the tree is drawn: classic, grid, arc, or staggered.', side: 'top', onEnter: closeChips },
     ]
   }, [lang, setTreeControlsExpanded])
 

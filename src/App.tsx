@@ -140,6 +140,12 @@ export default function App() {
       ? ['ft-state-v4', 'ft-state-v3', 'ft-demo-state-v2', 'ft-demo-state-v1']
       : []
 
+    // Settings keys from retired features (fake layout modes, density
+    // toggle) — removed unconditionally so stale prefs don't linger.
+    for (const k of ['ft-tree-layout-mode', 'ft-tree-density']) {
+      try { window.localStorage.removeItem(k) } catch { /* ignore */ }
+    }
+
     // Migrate / hydrate.
     let restored = false
     const tryParse = (raw: string | null) => {
