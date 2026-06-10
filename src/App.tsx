@@ -15,6 +15,7 @@ import InstallPrompt from './components/InstallPrompt'
 import VersionUpdateModal from './components/VersionUpdateModal'
 import DevEnvBanner from './components/DevEnvBanner'
 import MfaChallengeGate from './components/security/MfaChallengeGate'
+import PlanGateToast from './components/plan/PlanGateToast'
 import { ADLER_MEMBERS, ADLER_RELATIONSHIPS, ADLER_TREES } from './data/adlerFamily'
 import { isPendingOnboarding, clearPendingOnboarding } from './lib/pendingOnboarding'
 import type { Profile } from './types'
@@ -28,6 +29,7 @@ const TreePage = lazy(() => import('./pages/TreePage'))
 const BirthdayPage = lazy(() => import('./pages/BirthdayPage'))
 const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'))
 const OnboardingWizard = lazy(() => import('./components/onboarding/OnboardingWizard'))
+const PricingPage = lazy(() => import('./pages/PricingPage'))
 
 const SUPABASE_CONFIGURED =
   !!import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_URL !== ''
@@ -42,7 +44,7 @@ export default function App() {
   // the marketing landing entirely whenever Supabase wasn't configured.
   const [demoEntered, setDemoEntered] = useState(false)
 
-  const { setProfile, fetchMembers, fetchRelationships, fetchEditRequests, fetchTrees } = useFamilyStore()
+  const { setProfile, fetchMembers, fetchRelationships, fetchEditRequests, fetchTrees, fetchMyPlan } = useFamilyStore()
   const { lang } = useLang()
   const dir = isRTL(lang) ? 'rtl' : 'ltr'
 
@@ -188,6 +190,9 @@ export default function App() {
         feedback: (Array.isArray((parsed as { feedback?: unknown }).feedback)
           ? (parsed as { feedback: unknown[] }).feedback
           : []) as never[],
+        // Demo plan object (subscription Phase A) — null lets the
+        // PlanCard's fetchMyPlan synthesize the free-tier default.
+        myPlan: ((parsed as { myPlan?: unknown }).myPlan ?? null) as never,
       })
       restored = true
     }
@@ -257,6 +262,7 @@ export default function App() {
             trees: s.trees,
             notes: s.notes,
             feedback: s.feedback,
+            myPlan: s.myPlan,
           }),
         )
         for (const k of LEGACY_KEYS) window.localStorage.removeItem(k)
@@ -296,7 +302,8 @@ export default function App() {
         state.relationships === prev.relationships &&
         state.trees === prev.trees &&
         state.notes === prev.notes &&
-        state.feedback === prev.feedback
+        state.feedback === prev.feedback &&
+        state.myPlan === prev.myPlan
       ) return
       write()
     })
@@ -367,12 +374,12 @@ export default function App() {
         full_name: session.user.user_metadata?.full_name ?? session.user.email ?? 'User',
         role: 'user',
       })
-      fetchMembers(); fetchRelationships(); fetchEditRequests(); fetchTrees()
+      fetchMembers(); fetchRelationships(); fetchEditRequests(); fetchTrees(); fetchMyPlan()
     }
     load()
     // The store actions are stable zustand references — listing them
     // satisfies exhaustive-deps without changing when the effect runs.
-  }, [session, fetchEditRequests, fetchMembers, fetchRelationships, fetchTrees, setProfile])
+  }, [session, fetchEditRequests, fetchMembers, fetchRelationships, fetchTrees, fetchMyPlan, setProfile])
 
   // ALL hooks must run BEFORE any conditional early return — otherwise
   // React's hook order changes between renders (authLoading flips) and
@@ -490,6 +497,10 @@ export default function App() {
       <VersionUpdateModal />
       <HashRouter>
         <ThemeShell>
+          {/* Plan-limit upsell toast — fed by ft-plan-gate events from
+              the store's addMember/addTree gates. Inside the router so
+              its "see plans" button can navigate. */}
+          <PlanGateToast />
           {/* Suspense boundary for the lazy-loaded routes. The fallback
               mirrors the auth-loading spinner so the visual feel stays
               consistent while a route chunk streams in over the
@@ -513,6 +524,9 @@ export default function App() {
               nudges them when relevant.
             */}
             <Route path="/" element={<Landing />} />
+            {/* Pricing is public — part of the marketing funnel. CTAs
+                inside route unauthenticated visitors to signup. */}
+            <Route path="/pricing" element={<PricingPage isAuth={isAuth} />} />
             <Route
               path="/login"
               element={

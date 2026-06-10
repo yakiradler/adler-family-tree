@@ -173,6 +173,24 @@ export interface EditRequest {
 }
 
 /**
+ * Subscription + token bank (Phase A — no billing; see lib/plans.ts).
+ * One row per auth user in `user_plans`. "Leaves" (עלים) are the
+ * action tokens; every grant/spend is mirrored into leaf_transactions
+ * for auditing.
+ */
+export type PlanId = 'free' | 'family' | 'premium'
+
+export interface UserPlan {
+  user_id: string
+  plan: PlanId
+  /** Set while a self-service family trial is running; expired ⇒ behaves as free. */
+  trial_ends_at?: string | null
+  leaves: number
+  leaves_renewed_at?: string | null
+  updated_at?: string
+}
+
+/**
  * Feedback sent from the help ("?") menu — a bug report or a question
  * addressed to the system admin. Surfaces in the admin dashboard under
  * the "reports" tab; regular users only ever write these, never read
