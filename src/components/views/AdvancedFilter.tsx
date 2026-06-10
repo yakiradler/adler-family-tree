@@ -72,11 +72,13 @@ export default function AdvancedFilter({
     if (!open) return
     const onDoc = (e: MouseEvent) => {
       const target = e.target as HTMLElement
-      if (!target.closest('[data-advanced-filter]')) setOpen(false)
+      // setOpenTreePopover(null) === setOpen(false), but the store setter
+      // is referentially stable so the dependency list stays truthful.
+      if (!target.closest('[data-advanced-filter]')) setOpenTreePopover(null)
     }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
-  }, [open])
+  }, [open, setOpenTreePopover])
 
   return (
     <div

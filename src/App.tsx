@@ -356,7 +356,9 @@ export default function App() {
       fetchMembers(); fetchRelationships(); fetchEditRequests(); fetchTrees()
     }
     load()
-  }, [session])
+    // The store actions are stable zustand references — listing them
+    // satisfies exhaustive-deps without changing when the effect runs.
+  }, [session, fetchEditRequests, fetchMembers, fetchRelationships, fetchTrees, setProfile])
 
   // ALL hooks must run BEFORE any conditional early return — otherwise
   // React's hook order changes between renders (authLoading flips) and

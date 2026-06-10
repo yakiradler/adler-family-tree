@@ -47,6 +47,9 @@ export default function FocusedCentricView({
   const [ty, setTy] = useState(60)
   const dragRef = useRef<{ sx: number; sy: number; tx0: number; ty0: number } | null>(null)
   const isDragging = useRef(false)
+  // Render-facing mirror of dragRef — refs must not be read during
+  // render, and state (unlike the ref) actually re-renders the cursor.
+  const [dragCursor, setDragCursor] = useState(false)
 
   const focusedMembers = useMemo(
     () => buildFocusedSubgraph(focusId, allMembers, allRelationships),
@@ -84,10 +87,15 @@ export default function FocusedCentricView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusId, result])
 
-  useEffect(() => {
+  // Re-root the view when the caller hands us a new focus member —
+  // adjusted during render (state already starts from initialFocusId,
+  // so mount needs no extra pass).
+  const [prevInitialFocusId, setPrevInitialFocusId] = useState(initialFocusId)
+  if (initialFocusId !== prevInitialFocusId) {
+    setPrevInitialFocusId(initialFocusId)
     setFocusId(initialFocusId)
     setNavStack([initialFocusId])
-  }, [initialFocusId])
+  }
 
   const navigateTo = (id: string) => {
     if (id === focusId) {
@@ -109,6 +117,7 @@ export default function FocusedCentricView({
     if ((e.target as HTMLElement).closest('button,input,select')) return
     isDragging.current = false
     dragRef.current = { sx: e.clientX, sy: e.clientY, tx0: tx, ty0: ty }
+    setDragCursor(true)
   }
   const onMouseMove = (e: React.MouseEvent) => {
     if (!dragRef.current) return
@@ -116,7 +125,10 @@ export default function FocusedCentricView({
     setTx(dragRef.current.tx0 + (e.clientX - dragRef.current.sx))
     setTy(dragRef.current.ty0 + (e.clientY - dragRef.current.sy))
   }
-  const onMouseUp = () => { dragRef.current = null }
+  const onMouseUp = () => {
+    dragRef.current = null
+    setDragCursor(false)
+  }
 
   const onWheel = (e: React.WheelEvent) => {
     e.preventDefault()
@@ -267,7 +279,7 @@ export default function FocusedCentricView({
       <div
         ref={wrapRef}
         className="relative flex-1 overflow-hidden"
-        style={{ touchAction: 'none', cursor: dragRef.current ? 'grabbing' : 'grab' }}
+        style={{ touchAction: 'none', cursor: dragCursor ? 'grabbing' : 'grab' }}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}

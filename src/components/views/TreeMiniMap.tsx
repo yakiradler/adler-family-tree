@@ -59,6 +59,10 @@ export default function TreeMiniMap({
 }: TreeMiniMapProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const draggingRef = useRef(false)
+  // Render-facing mirror of draggingRef — refs must not be read during
+  // render; the ref keeps serving the pointer-move guard (state would be
+  // stale in events that fire before the next render).
+  const [dragCursor, setDragCursor] = useState(false)
   // Collapsed state — lets the user dismiss the minimap without
   // affecting any other UI. Persisted in localStorage so refresh
   // honours the previous choice.
@@ -122,6 +126,7 @@ export default function TreeMiniMap({
     if (!svgRef.current) return
     svgRef.current.setPointerCapture(e.pointerId)
     draggingRef.current = true
+    setDragCursor(true)
     const rect = svgRef.current.getBoundingClientRect()
     navigateTo(e.clientX - rect.left, e.clientY - rect.top)
   }
@@ -134,6 +139,7 @@ export default function TreeMiniMap({
     if (!svgRef.current) return
     try { svgRef.current.releasePointerCapture(e.pointerId) } catch { /* already released */ }
     draggingRef.current = false
+    setDragCursor(false)
   }
 
   // Minimap is anchored to the PHYSICAL bottom-left (`left-4`) — the
@@ -202,7 +208,7 @@ export default function TreeMiniMap({
         onPointerCancel={onPointerUp}
         style={{
           touchAction: 'none',
-          cursor: draggingRef.current ? 'grabbing' : 'crosshair',
+          cursor: dragCursor ? 'grabbing' : 'crosshair',
           background:
             'linear-gradient(135deg, rgba(0,122,255,0.05), rgba(50,173,230,0.07))',
           borderRadius: 10,
