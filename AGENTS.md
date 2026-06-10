@@ -38,12 +38,14 @@ src/
 │   ├── Dashboard.tsx             ← /home
 │   ├── TreePage.tsx              ← /tree (search + tree switcher)
 │   └── BirthdayPage.tsx          ← /birthdays
+├── layout/                       ← THE tree layout engine (pure, tested,
+│                                    invariant-checked — see ARCHITECTURE §5)
 ├── components/
 │   ├── views/
-│   │   ├── TreeView.tsx          ← canvas + zoom + connectors + LAYOUT_THEMES
-│   │   ├── treeLayout.ts         ← cluster shapes + placement engine
+│   │   ├── TreeView.tsx          ← thin orchestrator over src/layout
+│   │   ├── tree/                 ← useTreeLayout, useViewport, ConnectorsLayer…
 │   │   ├── AdvancedFilter.tsx    ← lineage/divorces/deceased/search/focus
-│   │   └── applyTreeFilters.ts
+│   │   └── applyTreeFilters.ts   ← behaviour pinned by golden tests
 │   ├── MemberPanel.tsx           ← side panel (right-docked, 360px on md+)
 │   ├── EditMemberModal.tsx       ← member edit (with hide + connector_parent_id)
 │   ├── RelationshipManager.tsx   ← spouse status pills + add/remove rels

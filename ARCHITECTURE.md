@@ -240,23 +240,37 @@ interface MasterPermissions {
 
 ## 5. Tree Layout Engine
 
-קובץ: `src/components/views/treeLayout.ts`
+חבילה: `src/layout/` — מנוע פריסה טהור (אפס תלות בספריות, אפס גישה
+ל-store/DB). נקודת כניסה אחת: `computeLayout({members, relationships},
+options) → LayoutResult`. אותו מנוע משרת את העץ הראשי, את התצוגה
+הממוקדת, את התרשים (דורות בלבד) ואת תצוגת איחוד-העצים העתידית
+(`compose.ts`).
 
-### זרימה:
-1. **`buildParentMap`** — child_id → [parent members]
-2. **`primaryParentOf`** — לכל ילד בוחר הורה ראשי לקיבוץ:
-   `connector_parent_id` (override) → אם → אב → ראשון
-3. **`familyChildrenOf`** — מאחד את הילדים של החבר עם ילדי בן/בת הזוג
-4. **גנרציה** — חישוב fixpoint: דור = max(הורים) + 1
-5. **`layoutRoots`** — שורשים (חברים בלי הורים), מחוברים לבני-זוג
-6. **`subtreeWidth`** — רוחב כל תת-עץ לפי `mode` (cluster shape)
-7. **placement** — DFS שמניח כל תת-עץ במיקום מוחלט
+### קבצים:
+- **`metrics.ts`** — מקור אמת יחיד למידות כרטיס (`CARD`), רווחים
+  (`GAPS`) ונקודות עיגון (`anchor()`). כל צרכן גיאומטריה (MemberNode,
+  ConnectorsLayer, מיני-מפה, ייצוא) מייבא מכאן בלבד.
+- **`buildGraph.ts`** — נרמול: יחידות-זוג (couple units), בחירת ההורה
+  הממקם לכל ילד (`connector_parent_id` → אם → ראשון), בחירת "primary"
+  לזוג דו-שושלתי (יותר אבות-בעץ מנצח), קשרי-הורה משניים (מקווקווים),
+  והנמכת דאטה פגום ל-issues במקום קריסה.
+- **`generations.ts`** — שכבות לפי המסלול-הארוך על DAG היחידות, עם
+  זיהוי מעגלים מפורש (קשת סוגרת מוסרת ומדווחת). בלי לולאות fixpoint,
+  בלי מגבלות איטרציה — סיום מובטח מבנית.
+- **`placement.ts`** — מיקום קונטור בסגנון Reingold-Tilford/Walker:
+  אפס חפיפות מהבנייה, הורים ממורכזים מעל ילדים, פיזור slack סימטרי.
+  אין שום fallback-placement — חבר או ממוקם נכון או מדווח.
+- **`connectors.ts`** — גיאומטריית קווים: קו-זוג רק בין כרטיסים
+  צמודים; מסילות משפחה בנתיבים (lanes) בתוך רצועת הביניים; ניתוב
+  מסדרונות מאומת-פנוי לקשרים חוצי-דורות; פתרון גובה שורות.
+- **`validate.ts`** — 8 אינווריאנטים רצים ב-dev ובטסטים: סופיות,
+  ייחודיות, אפס חפיפות, צמידות זוג, קצוות-על-עיגונים, אפס חציית
+  כרטיסים, שלמות מסילות, סימטריה.
+- **`subgraph.ts` / `selectTreeGraph.ts` / `compose.ts`** — חיתוך
+  תת-גרף ממוקד, בידוד פר-עץ, ותפר איחוד עצים עתידי.
 
-### Cluster shapes (per layout mode):
-- **classic** — שורה אופקית
-- **grid** — עד 5 בשורה, נפרס למטה
-- **arc** — קשת רכה (sweep ≤ 99°, sag ≤ 0.9·NODE_H)
-- **staggered** — לבני (zigzag), gap קטן יותר אופקית
+טסטים: `src/layout/__tests__/` — מחולל משפחות אקראיות (seeded) עד 20
+דורות כולל נישואי בני-דודים ודאטה מעגלי; דטרמיניזם מלא.
 
 קובץ: `src/components/views/applyTreeFilters.ts`
 
@@ -267,15 +281,17 @@ interface MasterPermissions {
 4. `passesSearch` — חיפוש שם
 5. `focusMemberId` — מצמצם לאבות/צאצאים/בני-זוג של חבר ממוקד
 
-### Connectors (`buildConnectors` ב-`TreeView.tsx`):
-- כל ילד מקבל קו מהורה ה-anchor (default: אם)
-- אורתוגונלי: לרדת → אופקי → לרדת לראש כרטיס הילד
+התנהגות הפילטרים מקובעת בטסטים:
+`src/components/views/__tests__/applyTreeFilters.test.ts`
 
-### Per-layout themes (`LAYOUT_THEMES`):
-- classic → כחול / סגול / תכלת
-- grid → אמרלד / ירוק / טורקיז
-- arc → ענבר / כתום / אדום
-- staggered → סגול / מגנטה / טורקיז
+### רנדור (`src/components/views/tree/`):
+- `useTreeLayout` — צינור הנתונים היחיד: scope → filters → engine
+  (+ הרצת validateLayout ב-dev)
+- `useViewport` — pan/zoom: בזמן מחווה ה-transform נכתב ישירות ל-DOM
+  (אפס רינדורים לכל mousemove); commit אטומי ל-store בסוף מחווה עם
+  הגנות NaN ו-epsilon. fit-to-screen הוא חישוב טהור חד-פעמי.
+- `ConnectorsLayer` — מצייר את `result.edges` כפי שהם; אפס גיאומטריה.
+- `IssuesBanner` — בעיות דאטה (מעגלים, כפל בני-זוג…) מדווחות ב-UI.
 
 ### Zoom: `[0.05, 8]` (5%—800%)
 
@@ -350,10 +366,21 @@ src/
 │   ├── Dashboard.tsx            ← /home
 │   ├── TreePage.tsx             ← /tree (search + switcher)
 │   └── BirthdayPage.tsx
+├── layout/                      ← THE layout engine (pure, zero deps)
+│   ├── index.ts                 ← computeLayout() facade + re-exports
+│   ├── metrics.ts               ← card geometry + anchor points (single truth)
+│   ├── buildGraph.ts            ← couple units, placement parents, issues
+│   ├── generations.ts           ← cycle-proof generation solver
+│   ├── placement.ts             ← contour placement (no-overlap by construction)
+│   ├── connectors.ts            ← anchor-exact edges + row Y solver
+│   ├── validate.ts              ← 8 layout invariants (dev + tests)
+│   ├── subgraph.ts / selectTreeGraph.ts / compose.ts
+│   └── __tests__/               ← random-family + invariant tests
 ├── components/
 │   ├── views/
-│   │   ├── TreeView.tsx         ← canvas + zoom + connectors + themes
-│   │   ├── treeLayout.ts        ← cluster shapes + placement engine
+│   │   ├── TreeView.tsx         ← thin orchestrator over the engine
+│   │   ├── tree/                ← useTreeLayout, useViewport, layers
+│   │   ├── FocusedCentricView.tsx ← same engine, 3-gen subgraph
 │   │   ├── AdvancedFilter.tsx
 │   │   └── applyTreeFilters.ts
 │   ├── MemberPanel.tsx          ← side panel (the right-docked one)

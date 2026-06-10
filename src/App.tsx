@@ -27,7 +27,6 @@ const TreePage = lazy(() => import('./pages/TreePage'))
 const BirthdayPage = lazy(() => import('./pages/BirthdayPage'))
 const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'))
 const OnboardingWizard = lazy(() => import('./components/onboarding/OnboardingWizard'))
-const Lab = lazy(() => import('./pages/Lab'))
 
 const SUPABASE_CONFIGURED =
   !!import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_URL !== ''
@@ -526,14 +525,6 @@ export default function App() {
                 : <Navigate to="/home" replace />
               }
             />
-            {/*
-              /lab — experimental playground for the new connector-
-              driven tree editor. Intentionally bypasses auth gates:
-              it has its own isolated local state and no access to
-              real family data, so anyone with the URL can poke at it
-              without risk.
-            */}
-            <Route path="/lab" element={<Lab />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           </Suspense>
