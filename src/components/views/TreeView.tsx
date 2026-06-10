@@ -11,6 +11,7 @@ import FocusedCentricView from './FocusedCentricView'
 import TreeMiniMap from './TreeMiniMap'
 import Tooltip from '../Tooltip'
 import { useTreeLayout } from './tree/useTreeLayout'
+import { useCloseOnBack } from '../../hooks/useCloseOnBack'
 import { useViewport } from './tree/useViewport'
 import ConnectorsLayer from './tree/ConnectorsLayer'
 import IssuesBanner from './tree/IssuesBanner'
@@ -29,9 +30,12 @@ import ExportMenu from './tree/ExportMenu'
 export default function TreeView({
   filters,
   onMatchedCount,
+  onAddFirst,
 }: {
   filters: FilterState
   onMatchedCount?: (n: number) => void
+  /** Opens the add-member flow from the empty-state CTA. */
+  onAddFirst?: () => void
 }) {
   const {
     members: allMembers, relationships,
@@ -82,6 +86,11 @@ export default function TreeView({
       : members
     return pool.slice(0, 10)
   }, [members, pickerQuery])
+  // Phone back button: close the focus picker, or exit focused mode,
+  // instead of navigating off the tree.
+  useCloseOnBack(showFocusPicker, () => setOpenTreePopover(null))
+  useCloseOnBack(isFocusedMode, () => setIsFocusedMode(false))
+
   const enterFocusMode = (id: string) => {
     setActiveFocusId(id)
     setIsFocusedMode(true)
@@ -123,7 +132,7 @@ export default function TreeView({
     return () => ro.disconnect()
   }, [])
 
-  if (members.length === 0) return <EmptyState t={t} treeName={activeTree?.name ?? null} />
+  if (members.length === 0) return <EmptyState t={t} treeName={activeTree?.name ?? null} onAdd={onAddFirst} />
 
   return (
     <div
@@ -394,7 +403,11 @@ export default function TreeView({
   )
 }
 
-function EmptyState({ t, treeName }: { t: Translations; treeName: string | null }) {
+function EmptyState({ t, treeName, onAdd }: {
+  t: Translations
+  treeName: string | null
+  onAdd?: () => void
+}) {
   const title = treeName
     ? t.treeEmptyTitleWithName.replace('{name}', treeName)
     : t.treeEmptyTitle
@@ -413,6 +426,26 @@ function EmptyState({ t, treeName }: { t: Translations; treeName: string | null 
         <h3 className="text-sf-title3 text-[#1C1C1E] mb-1">{title}</h3>
         <p className="text-sf-subhead text-[#8E8E93]">{t.treeEmptyDesc}</p>
       </div>
+      {/* Big central "+" — the empty tree used to offer no obvious way
+          to start; the only entry point was the small + in the top bar,
+          which first-time users missed (owner request: "make starting a
+          new tree easy"). */}
+      {onAdd && (
+        <motion.button
+          type="button"
+          onClick={onAdd}
+          whileTap={{ scale: 0.93 }}
+          aria-label={t.treeEmptyAddFirst}
+          className="mt-2 flex flex-col items-center gap-2 group"
+        >
+          <span className="w-16 h-16 rounded-full bg-gradient-to-br from-[#007AFF] to-[#32ADE6] shadow-lg flex items-center justify-center group-hover:scale-105 transition">
+            <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+              <path d="M13 4v18M4 13h18" stroke="white" strokeWidth="3" strokeLinecap="round" />
+            </svg>
+          </span>
+          <span className="text-sf-subhead font-semibold text-[#007AFF]">{t.treeEmptyAddFirst}</span>
+        </motion.button>
+      )}
     </motion.div>
   )
 }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
+import { useCloseOnBack } from '../hooks/useCloseOnBack'
 import { PersonAvatarIcon } from './MemberNode'
 import { getRingGradient, getFallbackGradient } from './memberVisuals'
 import { canManageRelationships } from '../lib/permissions'
@@ -20,6 +21,8 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
     useFamilyStore()
   const { t, lang } = useLang()
   const rtl = isRTL(lang)
+  // Phone back button closes the manager instead of leaving the page.
+  useCloseOnBack(open, onClose)
   const [tab, setTab] = useState<TabKey>('parents')
   const [picker, setPicker] = useState<RelationshipType | null>(null)
   const [pickerKind, setPickerKind] = useState<'parent' | 'spouse' | 'child' | null>(null)

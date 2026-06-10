@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
+import { useCloseOnBack } from '../hooks/useCloseOnBack'
 import { PersonAvatarIcon } from './MemberNode'
 import { getRingGradient, getFallbackGradient } from './memberVisuals'
 import type { Member } from '../types'
@@ -30,6 +31,8 @@ export default function TreeSearchModal({
   const { members, setSelectedMemberId } = useFamilyStore()
   const { t, lang } = useLang()
   const rtl = isRTL(lang)
+  // Phone back button closes the modal instead of leaving the page.
+  useCloseOnBack(open, onClose)
   const inputRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
 

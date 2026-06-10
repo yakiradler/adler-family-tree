@@ -680,6 +680,70 @@ export const translations = {
     panelCopyToTreeNote: 'הפרטים האישיים יועתקו. קשרים משפחתיים לא יועתקו.',
     panelCopyToTreeDone: 'הועתק בהצלחה!',
     panelCopyToTreeMain: 'עץ ראשי',
+
+    // Empty tree CTA (TreeView)
+    treeEmptyAddFirst: 'הוספת בן המשפחה הראשון',
+
+    // Edit-mode coach mark
+    editCoachTitle: 'מצב עריכה פעיל',
+    editCoachIntro: 'ליד כל כרטיס מופיעים כפתורי + להוספת קרובים:',
+    editCoachParent: 'פלוס למעלה — הוספת אבא או אמא',
+    editCoachChild: 'פלוס למטה — הוספת בן או בת',
+    editCoachSibling: 'פלוס מימין — הוספת אח או אחות',
+    editCoachSpouse: 'פלוס משמאל — הוספת בן או בת זוג',
+    editCoachGotIt: 'הבנתי!',
+
+    // Help menu ("?")
+    helpMenuTooltip: 'עזרה',
+    helpMenuTitle: 'עזרה ותמיכה',
+    helpTour: 'מצב למידה',
+    helpTourDesc: 'סיור מודרך צעד-אחר-צעד על המסך',
+    helpFaq: 'שאלות נפוצות',
+    helpFaqDesc: 'תשובות קצרות לשאלות חוזרות',
+    helpReport: 'דיווח למנהל',
+    helpReportDesc: 'שליחת שאלה או דיווח על תקלה',
+
+    // FAQ
+    faqTitle: 'שאלות נפוצות',
+    faqClose: 'סגור',
+    faqQ1: 'איך מוסיפים בן משפחה חדש?',
+    faqA1: 'לוחצים על כפתור ה-+ הכחול בסרגל העליון, או מפעילים מצב עריכה (כפתור העיפרון למטה) ולוחצים על אחד מכפתורי ה-+ שמופיעים סביב כל כרטיס.',
+    faqQ2: 'איך עורכים פרטים של בן משפחה?',
+    faqA2: 'לוחצים על הכרטיס שלו בעץ — נפתח חלון הפרופיל, ושם לוחצים על כפתור העריכה. אפשר לעדכן שמות, תאריכים, תמונה וסיפור חיים.',
+    faqQ3: 'איך מסמנים גירושין או פטירה?',
+    faqA3: 'גירושין: בחלון הפרופיל נכנסים ל"ניהול קשרים", בוחרים את בן/בת הזוג ומחליפים את הסטטוס ל"גרושים".\nפטירה: בעריכת הפרופיל מוסיפים תאריך פטירה.',
+    faqQ4: 'למה אני לא רואה גרושים בעץ?',
+    faqA4: 'כברירת מחדל בני זוג לשעבר אינם מוצגים, כדי שהעץ יישאר נקי. בסינון המתקדם מפעילים "הצג גירושים" — והם יופיעו כתג קטן ליד בן הזוג לשעבר.',
+    faqQ5: 'איך עוברים בין עצים או יוצרים עץ חדש?',
+    faqA5: 'לוחצים על הכפתור עם הנקודה הצבעונית בסרגל העליון — נפתחת רשימת העצים שלך, ובתחתיתה "צור עץ חדש".',
+    faqQ6: 'איך מתמקדים באדם אחד ובמשפחה הקרובה שלו?',
+    faqA6: 'פותחים את התפריט הצף (כפתור שלושת הקווים) ולוחצים על "מיקוד דינמי". בוחרים אדם — ורואים רק אותו עם ההורים, בני הזוג והילדים שלו.',
+    faqQ7: 'איך מחפשים מישהו בעץ?',
+    faqA7: 'לוחצים על כפתור הזכוכית המגדלת בסרגל העליון ומקלידים שם. לחיצה על תוצאה תקפיץ אתכם אליה בעץ.',
+    faqQ8: 'האם התמונות שאני מעלה נשמרות?',
+    faqA8: 'בשלב זה תמונות שמועלות מהמכשיר נשמרות מקומית בלבד. שמירת תמונות קבועה בענן תתווסף בהמשך.',
+
+    // Feedback (report to admin)
+    feedbackTitle: 'דיווח למנהל המערכת',
+    feedbackDesc: 'ההודעה תישלח ישירות למנהל ותטופל בהקדם.',
+    feedbackCategoryBug: 'דיווח על תקלה',
+    feedbackCategoryQuestion: 'שאלה',
+    feedbackPlaceholderBug: 'מה קרה? תארו מה ניסיתם לעשות ומה השתבש…',
+    feedbackPlaceholderQuestion: 'מה תרצו לשאול?',
+    feedbackSend: 'שליחה',
+    feedbackSent: 'ההודעה נשלחה!',
+    feedbackSentDesc: 'תודה! המנהל יראה את הפנייה במסך הניהול ויטפל בה.',
+
+    // Admin reports tab
+    adminTabReports: 'דיווחים',
+    adminReportsTitle: 'באגים ודיווחים',
+    adminReportsDesc: 'פניות שנשלחו מכפתור העזרה — תקלות ושאלות מהמשתמשים',
+    adminReportsEmpty: 'אין דיווחים כרגע. כל הכבוד!',
+    feedbackStatusResolved: 'טופל',
+    feedbackMarkResolved: 'סמן כטופל',
+    feedbackReopen: 'פתח מחדש',
+    feedbackDelete: 'מחק',
+    feedbackDeleteConfirm: 'למחוק את הדיווח לצמיתות?',
   },
 
   en: {
@@ -1349,6 +1413,70 @@ export const translations = {
     panelCopyToTreeNote: 'Personal details will be copied. Family relationships will not be included.',
     panelCopyToTreeDone: 'Copied successfully!',
     panelCopyToTreeMain: 'Main tree',
+
+    // Empty tree CTA (TreeView)
+    treeEmptyAddFirst: 'Add the first family member',
+
+    // Edit-mode coach mark
+    editCoachTitle: 'Edit mode is on',
+    editCoachIntro: 'Small + buttons now appear around every card:',
+    editCoachParent: '+ above — add a father or mother',
+    editCoachChild: '+ below — add a son or daughter',
+    editCoachSibling: '+ on one side — add a sibling',
+    editCoachSpouse: '+ on the other side — add a spouse',
+    editCoachGotIt: 'Got it!',
+
+    // Help menu ("?")
+    helpMenuTooltip: 'Help',
+    helpMenuTitle: 'Help & support',
+    helpTour: 'Learning mode',
+    helpTourDesc: 'Step-by-step guided tour on screen',
+    helpFaq: 'FAQ',
+    helpFaqDesc: 'Short answers to common questions',
+    helpReport: 'Contact admin',
+    helpReportDesc: 'Send a question or report a bug',
+
+    // FAQ
+    faqTitle: 'Frequently asked questions',
+    faqClose: 'Close',
+    faqQ1: 'How do I add a family member?',
+    faqA1: 'Tap the blue + button in the top bar, or enable edit mode (the pencil button at the bottom) and tap one of the + buttons around any card.',
+    faqQ2: 'How do I edit someone’s details?',
+    faqA2: 'Tap their card on the tree — the profile panel opens; tap the edit button there. You can update names, dates, a photo and a life story.',
+    faqQ3: 'How do I mark a divorce or a death?',
+    faqA3: 'Divorce: open the profile panel → "Manage relationships", pick the spouse and switch the status to "Divorced".\nDeath: add a death date in the profile editor.',
+    faqQ4: 'Why don’t I see divorced spouses on the tree?',
+    faqA4: 'Former spouses are hidden by default to keep the tree clean. Enable "Show divorces" in the advanced filter — they appear as a small badge next to their former partner.',
+    faqQ5: 'How do I switch trees or create a new one?',
+    faqA5: 'Tap the button with the colored dot in the top bar — your tree list opens, with "Create new tree" at the bottom.',
+    faqQ6: 'How do I focus on one person and their close family?',
+    faqA6: 'Open the floating menu (the three-lines button) and tap "Focused mode". Pick a person to see only them with their parents, spouses and children.',
+    faqQ7: 'How do I search for someone?',
+    faqA7: 'Tap the magnifying-glass button in the top bar and type a name. Tapping a result jumps to them on the tree.',
+    faqQ8: 'Are uploaded photos saved permanently?',
+    faqA8: 'For now, photos uploaded from your device are stored locally only. Permanent cloud photo storage is coming later.',
+
+    // Feedback (report to admin)
+    feedbackTitle: 'Report to the admin',
+    feedbackDesc: 'Your message goes directly to the system admin.',
+    feedbackCategoryBug: 'Report a bug',
+    feedbackCategoryQuestion: 'Question',
+    feedbackPlaceholderBug: 'What happened? Describe what you tried and what went wrong…',
+    feedbackPlaceholderQuestion: 'What would you like to ask?',
+    feedbackSend: 'Send',
+    feedbackSent: 'Message sent!',
+    feedbackSentDesc: 'Thanks! The admin will see your report in the admin dashboard.',
+
+    // Admin reports tab
+    adminTabReports: 'Reports',
+    adminReportsTitle: 'Bugs & reports',
+    adminReportsDesc: 'Messages sent from the help button — bugs and user questions',
+    adminReportsEmpty: 'No reports right now. Well done!',
+    feedbackStatusResolved: 'Resolved',
+    feedbackMarkResolved: 'Mark resolved',
+    feedbackReopen: 'Reopen',
+    feedbackDelete: 'Delete',
+    feedbackDeleteConfirm: 'Permanently delete this report?',
   },
 } as const
 

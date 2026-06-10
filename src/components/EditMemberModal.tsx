@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
+import { useCloseOnBack } from '../hooks/useCloseOnBack'
 import { PersonAvatarIcon } from './MemberNode'
 import { getRingGradient, getFallbackGradient } from './memberVisuals'
 import type { Member, Gender, Lineage } from '../types'
@@ -76,6 +77,8 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
   )
   const { t, lang } = useLang()
   const rtl = isRTL(lang)
+  // Phone back button closes the modal instead of leaving the page.
+  useCloseOnBack(open, onClose)
   const [form, setForm] = useState<FormState>(() => fromMember(member))
   const [saving, setSaving] = useState(false)
   const profileInputRef = useRef<HTMLInputElement>(null)

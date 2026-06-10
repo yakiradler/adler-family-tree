@@ -132,16 +132,21 @@ export default function App() {
     // from now-deleted trees ("טסט יקיר" etc.) — the new engine treats
     // every relationship row as authoritative, so we force-flush so the
     // store rehydrates strictly from what RLS returns.
+    // Demo bucket bumps to v7 with the 10-generation pilot seed — a
+    // returning demo visitor must get the new fixture, so the old demo
+    // snapshots are intentionally NOT migrated (no legacy hydration).
     const STORAGE_KEY = demoMode
-      ? 'ft-state-v5'
+      ? 'ft-state-v7'
       : `ft-state-v6-${session?.user?.id ?? 'anon'}`
-    const LEGACY_KEYS = demoMode
-      ? ['ft-state-v4', 'ft-state-v3', 'ft-demo-state-v2', 'ft-demo-state-v1']
-      : []
+    const LEGACY_KEYS: string[] = []
 
-    // Settings keys from retired features (fake layout modes, density
-    // toggle) — removed unconditionally so stale prefs don't linger.
-    for (const k of ['ft-tree-layout-mode', 'ft-tree-density']) {
+    // Keys from retired features + retired demo snapshots — removed
+    // unconditionally so stale data doesn't linger.
+    for (const k of [
+      'ft-tree-layout-mode', 'ft-tree-density',
+      'ft-state-v5', 'ft-state-v4', 'ft-state-v3',
+      'ft-demo-state-v2', 'ft-demo-state-v1',
+    ]) {
       try { window.localStorage.removeItem(k) } catch { /* ignore */ }
     }
 
@@ -178,6 +183,10 @@ export default function App() {
         notes: (Array.isArray((parsed as { notes?: unknown }).notes)
           ? (parsed as { notes: unknown[] }).notes
           : []) as never[],
+        // Same defensive default for `feedback` (help "?" reports).
+        feedback: (Array.isArray((parsed as { feedback?: unknown }).feedback)
+          ? (parsed as { feedback: unknown[] }).feedback
+          : []) as never[],
       })
       restored = true
     }
@@ -198,6 +207,7 @@ export default function App() {
         // branch and show an empty canvas.
         trees: demoMode ? ADLER_TREES : [],
         notes: [],
+        feedback: [],
       })
       // Auto-select the demo tree as active so /tree renders the
       // seed without forcing the user through a tree-picker first.
@@ -245,6 +255,7 @@ export default function App() {
             relationships: s.relationships,
             trees: s.trees,
             notes: s.notes,
+            feedback: s.feedback,
           }),
         )
         for (const k of LEGACY_KEYS) window.localStorage.removeItem(k)
@@ -270,6 +281,7 @@ export default function App() {
                 relationships: s.relationships,
                 trees: s.trees,
                 notes: s.notes,
+                feedback: s.feedback,
               }),
             )
           } catch { /* still won't fit — give up */ }
@@ -282,7 +294,8 @@ export default function App() {
         state.members === prev.members &&
         state.relationships === prev.relationships &&
         state.trees === prev.trees &&
-        state.notes === prev.notes
+        state.notes === prev.notes &&
+        state.feedback === prev.feedback
       ) return
       write()
     })

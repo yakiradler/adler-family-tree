@@ -11,7 +11,7 @@ import { getRingGradient, getFallbackGradient } from '../memberVisuals'
 import type { EditRequest, Member, Profile, UserRole, MasterPermissions, AccessRequest } from '../../types'
 import type { PermissionKey } from '../../lib/permissions'
 
-type Tab = 'overview' | 'users' | 'members' | 'requests' | 'access' | 'invites' | 'system'
+type Tab = 'overview' | 'users' | 'members' | 'requests' | 'access' | 'reports' | 'invites' | 'system'
 
 const ROLE_OPTIONS: { key: UserRole; icon: string; labelKey: 'adminRoleGuest' | 'adminRoleUser' | 'adminRoleMaster' | 'adminRoleAdmin' }[] = [
   { key: 'guest',  icon: '👤', labelKey: 'adminRoleGuest' },
@@ -59,6 +59,7 @@ export default function AdminDashboard() {
     editRequests, fetchEditRequests, approveEditRequest, rejectEditRequest,
     members, deleteMember, profile,
     accessRequests, fetchAccessRequests, decideAccessRequest, updateProfileById,
+    feedback, fetchFeedback, updateFeedback, deleteFeedback,
   } = useFamilyStore()
   const { t, lang } = useLang()
   const rtl = isRTL(lang)
@@ -260,8 +261,11 @@ export default function AdminDashboard() {
   // exhaustive-deps honest without changing the run-once behaviour.
   useEffect(() => {
     fetchEditRequests()
-    if (SUPABASE_CONFIGURED) fetchAccessRequests()
-  }, [fetchEditRequests, fetchAccessRequests])
+    if (SUPABASE_CONFIGURED) {
+      fetchAccessRequests()
+      fetchFeedback()
+    }
+  }, [fetchEditRequests, fetchAccessRequests, fetchFeedback])
 
   const pendingAccess = useMemo(
     () => accessRequests.filter(r => r.status === 'pending'),
@@ -485,6 +489,7 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
             ['members', t.adminTabMembers, '🌳'],
             ['requests', t.adminTabRequests, '🔔'],
             ['access', t.adminTabAccess, '🚪'],
+            ['reports', t.adminTabReports, '🐞'],
             ['invites', t.adminTabInvites, '🔑'],
             ['system', t.adminTabSystem, '⚙️'],
           ] as const).map(([key, label, icon]) => (
@@ -733,6 +738,77 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
                       onApprove={(role) => decideAccessRequest(req.id, 'approved', role)}
                       onReject={() => decideAccessRequest(req.id, 'rejected')}
                     />
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {tab === 'reports' && (
+            <motion.div
+              key="reports"
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}
+              className="space-y-3"
+            >
+              <SectionHeader title={t.adminReportsTitle} desc={t.adminReportsDesc} />
+              {feedback.length === 0 ? (
+                <EmptyBlock icon="📭" text={t.adminReportsEmpty} />
+              ) : (
+                <div className="space-y-2">
+                  {feedback.map((f) => (
+                    <div
+                      key={f.id}
+                      className={`glass-strong rounded-3xl p-4 shadow-glass space-y-2 ${
+                        f.status === 'resolved' ? 'opacity-60' : ''
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`px-2 py-0.5 rounded-full text-[10.5px] font-bold ${
+                          f.category === 'bug'
+                            ? 'bg-[#FF3B30]/12 text-[#FF3B30]'
+                            : 'bg-[#5E5CE6]/12 text-[#5E5CE6]'
+                        }`}>
+                          {f.category === 'bug' ? t.feedbackCategoryBug : t.feedbackCategoryQuestion}
+                        </span>
+                        <span className="text-[11.5px] font-semibold text-[#1C1C1E]">{f.author_name}</span>
+                        <span className="text-[10.5px] text-[#8E8E93]" dir="ltr">
+                          {new Date(f.created_at).toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-US', {
+                            day: 'numeric', month: 'short', year: 'numeric',
+                          })}
+                        </span>
+                        {f.status === 'resolved' && (
+                          <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-[#34C759]/12 text-[#34C759]">
+                            {t.feedbackStatusResolved}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[13px] text-[#3C3C43] leading-relaxed whitespace-pre-line">{f.body}</p>
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => updateFeedback(f.id, {
+                            status: f.status === 'resolved' ? 'open' : 'resolved',
+                          })}
+                          className={`px-3 py-1.5 rounded-xl text-[11.5px] font-bold transition ${
+                            f.status === 'resolved'
+                              ? 'bg-[#F2F2F7] text-[#636366]'
+                              : 'bg-[#34C759] text-white'
+                          }`}
+                        >
+                          {f.status === 'resolved' ? t.feedbackReopen : t.feedbackMarkResolved}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(t.feedbackDeleteConfirm)) deleteFeedback(f.id)
+                          }}
+                          className="px-3 py-1.5 rounded-xl text-[11.5px] font-bold text-[#FF3B30] hover:bg-[#FF3B30]/8 transition"
+                        >
+                          {t.feedbackDelete}
+                        </button>
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}

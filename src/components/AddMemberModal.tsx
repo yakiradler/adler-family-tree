@@ -2,6 +2,7 @@ import { useState, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang } from '../i18n/useT'
+import { useCloseOnBack } from '../hooks/useCloseOnBack'
 import type { Gender, Lineage } from '../types'
 import { linkRelative, type RelativeDirection } from '../lib/relatives'
 
@@ -16,6 +17,8 @@ export default function AddMemberModal({ open, onClose }: Props) {
     members, selectedMemberId, profile, activeTreeId,
   } = useFamilyStore()
   const { t, lang } = useLang()
+  // Phone back button closes the modal instead of leaving the page.
+  useCloseOnBack(open, onClose)
   const [form, setForm] = useState({ first_name: '', last_name: '', maiden_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '' as Gender | '', birth_order: '', lineage: '' as Lineage | '' })
   const [loading, setLoading] = useState(false)
   const photoInputRef = useRef<HTMLInputElement>(null)

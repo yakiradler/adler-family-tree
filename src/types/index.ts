@@ -173,6 +173,28 @@ export interface EditRequest {
 }
 
 /**
+ * Feedback sent from the help ("?") menu — a bug report or a question
+ * addressed to the system admin. Surfaces in the admin dashboard under
+ * the "reports" tab; regular users only ever write these, never read
+ * others'. `author_name` is denormalised like MemberNote's so the row
+ * stays meaningful even if the profile is renamed or deleted.
+ */
+export type FeedbackCategory = 'bug' | 'question'
+export type FeedbackStatus = 'open' | 'resolved'
+
+export interface FeedbackItem {
+  id: string
+  author_id: string
+  author_name: string
+  category: FeedbackCategory
+  body: string
+  /** Where the report was sent from (route hash) — helps reproduce. */
+  context?: string | null
+  status: FeedbackStatus
+  created_at: string
+}
+
+/**
  * Note left on a member's profile by a family-tree user — short
  * `comment` (a few sentences) or longer `memory` (anecdote / story).
  * Both render in the same Notes tab; `kind` only changes the visual
