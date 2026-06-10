@@ -6,9 +6,8 @@ import { useLang } from '../../i18n/useT'
 import { buildFocusedSubgraph, type FocusedMember } from './buildFocusedSubgraph'
 import { CARD, CARD_BODY_H, computeLayout } from '../../layout'
 import ConnectorsLayer from './tree/ConnectorsLayer'
-import {
-  getFallbackGradient, getRingGradient, getRingShadow, PersonAvatarIcon,
-} from '../MemberNode'
+import { PersonAvatarIcon } from '../MemberNode'
+import { getFallbackGradient, getRingGradient, getRingShadow } from '../memberVisuals'
 
 const PAD = 72
 

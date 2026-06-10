@@ -4,53 +4,13 @@ import { useLang, isRTL } from '../../i18n/useT'
 import { useFamilyStore } from '../../store/useFamilyStore'
 import type { Member, Relationship } from '../../types'
 import { findFamilyPath } from './findFamilyPath'
+import { DEFAULT_FILTERS, isDefaultFilter, type FilterState } from './filterState'
 
-/**
- * Advanced filter state for the tree view. Filters apply BEFORE the
- * layout engine — filtered-out members + their dangling relationships are
- * stripped, so the resulting tree only contains matches. This keeps the
- * tree compact when zooming in on a sub-population.
- */
-export interface FilterState {
-  lineage: 'all' | 'kohen' | 'levi'
-  showFormerSpouses: boolean
-  hideDeceased: boolean
-  /** Surface members manually flagged `hidden` so the user can review
-   *  and restore them — Instagram blocked-list pattern. Off by default. */
-  showHidden: boolean
-  search: string
-  /** When set, only this member's blood line (ancestors + descendants) renders. */
-  focusMemberId: string | null
-  /** "Family path" mode — when both ids are set, the tree narrows to
-   *  the shortest chain of relations that connects them, so the user
-   *  can see at a glance how two people in the family are related. */
-  pathFromId: string | null
-  pathToId: string | null
-}
-
-export const DEFAULT_FILTERS: FilterState = {
-  lineage: 'all',
-  showFormerSpouses: false,
-  hideDeceased: false,
-  showHidden: false,
-  search: '',
-  focusMemberId: null,
-  pathFromId: null,
-  pathToId: null,
-}
-
-export function isDefaultFilter(f: FilterState): boolean {
-  return (
-    f.lineage === 'all' &&
-    !f.showFormerSpouses &&
-    !f.hideDeceased &&
-    !f.showHidden &&
-    f.search.trim() === '' &&
-    f.focusMemberId === null &&
-    f.pathFromId === null &&
-    f.pathToId === null
-  )
-}
+// The filter model (FilterState / DEFAULT_FILTERS / isDefaultFilter) lives
+// in ./filterState — only the TYPE may be re-exported from this component
+// file without breaking fast refresh. Existing type-only importers keep
+// working; value importers go straight to ./filterState.
+export type { FilterState } from './filterState'
 
 export default function AdvancedFilter({
   filters,

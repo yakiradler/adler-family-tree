@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
-import { getRingGradient, getFallbackGradient, PersonAvatarIcon } from './MemberNode'
+import { PersonAvatarIcon } from './MemberNode'
+import { getRingGradient, getFallbackGradient } from './memberVisuals'
 import type { Member, Gender, Lineage } from '../types'
 
 interface Props {
