@@ -14,6 +14,7 @@ import PersistenceIndicator from './components/PersistenceIndicator'
 import InstallPrompt from './components/InstallPrompt'
 import VersionUpdateModal from './components/VersionUpdateModal'
 import DevEnvBanner from './components/DevEnvBanner'
+import MfaChallengeGate from './components/security/MfaChallengeGate'
 import { ADLER_MEMBERS, ADLER_RELATIONSHIPS, ADLER_TREES } from './data/adlerFamily'
 import { isPendingOnboarding, clearPendingOnboarding } from './lib/pendingOnboarding'
 import type { Profile } from './types'
@@ -413,6 +414,32 @@ export default function App() {
     }
   }, [profile])
 
+  // ── MFA assurance gate ─────────────────────────────────────────────
+  // A password login on an account with a verified TOTP factor yields
+  // an AAL1 session that must be upgraded to AAL2. The gate replaces
+  // the ENTIRE router until the code is entered, so enforcement can't
+  // be bypassed by typing a URL. Reset-on-session-change is adjusted
+  // during render (react-hooks v7 forbids sync setState in effects);
+  // the async AAL probe sets state from its callback, which is fine.
+  const [mfaGate, setMfaGate] = useState(false)
+  const [prevSession, setPrevSession] = useState<Session | null>(session)
+  if (session !== prevSession) {
+    setPrevSession(session)
+    setMfaGate(false)
+  }
+  useEffect(() => {
+    if (!SUPABASE_CONFIGURED || !session) return
+    let cancelled = false
+    supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+      .then(({ data }) => {
+        if (!cancelled && data) {
+          setMfaGate(data.nextLevel === 'aal2' && data.currentLevel !== 'aal2')
+        }
+      })
+      .catch(() => { /* AAL probe failed — don't lock the user out */ })
+    return () => { cancelled = true }
+  }, [session])
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-mesh-gradient flex items-center justify-center">
@@ -421,6 +448,16 @@ export default function App() {
           transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
           className="w-8 h-8 border-2 border-[#007AFF]/20 border-t-[#007AFF] rounded-full"
         />
+      </div>
+    )
+  }
+
+  // Second-factor wall — see the mfaGate block above for why this
+  // renders INSTEAD of the router.
+  if (SUPABASE_CONFIGURED && session && mfaGate) {
+    return (
+      <div dir={dir}>
+        <MfaChallengeGate onVerified={() => setMfaGate(false)} />
       </div>
     )
   }

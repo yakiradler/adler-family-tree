@@ -306,7 +306,9 @@ export default function TreeView({
           chip (144 + ~40px chip + gap). */}
       {members.length > 0 && treeControlsExpanded && (
         <div
-          className="absolute z-20 no-print"
+          // Same open-state z bump as the filter chip: the person picker
+          // must paint above the "?" help chip below it.
+          className={`absolute no-print ${showFocusPicker ? 'z-[60]' : 'z-20'}`}
           style={{ top: 196, [rtl ? 'left' : 'right']: 12 } as React.CSSProperties}
           data-tour="tree-chip-focus"
         >

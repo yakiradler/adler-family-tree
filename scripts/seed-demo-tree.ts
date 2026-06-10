@@ -5,7 +5,11 @@
  *
  * Usage:
  *   npx tsx scripts/seed-demo-tree.ts --tree "משפחת אדלר" --dry-run
- *   npx tsx scripts/seed-demo-tree.ts --tree "משפחת אדלר" --yes
+ *   npx tsx scripts/seed-demo-tree.ts --tree "משפחת אדלר" --rename-to "עץ דמו" --yes
+ *
+ * --rename-to also renames the tree itself (and refreshes its
+ * description/color to the demo branding) — used when the live demo
+ * tree's old name must be freed up for the real family tree.
  *
  * What it does (inside ONE transaction):
  *   1. Resolves the target tree by name (must match exactly one row).
@@ -31,6 +35,7 @@ function argValue(flag: string): string | null {
   return i >= 0 && args[i + 1] ? args[i + 1] : null
 }
 const treeName = argValue('--tree')
+const renameTo = argValue('--rename-to')
 const dryRun = args.includes('--dry-run')
 const confirmed = args.includes('--yes')
 
@@ -137,12 +142,24 @@ try {
   console.log(`  current members: ${existing.rows[0].n} → will be replaced by ${ADLER_MEMBERS.length} seed members`)
   console.log(`  owner (created_by for new rows): ${ownerId}`)
 
+  if (renameTo) console.log(`  tree will be renamed to "${renameTo}"`)
+
   if (dryRun) {
     console.log('--dry-run: no changes made.')
     process.exit(0)
   }
 
   await c.query('begin')
+
+  if (renameTo) {
+    await c.query(
+      `update public.family_trees
+          set name = $1, description = $2, color = $3
+        where id = $4`,
+      [renameTo, '10 דורות — נתוני הדגמה מלאים', '#007AFF', treeId],
+    )
+    console.log(`  renamed tree to "${renameTo}"`)
+  }
 
   // 2) Clear the old population. Relationships cascade from members,
   //    but delete them explicitly first so cross-tree edges (if any)

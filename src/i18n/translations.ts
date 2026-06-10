@@ -744,6 +744,28 @@ export const translations = {
     feedbackReopen: 'פתח מחדש',
     feedbackDelete: 'מחק',
     feedbackDeleteConfirm: 'למחוק את הדיווח לצמיתות?',
+
+    // Social sign-in
+    authOrDivider: 'או',
+    authContinueWithGoogle: 'המשך עם Google',
+
+    // Account security / two-factor (TOTP)
+    securityTitle: 'אבטחת חשבון',
+    securityDemoNote: 'אימות דו-שלבי זמין רק בחשבון אמיתי, לא במצב הדגמה.',
+    mfaIntro: 'אימות דו-שלבי מוסיף שכבת הגנה לחשבון: אחרי הסיסמה תתבקשו להזין קוד מתחלף מאפליקציית אימות בטלפון.',
+    mfaEnabled: 'אימות דו-שלבי פעיל',
+    mfaEnable: 'הפעלת אימות דו-שלבי',
+    mfaDisable: 'כיבוי אימות דו-שלבי',
+    mfaDisableConfirm: 'לכבות את האימות הדו-שלבי? החשבון יהיה מוגן בסיסמה בלבד.',
+    mfaScanQr: 'סרקו את הקוד עם אפליקציית אימות (Google Authenticator, Authy וכדומה) והזינו את הקוד בן 6 הספרות שמופיע בה.',
+    mfaManualKey: 'מפתח להזנה ידנית',
+    mfaCodePlaceholder: '123456',
+    mfaVerifyAndEnable: 'אימות והפעלה',
+    mfaCodeWrong: 'קוד שגוי — נסו שוב',
+    mfaGateTitle: 'אימות דו-שלבי',
+    mfaGateDesc: 'החשבון מוגן. הזינו את הקוד מאפליקציית האימות כדי להמשיך.',
+    mfaGateSubmit: 'אישור',
+    mfaGateCancel: 'התנתקות',
   },
 
   en: {
@@ -1477,6 +1499,28 @@ export const translations = {
     feedbackReopen: 'Reopen',
     feedbackDelete: 'Delete',
     feedbackDeleteConfirm: 'Permanently delete this report?',
+
+    // Social sign-in
+    authOrDivider: 'or',
+    authContinueWithGoogle: 'Continue with Google',
+
+    // Account security / two-factor (TOTP)
+    securityTitle: 'Account security',
+    securityDemoNote: 'Two-factor authentication is available on real accounts only, not in demo mode.',
+    mfaIntro: 'Two-factor authentication adds a protection layer: after your password you will be asked for a rotating code from an authenticator app on your phone.',
+    mfaEnabled: 'Two-factor authentication is on',
+    mfaEnable: 'Enable two-factor authentication',
+    mfaDisable: 'Disable two-factor authentication',
+    mfaDisableConfirm: 'Disable two-factor authentication? Your account will be protected by password only.',
+    mfaScanQr: 'Scan the code with an authenticator app (Google Authenticator, Authy, etc.) and enter the 6-digit code it shows.',
+    mfaManualKey: 'Manual entry key',
+    mfaCodePlaceholder: '123456',
+    mfaVerifyAndEnable: 'Verify & enable',
+    mfaCodeWrong: 'Wrong code — try again',
+    mfaGateTitle: 'Two-factor authentication',
+    mfaGateDesc: 'This account is protected. Enter the code from your authenticator app to continue.',
+    mfaGateSubmit: 'Confirm',
+    mfaGateCancel: 'Sign out',
   },
 } as const
 

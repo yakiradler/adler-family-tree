@@ -99,7 +99,10 @@ export default function AdvancedFilter({
       // `relative` so the absolute popover below positions against
       // the chip and the chip itself doesn't get re-sized when the
       // popover opens.
-      className="absolute top-[144px] z-20 no-print"
+      // z bumps above the sibling chips ("?" help at z-20) and the
+      // bottom nav (z-50) while the popover is open — the help chip
+      // used to paint THROUGH the open filter panel (owner screenshot).
+      className={`absolute top-[144px] no-print ${open ? 'z-[60]' : 'z-20'}`}
       style={{ [rtl ? 'left' : 'right']: 12, position: 'absolute' } as React.CSSProperties}
       data-tour="tree-chip-filter"
     >
