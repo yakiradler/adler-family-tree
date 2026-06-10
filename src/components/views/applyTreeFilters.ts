@@ -2,7 +2,7 @@
  * Pure pre-layout filter pipeline.
  *
  * Strips members and dangling relationships according to the user's
- * advanced-filter selections, BEFORE handing the result to buildLayout.
+ * advanced-filter selections, BEFORE handing the result to computeLayout.
  * Keeping this in its own module makes it trivial to unit-test the
  * filter rules in isolation from the rendering pipeline.
  */

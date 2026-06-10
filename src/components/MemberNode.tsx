@@ -27,7 +27,7 @@ interface Props {
   /**
    * Ex / deceased partners — rendered as a smaller circle row beneath the
    * card. They do NOT affect layout slot width (the layout engine handles
-   * vertical spacing instead — see treeLayout.ts genOverflow).
+   * vertical spacing instead — see src/layout BADGE_ROW_H).
    */
   secondaryPartners?: SecondaryPartner[]
   onSecondarySelect?: (memberId: string) => void

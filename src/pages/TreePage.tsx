@@ -412,7 +412,7 @@ export default function TreePage({ demoMode }: Props) {
               className="overflow-y-auto"
               style={{ paddingTop: 72, paddingBottom: 120, minHeight: '100vh', touchAction: 'pan-y' }}
             >
-              <SchematicView />
+              <SchematicView filters={filters} />
             </motion.div>
           )}
           {viewMode === 'timeline' && (
