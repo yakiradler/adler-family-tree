@@ -139,6 +139,22 @@ describe('applyTreeFilters — visibility contracts', () => {
     expect(out.members.map((x) => x.id)).not.toContain('ex')
   })
 
+  it('an ex-only member is OFF the tree by default, present (for the badge) with showFormerSpouses', () => {
+    // exwife's only tie is the dead marriage; me is anchored via a kid.
+    const members = [m('me'), m('kid'), m('exwife', { gender: 'female' })]
+    const rels = [pc('r0', 'me', 'kid'), sp('r1', 'me', 'exwife', 'ex')]
+    expect(run(members, rels).members.map((x) => x.id).sort()).toEqual(['kid', 'me'])
+    expect(run(members, rels, { showFormerSpouses: true }).members.map((x) => x.id).sort()).toEqual(
+      ['exwife', 'kid', 'me'],
+    )
+  })
+
+  it('a divorced pair where BOTH sides have nothing else stays visible', () => {
+    const members = [m('a'), m('b', { gender: 'female' })]
+    const rels = [sp('r1', 'a', 'b', 'ex')]
+    expect(run(members, rels).members.map((x) => x.id).sort()).toEqual(['a', 'b'])
+  })
+
   it('focus mode keeps ancestors, descendants and in-scope spouses', () => {
     const members = [
       m('grandpa'), m('dad'), m('me'), m('wife', { gender: 'female' }),

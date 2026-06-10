@@ -293,11 +293,12 @@ export default function TreeView({
         </div>
       )}
 
-      {/* Focused-Centric mode button — below the filter chip. */}
+      {/* Focused-Centric mode button — second slot beneath the filter
+          chip (144 + ~40px chip + gap). */}
       {members.length > 0 && treeControlsExpanded && (
         <div
           className="absolute z-20 no-print"
-          style={{ top: 176, [rtl ? 'left' : 'right']: 12 } as React.CSSProperties}
+          style={{ top: 196, [rtl ? 'left' : 'right']: 12 } as React.CSSProperties}
           data-tour="tree-chip-focus"
         >
           <Tooltip content={t.tipFocusedCentric} placement="bottom">

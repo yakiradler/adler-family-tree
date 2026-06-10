@@ -178,9 +178,31 @@ export function buildFamilyGraph(input: LayoutInput, options: LayoutOptions = {}
     for (const m of unit.members) unitOfMember.set(m.id, unit.id)
   }
 
+  // Badge-only members: someone's ex/deceased partner whose ONLY tie
+  // to the tree is that former marriage. They render as the small
+  // badge under the former partner — never as their own floating card.
+  // Asymmetry guard: the badge needs an ANCHORED host (a partner with
+  // real ties of their own); a divorced pair where BOTH sides have
+  // nothing else keeps two normal cards instead of vanishing.
+  const anchored = (id: string): boolean =>
+    spouseOf.has(id) ||
+    (parentsOf.get(id) ?? []).length > 0 ||
+    (childrenOf.get(id) ?? []).length > 0
+  const badgeOnlyMemberIds = new Set<string>()
+  for (const [ownerId, list] of secondaryPartnersOf) {
+    if (!anchored(ownerId)) continue
+    for (const p of list) {
+      if (!anchored(p.member.id)) badgeOnlyMemberIds.add(p.member.id)
+    }
+  }
+
   const seen = new Set<string>()
   for (const m of members) {
     if (seen.has(m.id)) continue
+    if (badgeOnlyMemberIds.has(m.id)) {
+      seen.add(m.id)
+      continue // represented as a badge, not a unit
+    }
     const spouseId = spouseOf.get(m.id)
     if (!spouseId) {
       seen.add(m.id)
@@ -329,6 +351,7 @@ export function buildFamilyGraph(input: LayoutInput, options: LayoutOptions = {}
     secondaryPartnersOf,
     satellites,
     orphanUnitIds,
+    badgeOnlyMemberIds,
     issues,
   }
 }

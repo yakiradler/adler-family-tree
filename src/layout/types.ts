@@ -124,6 +124,9 @@ export interface LayoutResult {
   /** Units placed as in-law "satellites" above a married-in spouse —
    *  their alignment is best-effort, so symmetry checks skip them. */
   satelliteUnitIds: UnitId[]
+  /** Members rendered ONLY as a badge under their former partner
+   *  (ex/deceased spouses with no other family ties) — no card. */
+  badgeOnlyMembers: string[]
   /** Actual horizontal gap inside each couple (the gap widens when
    *  both spouses have parent couples above them — the "menorah"). */
   coupleGaps: Record<UnitId, number>
@@ -169,5 +172,12 @@ export interface FamilyGraph {
   satellites: Array<{ unitId: UnitId; hostUnitId: UnitId; anchorMemberId: string }>
   /** Single-member units with no family edges at all. */
   orphanUnitIds: Set<UnitId>
+  /**
+   * Members represented ONLY as a badge beneath their former partner —
+   * an ex/deceased spouse whose only tie to the tree is that marriage.
+   * They get no unit and no card of their own (a floating "loose"
+   * profile is exactly the bug this prevents).
+   */
+  badgeOnlyMemberIds: Set<string>
   issues: LayoutIssue[]
 }
