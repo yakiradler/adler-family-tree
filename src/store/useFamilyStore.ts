@@ -3,7 +3,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { canApproveEditRequests, isAdmin } from '../lib/permissions'
 import type {
   Member, Relationship, EditRequest, ViewMode, Profile,
-  AccessRequest, UserRole, FamilyTree, MemberNote,
+  AccessRequest, UserRole, FamilyTree, MemberNote, FeedbackItem,
 } from '../types'
 
 // Surface Supabase failures to the UI. The "נשמר מקומית — סנכרון
@@ -191,6 +191,16 @@ interface FamilyState {
   addNote: (note: Omit<MemberNote, 'id' | 'created_at'>) => Promise<MemberNote | null>
   updateNote: (id: string, patch: Partial<MemberNote>) => Promise<void>
   deleteNote: (id: string) => Promise<void>
+
+  // ── Feedback (help "?" → bug report / question to the admin) ───────
+  /** Admin-facing list; regular users only ever append via addFeedback. */
+  feedback: FeedbackItem[]
+  fetchFeedback: () => Promise<void>
+  addFeedback: (
+    item: Pick<FeedbackItem, 'author_id' | 'author_name' | 'category' | 'body' | 'context'>,
+  ) => Promise<FeedbackItem | null>
+  updateFeedback: (id: string, patch: Partial<FeedbackItem>) => Promise<void>
+  deleteFeedback: (id: string) => Promise<void>
 }
 
 export const useFamilyStore = create<FamilyState>((set, get) => ({
@@ -899,6 +909,81 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     try { await supabase.from('member_notes').delete().eq('id', id) } catch (err) {
       reportSupabaseFailure('deleteNote', err)
     }
+  },
+
+  // ── Feedback ───────────────────────────────────────────────────────
+  // Same optimistic pattern as notes. In demo mode the optimistic row
+  // is the source of truth and the App.tsx localStorage subscriber
+  // persists it, so the demo admin sees their own test reports too.
+  feedback: [],
+  fetchFeedback: async () => {
+    if (!isSupabaseConfigured) return
+    const { data, error } = await supabase
+      .from('feedback')
+      .select('*')
+      .order('created_at', { ascending: false })
+    if (error) {
+      reportSupabaseFailure('fetchFeedback', error, 'read')
+      return
+    }
+    if (!Array.isArray(data)) return
+    const serverRows = data as FeedbackItem[]
+    const serverIds = new Set(serverRows.map((f) => f.id))
+    // Preserve mid-flight optimistic rows (synthetic `fb-` ids).
+    const localOptimistic = get().feedback.filter(
+      (f) => f.id.startsWith('fb-') && !serverIds.has(f.id),
+    )
+    set({ feedback: [...serverRows, ...localOptimistic] })
+  },
+  addFeedback: async (item) => {
+    const localId = `fb-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    const optimistic: FeedbackItem = {
+      ...item,
+      id: localId,
+      status: 'open',
+      created_at: new Date().toISOString(),
+    }
+    set((s) => ({ feedback: [optimistic, ...s.feedback] }))
+    if (!isSupabaseConfigured) return optimistic
+    try {
+      const { data, error } = await supabase
+        .from('feedback')
+        .insert({
+          author_id: item.author_id,
+          author_name: item.author_name,
+          category: item.category,
+          body: item.body,
+          context: item.context ?? null,
+        })
+        .select()
+        .single()
+      if (error) reportSupabaseFailure('addFeedback', error)
+      if (data) {
+        set((s) => ({
+          feedback: s.feedback.map((f) => (f.id === localId ? (data as FeedbackItem) : f)),
+        }))
+        return data as FeedbackItem
+      }
+    } catch (err) { reportSupabaseFailure('addFeedback', err) }
+    return optimistic
+  },
+  updateFeedback: async (id, patch) => {
+    set((s) => ({
+      feedback: s.feedback.map((f) => (f.id === id ? { ...f, ...patch } : f)),
+    }))
+    if (!isSupabaseConfigured) return
+    try {
+      const { error } = await supabase.from('feedback').update(patch).eq('id', id)
+      if (error) reportSupabaseFailure('updateFeedback', error)
+    } catch (err) { reportSupabaseFailure('updateFeedback', err) }
+  },
+  deleteFeedback: async (id) => {
+    set((s) => ({ feedback: s.feedback.filter((f) => f.id !== id) }))
+    if (!isSupabaseConfigured) return
+    try {
+      const { error } = await supabase.from('feedback').delete().eq('id', id)
+      if (error) reportSupabaseFailure('deleteFeedback', error)
+    } catch (err) { reportSupabaseFailure('deleteFeedback', err) }
   },
 
   // ── Tree-view floating-controls visibility ─────────────────────────

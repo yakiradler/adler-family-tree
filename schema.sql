@@ -238,6 +238,22 @@ create table if not exists public.member_notes (
 );
 
 -- ============================================================
+-- FEEDBACK — bug reports / questions sent from the help "?" menu
+-- ============================================================
+-- `author_name` denormalised like member_notes; `context` stores the
+-- route hash the report was sent from. Admin-only reads (see RLS).
+create table if not exists public.feedback (
+  id          uuid primary key default uuid_generate_v4(),
+  author_id   uuid references public.profiles(id) on delete set null,
+  author_name text not null default '',
+  category    text not null check (category in ('bug', 'question')),
+  body        text not null,
+  context     text,
+  status      text not null default 'open' check (status in ('open', 'resolved')),
+  created_at  timestamptz not null default now()
+);
+
+-- ============================================================
 -- ROW-LEVEL SECURITY
 -- ============================================================
 
@@ -460,6 +476,19 @@ create policy "notes_update_self"  on public.member_notes for update using (auth
 create policy "notes_delete_self"  on public.member_notes for delete using (author_id = auth.uid());
 create policy "notes_delete_admin" on public.member_notes for delete using (public.is_admin(auth.uid()));
 
+-- ─── FEEDBACK ─────────────────────────────────────────────
+-- Users write their own reports; only admins read / triage them.
+alter table public.feedback enable row level security;
+drop policy if exists "fb_insert_self"  on public.feedback;
+drop policy if exists "fb_select_admin" on public.feedback;
+drop policy if exists "fb_update_admin" on public.feedback;
+drop policy if exists "fb_delete_admin" on public.feedback;
+create policy "fb_insert_self" on public.feedback for insert
+  with check (auth.role() = 'authenticated' and author_id = auth.uid());
+create policy "fb_select_admin" on public.feedback for select using (public.is_admin(auth.uid()));
+create policy "fb_update_admin" on public.feedback for update using (public.is_admin(auth.uid()));
+create policy "fb_delete_admin" on public.feedback for delete using (public.is_admin(auth.uid()));
+
 -- ============================================================
 -- INDEXES
 -- ============================================================
@@ -471,6 +500,7 @@ create index if not exists notes_member_idx        on public.member_notes(member
 create index if not exists er_status_idx           on public.edit_requests(status);
 create index if not exists ar_status_idx           on public.access_requests(status);
 create index if not exists inv_code_idx            on public.tree_invites(code);
+create index if not exists feedback_status_idx     on public.feedback(status);
 
 -- ============================================================
 -- DONE

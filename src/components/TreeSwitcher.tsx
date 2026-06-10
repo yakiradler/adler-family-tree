@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang } from '../i18n/useT'
+import { useCloseOnBack } from '../hooks/useCloseOnBack'
 import type { FamilyTree } from '../types/index'
 
 /**
@@ -26,6 +27,10 @@ export default function TreeSwitcher({
   const [deleteTarget, setDeleteTarget] = useState<FamilyTree | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const isAdmin = profile?.role === 'admin'
+
+  // Phone back button closes the popover / confirm dialog in turn.
+  useCloseOnBack(open, () => setOpen(false))
+  useCloseOnBack(deleteTarget !== null, () => setDeleteTarget(null))
 
   useEffect(() => {
     if (!open) return
@@ -97,22 +102,26 @@ export default function TreeSwitcher({
 
       <AnimatePresence>
         {open && (
+          // Viewport-centred via a fixed full-width flex wrapper. The
+          // previous `absolute end-0` anchored the popover's inline-end
+          // edge to the trigger — in RTL that's the LEFT edge, so the
+          // body grew RIGHTWARD and clipped off-screen on phones (owner
+          // bug report, with screenshot). A transform-based `left:50%`
+          // centring can't be used either: framer-motion owns the
+          // element's transform for the scale/y animation. The flex
+          // wrapper centres without transforms and without caring where
+          // the trigger button happens to sit in the top bar.
+          <div
+            className="fixed inset-x-0 z-[60] flex justify-center px-3 pointer-events-none"
+            style={{ top: 'calc(env(safe-area-inset-top, 0px) + 68px)' }}
+          >
           <motion.div
             role="menu"
             initial={{ opacity: 0, y: -6, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.97 }}
             transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-            // Button-anchored absolute positioning (matches the pattern
-            // QuickAccessMenu uses). The previous fixed/centred approach
-            // looked off-centre on mobile and could clip off-screen
-            // because `left: 50%` ignores where the button actually is.
-            // Now: popover docks under the trigger via the parent
-            // `relative` wrapper; on RTL it docks against the right
-            // edge so the dropdown opens INWARD toward the canvas
-            // instead of toward the screen edge. max-width keeps it
-            // from overflowing a 360px viewport.
-            className="absolute z-[60] mt-2 end-0 w-[min(280px,calc(100vw-24px))] rounded-2xl bg-white/95 backdrop-blur-2xl border border-white/60 shadow-glass-lg p-2"
+            className="pointer-events-auto w-[min(300px,100%)] rounded-2xl bg-white/95 backdrop-blur-2xl border border-white/60 shadow-glass-lg p-2"
           >
             <p className="px-2 pt-1 pb-2 text-[10px] font-bold uppercase tracking-wider text-[#8E8E93]">
               {t.treeSwitcherTitle}
@@ -157,7 +166,11 @@ export default function TreeSwitcher({
                     type="button"
                     title={t.treeDeleteTree}
                     aria-label={t.treeDeleteTree}
-                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(tt) }}
+                    // Close the popover BEFORE the dialog opens — it sits at
+                    // z-[60] and used to paint OVER the confirmation overlay
+                    // (owner-reported layering bug), leaving the user unable
+                    // to read the prompt they were supposed to answer.
+                    onClick={(e) => { e.stopPropagation(); setOpen(false); setDeleteTarget(tt) }}
                     className="flex-shrink-0 w-7 h-7 rounded-xl flex items-center justify-center text-[#FF3B30]/60 hover:text-[#FF3B30] hover:bg-[#FF3B30]/8 transition"
                   >
                     <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
@@ -217,6 +230,7 @@ export default function TreeSwitcher({
               )}
             </div>
           </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
@@ -227,7 +241,10 @@ export default function TreeSwitcher({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+            // z-[110]: a confirmation must outrank EVERYTHING it can be
+            // launched from — the switcher popover (z-[60]) and the edit
+            // modal (z-[100]) — or it renders underneath and looks broken.
+            className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 backdrop-blur-sm"
             onClick={() => setDeleteTarget(null)}
           >
             <motion.div

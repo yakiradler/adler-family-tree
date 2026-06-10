@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLang, isRTL } from '../i18n/useT'
+import { useCloseOnBack } from '../hooks/useCloseOnBack'
 import { useFamilyStore } from '../store/useFamilyStore'
 import type { Member, Gender } from '../types'
 import { linkRelative, type RelativeDirection } from '../lib/relatives'
@@ -54,6 +55,10 @@ export default function QuickAddRelativeModal({ open, onClose, anchor, direction
     : ''
   const [gender, setGender] = useState<Gender | ''>(defaultGender)
   const [busy, setBusy] = useState(false)
+
+  // Phone back button closes the popover instead of leaving the page.
+  // Must run BEFORE the early return below — hook order is fixed.
+  useCloseOnBack(open && !!anchor, onClose)
 
   if (!open || !anchor) return null
 

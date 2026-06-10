@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLang, isRTL } from '../../i18n/useT'
+import { useCloseOnBack } from '../../hooks/useCloseOnBack'
 import { useFamilyStore } from '../../store/useFamilyStore'
 import type { Member, Relationship } from '../../types'
 import { findFamilyPath } from './findFamilyPath'
@@ -37,6 +38,8 @@ export default function AdvancedFilter({
     const value = typeof next === 'function' ? next(open) : next
     setOpenTreePopover(value ? 'filter' : null)
   }
+  // Phone back button closes the filter popover instead of leaving.
+  useCloseOnBack(open, () => setOpenTreePopover(null))
   const active = !isDefaultFilter(filters)
   const focusedMember = filters.focusMemberId
     ? members.find(m => m.id === filters.focusMemberId)

@@ -11,10 +11,13 @@ import AddMemberModal from '../components/AddMemberModal'
 import TreeSearchModal from '../components/TreeSearchModal'
 import TreeSwitcher from '../components/TreeSwitcher'
 import EditModeToggle from '../components/EditModeToggle'
+import EditModeCoachMark from '../components/EditModeCoachMark'
+import HelpMenu from '../components/help/HelpMenu'
 import { useEffect, useMemo, useState } from 'react'
 import AdvancedFilter from '../components/views/AdvancedFilter'
 import { DEFAULT_FILTERS, type FilterState } from '../components/views/filterState'
 import { useBrowserZoom } from '../hooks/useBrowserZoom'
+import { useCloseOnBack } from '../hooks/useCloseOnBack'
 import { useHorizontalSwipe } from '../hooks/useHorizontalSwipe'
 import Tooltip from '../components/Tooltip'
 import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
@@ -77,6 +80,11 @@ export default function TreePage({ demoMode }: Props) {
   // dominate the viewport. We apply an inverse transform so the panel
   // stays at a roughly constant physical size regardless of zoom.
   const browserZoom = useBrowserZoom()
+
+  // Phone back button: close the member profile panel and stay on the
+  // tree instead of navigating away (owner request — back from an open
+  // profile used to land on the home page).
+  useCloseOnBack(!!selectedMemberId, () => setSelectedMemberId(null))
 
   // Tutorial overlay tailored to the TREE page itself. The user said
   // a guided walkthrough is "even more important" here than on the
@@ -275,7 +283,11 @@ export default function TreePage({ demoMode }: Props) {
       <div className="relative">
         {viewMode === 'tree' && (
           <>
-            <TreeView filters={filters} onMatchedCount={setMatchedCount} />
+            <TreeView
+              filters={filters}
+              onMatchedCount={setMatchedCount}
+              onAddFirst={() => setAddOpen(true)}
+            />
 
             {/* Floating-controls hamburger.
                 The three tree-page chips (Focused-Centric, Filters,
@@ -338,31 +350,14 @@ export default function TreePage({ demoMode }: Props) {
               />
             )}
 
-            {/* Tutorial replay pill — only visible when the hamburger
-                is expanded. Previously a "?" pill in the top chrome
-                bar, but it was eating the family-name's space. Now
-                lives next to the hamburger so the top bar stays
-                clean and the user finds it together with the other
-                advanced controls. */}
+            {/* Help "?" — last in the vertical chip stack. Absolute in
+                the SAME container as the filter chip so spacing stays
+                uniform (144 → 196 → 248); the previous `fixed` version
+                measured against the viewport and floated with a visible
+                gap (owner bug report). Opens the help hub: guided tour,
+                FAQ, report-to-admin. */}
             {treeControlsExpanded && !hideChrome && (
-              // Minimal "?" icon — last in the vertical stack. NOTE the
-              // chips above it are `absolute` inside the tree container
-              // (origin ~31px lower than the viewport) while this button
-              // is `fixed`, so its offset compensates: focus chip ends at
-              // ~viewport 270; 300 leaves a clean gap below it.
-              <div className={`fixed z-30 no-print ${isRTL(lang) ? 'left-3' : 'right-3'}`} style={{ top: 'calc(env(safe-area-inset-top, 0px) + 300px)' }}>
-                <Tooltip content={t.tipTreeTutorial} placement="bottom" align="end">
-                  <motion.button
-                    type="button"
-                    whileTap={{ scale: 0.94 }}
-                    onClick={() => setTreeTutorialOpen(true)}
-                    aria-label={t.tipTreeTutorial}
-                    className="w-9 h-9 rounded-full bg-white/95 border border-white/70 shadow-glass text-[#007AFF] flex items-center justify-center hover:bg-white transition"
-                  >
-                    <span className="text-base font-bold" aria-hidden>?</span>
-                  </motion.button>
-                </Tooltip>
-              </div>
+              <HelpMenu onStartTour={() => setTreeTutorialOpen(true)} />
             )}
           </>
         )}
@@ -521,6 +516,9 @@ export default function TreePage({ demoMode }: Props) {
           per-card "+" buttons would be misplaced there. Hidden in
           fullscreen + focused mode to keep the canvas clean. */}
       {!hideChrome && viewMode === 'tree' && <EditModeToggle />}
+      {/* Edit-mode explainer balloon — pops when the mode turns on,
+          until the user confirms they understood the four "+" buttons. */}
+      {!hideChrome && viewMode === 'tree' && <EditModeCoachMark />}
 
       {/* Interactive tree-page tutorial. Auto-launches on the user's
           very first visit to the tree (different localStorage key

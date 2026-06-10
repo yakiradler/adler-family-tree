@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLang, isRTL } from '../i18n/useT'
+import { useCloseOnBack } from '../hooks/useCloseOnBack'
 
 /**
  * Interactive guided-tour overlay.
@@ -67,6 +68,8 @@ const EDGE_PAD = 16
 export default function TutorialOverlay({ open, steps, onClose }: Props) {
   const { lang } = useLang()
   const rtl = isRTL(lang)
+  // Phone back button exits the tour instead of leaving the page.
+  useCloseOnBack(open, onClose)
   const [stepIndex, setStepIndex] = useState(0)
   const [rect, setRect] = useState<TargetRect | null>(null)
   const [captionPos, setCaptionPos] = useState<{ top: number; left: number; width: number } | null>(null)
