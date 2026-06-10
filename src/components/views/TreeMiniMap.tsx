@@ -82,8 +82,13 @@ export default function TreeMiniMap({
   // Compact-on-small-trees: when the tree is sparse (≤10 nodes) the
   // default 180-wide minimap dwarfs the actual canvas. Drop down to
   // 110 wide / 80 tall in that regime so the corner stays subtle.
-  const MM_WIDTH = nodes.length <= 10 ? MM_WIDTH_COMPACT : MM_WIDTH_DEFAULT
-  const MM_MAX_HEIGHT = nodes.length <= 10 ? MM_MAX_HEIGHT_COMPACT : MM_MAX_HEIGHT_DEFAULT
+  //
+  // Phones: on narrow viewports the 180px map ate a big slice of the
+  // screen while showing a handful of far-apart dots — zero navigation
+  // value at a high cost. Cap it small there regardless of tree size.
+  const phone = viewportW < 520
+  const MM_WIDTH = phone ? 88 : nodes.length <= 10 ? MM_WIDTH_COMPACT : MM_WIDTH_DEFAULT
+  const MM_MAX_HEIGHT = phone ? 60 : nodes.length <= 10 ? MM_MAX_HEIGHT_COMPACT : MM_MAX_HEIGHT_DEFAULT
   const { mmW, mmH, mmScale } = useMemo(() => {
     if (canvasW <= 0 || canvasH <= 0) {
       return { mmW: MM_WIDTH, mmH: 90, mmScale: 1 }
@@ -222,7 +227,7 @@ export default function TreeMiniMap({
             key={n.member.id}
             cx={(n.x + CARD.W / 2) * mmScale}
             cy={(n.y + AVATAR_CENTER_Y) * mmScale}
-            r={1.6}
+            r={Math.max(1.6, Math.min(2.4, mmW / 60))}
             fill={n.member.gender === 'female' ? '#FF7AA8' : '#3D8BFD'}
             opacity={0.85}
           />

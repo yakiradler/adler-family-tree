@@ -134,10 +134,59 @@ describe('computeLayout — malformed data never hangs or hides members', () => 
       { showFormerSpouses: true },
     )
     expect(r.issues.some((i) => i.kind === 'multiple-current-spouses')).toBe(true)
-    // w2 still renders (as her own node) and as a badge under h.
-    expect(r.nodes).toHaveLength(3)
+    // w2 renders as a badge under h ONLY — never as a floating card.
+    expect(r.nodes).toHaveLength(2)
+    expect(r.badgeOnlyMembers).toEqual(['w2'])
     const h = r.nodes.find((n) => n.member.id === 'h')!
     expect(h.secondaryPartners?.some((p) => p.member.id === 'w2')).toBe(true)
+    expect(r.issues.some((i) => i.kind === 'unplaced')).toBe(false)
+    expectValid(r)
+  })
+
+  it('an ex with no other family ties is a badge, never a floating card', () => {
+    const r = computeLayout(
+      {
+        // 'a' is anchored in the tree (has a child) — his ex is not.
+        members: [m('a'), m('kid'), m('exwife', { gender: 'female' })],
+        relationships: [pc('r0', 'a', 'kid'), sp('r1', 'a', 'exwife', 'ex')],
+      },
+      { showFormerSpouses: true },
+    )
+    expect(r.nodes.map((n) => n.member.id).sort()).toEqual(['a', 'kid'])
+    expect(r.badgeOnlyMembers).toEqual(['exwife'])
+    const a = r.nodes.find((n) => n.member.id === 'a')!
+    expect(a.secondaryPartners?.[0]?.member.id).toBe('exwife')
+    expect(r.issues).toEqual([])
+    expectValid(r)
+  })
+
+  it('a divorced pair with no other ties keeps BOTH cards (no vanishing)', () => {
+    const r = computeLayout(
+      {
+        members: [m('a'), m('b', { gender: 'female' })],
+        relationships: [sp('r1', 'a', 'b', 'ex')],
+      },
+      { showFormerSpouses: true },
+    )
+    expect(r.nodes.map((n) => n.member.id).sort()).toEqual(['a', 'b'])
+    expect(r.badgeOnlyMembers).toEqual([])
+    expectValid(r)
+  })
+
+  it('an ex who is a PARENT keeps a real card (they anchor children)', () => {
+    const r = computeLayout(
+      {
+        members: [m('mom', { gender: 'female' }), m('exdad'), m('kid')],
+        relationships: [
+          sp('r1', 'mom', 'exdad', 'ex'),
+          pc('r2', 'mom', 'kid'),
+          pc('r3', 'exdad', 'kid'),
+        ],
+      },
+      { showFormerSpouses: true },
+    )
+    expect(r.nodes.map((n) => n.member.id).sort()).toEqual(['exdad', 'kid', 'mom'])
+    expect(r.badgeOnlyMembers).toEqual([])
     expectValid(r)
   })
 
@@ -177,8 +226,9 @@ describe('computeLayout — invariants hold across random families', () => {
           violations.map((v) => `${v.rule}: ${v.message}`),
           `seed ${seed * 100 + generations}, ${fam.members.length} members`,
         ).toEqual([])
-        // Everyone is either placed or explicitly reported — never lost.
-        expect(r.nodes.length).toBe(fam.members.length)
+        // Everyone is either placed, a badge on their former partner,
+        // or explicitly reported — never lost.
+        expect(r.nodes.length + r.badgeOnlyMembers.length).toBe(fam.members.length)
       }
     })
   }
@@ -304,7 +354,7 @@ describe('computeLayout — menorah (in-law parents above the spouse)', () => {
         validateLayout(r).map((v) => `${v.rule}: ${v.message}`),
         `seed ${9000 + seed}, ${fam.members.length} members`,
       ).toEqual([])
-      expect(r.nodes.length).toBe(fam.members.length)
+      expect(r.nodes.length + r.badgeOnlyMembers.length).toBe(fam.members.length)
     }
   })
 })

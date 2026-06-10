@@ -9,7 +9,6 @@ import ConnectorsLayer from './tree/ConnectorsLayer'
 import { PersonAvatarIcon } from '../MemberNode'
 import { getFallbackGradient, getRingGradient, getRingShadow } from '../memberVisuals'
 
-const PAD = 72
 
 // ─── Main component ───────────────────────────────────────────────────────────
 //
@@ -58,7 +57,9 @@ export default function FocusedCentricView({
 
   // Shared engine on the subgraph: members from the role-tagger, edges
   // restricted to the included population.
-  const { result, roleOf } = useMemo(() => {
+  // (roles/sides from buildFocusedSubgraph are no longer used for
+  // rendering — kept available via `focusedMembers` if needed later.)
+  const { result } = useMemo(() => {
     const subMembers = focusedMembers.map((fm) => fm.member)
     const ids = new Set(subMembers.map((m) => m.id))
     const subRelationships = allRelationships.filter(
@@ -300,25 +301,9 @@ export default function FocusedCentricView({
             transformOrigin: '0 0',
           }}
         >
-          {/* Side tints */}
-          {result.nodes.some(n => roleOf.get(n.member.id)?.side === 'paternal') && (
-            <div
-              className="absolute pointer-events-none rounded-2xl"
-              style={{
-                left: 0, top: PAD, width: canvasW / 2 - 20, height: canvasH - PAD * 2,
-                background: 'linear-gradient(to right, rgba(0,122,255,0.03), transparent)',
-              }}
-            />
-          )}
-          {result.nodes.some(n => roleOf.get(n.member.id)?.side === 'maternal') && (
-            <div
-              className="absolute pointer-events-none rounded-2xl"
-              style={{
-                right: 0, top: PAD, width: canvasW / 2 - 20, height: canvasH - PAD * 2,
-                background: 'linear-gradient(to left, rgba(52,199,89,0.03), transparent)',
-              }}
-            />
-          )}
+          {/* (The old paternal/maternal side-tint rectangles were removed —
+              their hard edges read as a broken/clipped background, which
+              the owner reported as a bug.) */}
 
           {/* Generation labels — engine rows, relative to the focus row */}
           {result.generationRows.map((row) => {

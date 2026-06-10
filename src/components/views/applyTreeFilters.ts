@@ -185,26 +185,55 @@ export function applyTreeFilters(
       const hasAnyParent = relationships.some(
         r => r.type === 'parent-child' && r.member_b_id === id,
       )
-      // Standalone founder (no parents anywhere in the DB, no visible
-      // children, no current spouse): keep them — they're a deliberate
-      // standalone node, not noise.
-      if (!hasAnyParent) continue
-      // At this point: has parents in DB but none visible, no visible
-      // children, no current spouse. They may still be a non-current
-      // (ex / deceased) spouse of someone in-tree — in which case
-      // they're a "married-in ex" with all their ties dead, and the
-      // layout engine would otherwise render them as a free-floating
-      // root subtree at the canvas edge ("נתנאל" the ex bug).
       const hasNonCurrentSpouse = relationships.some(
         r => r.type === 'spouse' && (r.status ?? 'current') !== 'current'
              && (r.member_a_id === id || r.member_b_id === id),
       )
-      // Preserve standalone members that aren't ex-spouses of anyone
-      // when no manual hides are active — they're legitimately
-      // unconnected founders waiting to be linked.
+      // Standalone founder (no parents anywhere in the DB, no visible
+      // children, no current spouse): keep them — they're a deliberate
+      // standalone node, not noise. (Ex-only members get a dedicated
+      // final pass below.)
+      if (!hasAnyParent) continue
+      // At this point: has parents in DB but none visible, no visible
+      // children, no current spouse.
       if (allHidden.size === 0 && !hasNonCurrentSpouse) continue
       allowed.delete(id)
       removedAny = true
+    }
+  }
+
+  // ── Ex-only members: off the tree by default ───────────────────────
+  // A member whose ONLY family tie is a divorced/widowed marriage (no
+  // parent-child edges at all, no current spouse) does not get a card
+  // of their own unless "show divorces" is on — the relationship stays
+  // visible inside the former partner's profile panel, and with the
+  // flag on they render as a small badge ATTACHED to that partner
+  // (engine-side), never as a loose floating profile.
+  // Pruned only when a former partner remains visible WITH real ties of
+  // their own — if both sides of a divorced pair have nothing else,
+  // both stay (otherwise the pair would vanish entirely).
+  if (!filters.showFormerSpouses) {
+    const isExOnly = (id: string): boolean => {
+      const hasFamilyEdge = relationships.some(
+        r => (r.type === 'parent-child' && (r.member_a_id === id || r.member_b_id === id)) ||
+             (r.type === 'spouse' && (r.status ?? 'current') === 'current' &&
+              (r.member_a_id === id || r.member_b_id === id)),
+      )
+      if (hasFamilyEdge) return false
+      return relationships.some(
+        r => r.type === 'spouse' && (r.status ?? 'current') !== 'current' &&
+             (r.member_a_id === id || r.member_b_id === id),
+      )
+    }
+    for (const id of [...allowed]) {
+      if (!isExOnly(id)) continue
+      const formerPartners = relationships
+        .filter(r => r.type === 'spouse' && (r.status ?? 'current') !== 'current' &&
+                     (r.member_a_id === id || r.member_b_id === id))
+        .map(r => (r.member_a_id === id ? r.member_b_id : r.member_a_id))
+      if (formerPartners.some(p => allowed.has(p) && !isExOnly(p))) {
+        allowed.delete(id)
+      }
     }
   }
 

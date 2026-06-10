@@ -39,6 +39,7 @@ export function computeLayout(input: LayoutInput, options: LayoutOptions = {}): 
       generationRows: [],
       issues: [],
       satelliteUnitIds: [],
+      badgeOnlyMembers: [],
       coupleGaps: {},
     }
   }
@@ -81,16 +82,18 @@ export function computeLayout(input: LayoutInput, options: LayoutOptions = {}): 
 
   const issues = [...graph.issues, ...gens.issues, ...connectors.issues]
   // "Placed correctly or explicitly reported" — never silently dropped.
-  if (nodes.length < input.members.length) {
-    const placedIds = new Set(nodes.map((n) => n.member.id))
-    const missing = input.members.filter((m) => !placedIds.has(m.id))
-    if (missing.length > 0) {
-      issues.push({
-        kind: 'unplaced',
-        memberIds: missing.map((m) => m.id),
-        message: `${missing.length} member(s) could not be placed`,
-      })
-    }
+  // (Badge-only ex-partners are intentionally card-less: they render as
+  // the small badge beneath their former partner.)
+  const placedIds = new Set(nodes.map((n) => n.member.id))
+  const missing = input.members.filter(
+    (m) => !placedIds.has(m.id) && !graph.badgeOnlyMemberIds.has(m.id),
+  )
+  if (missing.length > 0) {
+    issues.push({
+      kind: 'unplaced',
+      memberIds: missing.map((m) => m.id),
+      message: `${missing.length} member(s) could not be placed`,
+    })
   }
 
   let maxX = 0
@@ -111,6 +114,7 @@ export function computeLayout(input: LayoutInput, options: LayoutOptions = {}): 
     generationRows: connectors.generationRows,
     issues,
     satelliteUnitIds: graph.satellites.map((s) => s.unitId).sort(),
+    badgeOnlyMembers: [...graph.badgeOnlyMemberIds].sort(),
     coupleGaps: placement.coupleGaps,
   }
 }

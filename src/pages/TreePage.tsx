@@ -22,6 +22,24 @@ import { shouldAutoShowTutorial, recordTutorialShown } from '../lib/tutorialStat
 
 interface Props { demoMode: boolean }
 
+/**
+ * Wraps children in a Tooltip only while `show` is true. Used by the
+ * hamburger: once expanded, its tooltip bubble used to cover the chips
+ * that had just appeared below it.
+ */
+function ConditionalTooltip({
+  show,
+  content,
+  children,
+}: {
+  show: boolean
+  content: string
+  children: React.ReactElement
+}) {
+  if (!show) return children
+  return <Tooltip content={content} placement="bottom" align="end">{children}</Tooltip>
+}
+
 export default function TreePage({ demoMode }: Props) {
   const {
     selectedMemberId, setSelectedMemberId, profile,
@@ -268,7 +286,13 @@ export default function TreePage({ demoMode }: Props) {
                 its label is unambiguous. */}
             {!hideChrome && (
             <div className={`fixed z-30 no-print ${isRTL(lang) ? 'left-3' : 'right-3'}`} style={{ top: 'calc(env(safe-area-inset-top, 0px) + 88px)' }} data-tour="tree-hamburger">
-            <Tooltip content={t.tipTreeControlsToggle} placement="bottom" align="end">
+            {/* Tooltip only while COLLAPSED — when expanded the bubble
+                used to cover the chips underneath (owner bug report),
+                and an X button needs no explanation anyway. */}
+            <ConditionalTooltip
+              show={!treeControlsExpanded}
+              content={t.tipTreeControlsToggle}
+            >
             <motion.button
               type="button"
               onClick={() => setTreeControlsExpanded(!treeControlsExpanded)}
@@ -298,7 +322,7 @@ export default function TreePage({ demoMode }: Props) {
                 )}
               </motion.svg>
             </motion.button>
-            </Tooltip>
+            </ConditionalTooltip>
             </div>
             )}
 
@@ -321,13 +345,12 @@ export default function TreePage({ demoMode }: Props) {
                 clean and the user finds it together with the other
                 advanced controls. */}
             {treeControlsExpanded && !hideChrome && (
-              // Minimal "?" icon — sits below the rest of the hamburger
-              // pills so the user finds it last in the vertical stack.
-              // top:280 lands AFTER the density chip (which is at 228 +
-              // ~52px button height including its outline shadow), with
-              // a small gap so the icon doesn't overlap the chip on
-              // mobile. The previous offset (232) overlapped by 4px.
-              <div className={`fixed z-30 no-print ${isRTL(lang) ? 'left-3' : 'right-3'}`} style={{ top: 'calc(env(safe-area-inset-top, 0px) + 280px)' }}>
+              // Minimal "?" icon — last in the vertical stack. NOTE the
+              // chips above it are `absolute` inside the tree container
+              // (origin ~31px lower than the viewport) while this button
+              // is `fixed`, so its offset compensates: focus chip ends at
+              // ~viewport 270; 300 leaves a clean gap below it.
+              <div className={`fixed z-30 no-print ${isRTL(lang) ? 'left-3' : 'right-3'}`} style={{ top: 'calc(env(safe-area-inset-top, 0px) + 300px)' }}>
                 <Tooltip content={t.tipTreeTutorial} placement="bottom" align="end">
                   <motion.button
                     type="button"
@@ -366,7 +389,7 @@ export default function TreePage({ demoMode }: Props) {
             the tree. */}
         {(viewMode === 'schematic' || viewMode === 'timeline') && !treeFullscreen && (
           <div className={`absolute z-30 no-print top-[72px] ${isRTL(lang) ? 'left-3' : 'right-3'}`}>
-            <Tooltip content={t.tipTreeControlsToggle} placement="bottom" align="end">
+            <ConditionalTooltip show={!treeControlsExpanded} content={t.tipTreeControlsToggle}>
               <motion.button
                 type="button"
                 onClick={() => setTreeControlsExpanded(!treeControlsExpanded)}
@@ -393,7 +416,7 @@ export default function TreePage({ demoMode }: Props) {
                   )}
                 </motion.svg>
               </motion.button>
-            </Tooltip>
+            </ConditionalTooltip>
           </div>
         )}
         {/* Schematic + Timeline share a swipe-to-toggle gesture (see
