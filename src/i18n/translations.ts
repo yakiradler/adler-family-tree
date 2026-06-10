@@ -803,6 +803,25 @@ export const translations = {
     aiNoLeaves: 'אין מספיק עלים לפעולה הזו ({n} נדרשים). אפשר לשדרג מסלול או לחכות לחידוש החודשי.',
     adminPlanLabel: 'מסלול',
     adminGrantLeaves: '+50 עלים',
+
+    // Forgot / reset password
+    authForgotPassword: 'שכחתי סיסמה',
+    authForgotNeedEmail: 'הזינו קודם את כתובת המייל בשדה למעלה, ואז לחצו שוב.',
+    authResetSent: 'נשלח אליכם מייל עם קישור לאיפוס הסיסמה. בדקו גם בספאם.',
+    resetTitle: 'קביעת סיסמה חדשה',
+    resetDesc: 'הגעתם מקישור האיפוס — בחרו סיסמה חדשה לחשבון.',
+    resetNewPassword: 'סיסמה חדשה (8 תווים לפחות)',
+    resetConfirmPassword: 'אימות הסיסמה החדשה',
+    resetTooShort: 'הסיסמה צריכה להיות באורך 8 תווים לפחות.',
+    resetMismatch: 'הסיסמאות לא זהות — נסו שוב.',
+    resetSubmit: 'שמירת הסיסמה',
+    resetDone: 'הסיסמה עודכנה!',
+    resetContinue: 'המשך לאפליקציה',
+
+    // Suggest-edit (regular users, outside nuclear family)
+    panelSuggestEdit: 'הצע עריכה',
+    editSuggestSubmit: 'שלח לאישור המנהל',
+    editSuggestSent: 'ההצעה נשלחה! המנהל יבדוק ויאשר אותה בקרוב.',
   },
 
   en: {
@@ -1595,6 +1614,25 @@ export const translations = {
     aiNoLeaves: 'Not enough leaves for this action ({n} needed). Upgrade your plan or wait for the monthly refill.',
     adminPlanLabel: 'Plan',
     adminGrantLeaves: '+50 leaves',
+
+    // Forgot / reset password
+    authForgotPassword: 'Forgot password',
+    authForgotNeedEmail: 'Enter your email in the field above first, then tap again.',
+    authResetSent: 'We emailed you a password-reset link. Check spam too.',
+    resetTitle: 'Set a new password',
+    resetDesc: 'You arrived from the reset link — choose a new password for your account.',
+    resetNewPassword: 'New password (8+ characters)',
+    resetConfirmPassword: 'Confirm new password',
+    resetTooShort: 'Password must be at least 8 characters.',
+    resetMismatch: 'Passwords do not match — try again.',
+    resetSubmit: 'Save password',
+    resetDone: 'Password updated!',
+    resetContinue: 'Continue to the app',
+
+    // Suggest-edit (regular users, outside nuclear family)
+    panelSuggestEdit: 'Suggest an edit',
+    editSuggestSubmit: 'Send for admin approval',
+    editSuggestSent: 'Suggestion sent! The admin will review it shortly.',
   },
 } as const
 

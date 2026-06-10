@@ -35,6 +35,28 @@ export default function Auth({ demoMode = false, onDemoEnter }: Props) {
 
   const dir = lang === 'he' ? 'rtl' : 'ltr'
 
+  // Password-reset email. Uses whatever is typed in the email field —
+  // no separate dialog needed. Supabase sends a recovery link; landing
+  // back here with it fires PASSWORD_RECOVERY, which App.tsx catches
+  // with the set-new-password screen.
+  const forgotPassword = async () => {
+    setError(null)
+    setSuccess(null)
+    if (!email.trim()) {
+      setError(t.authForgotNeedEmail)
+      return
+    }
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/`,
+      })
+      if (error) throw error
+      setSuccess(t.authResetSent)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.genericError)
+    }
+  }
+
   // OAuth redirect flow — Supabase hands off to Google and returns to
   // this origin with session tokens in the URL hash; supabase-js's
   // detectSessionInUrl consumes them and onAuthStateChange in App.tsx
@@ -266,6 +288,19 @@ export default function Auth({ demoMode = false, onDemoEnter }: Props) {
                 )}
               </button>
             </div>
+
+            {/* Forgot password — login mode + real backend only. */}
+            {mode === 'login' && !demoMode && (
+              <div className="text-start">
+                <button
+                  type="button"
+                  onClick={forgotPassword}
+                  className="text-[12px] font-semibold text-[#007AFF] hover:underline"
+                >
+                  {t.authForgotPassword}
+                </button>
+              </div>
+            )}
 
             <AnimatePresence>
               {error && (

@@ -15,9 +15,10 @@ import InstallPrompt from './components/InstallPrompt'
 import VersionUpdateModal from './components/VersionUpdateModal'
 import DevEnvBanner from './components/DevEnvBanner'
 import MfaChallengeGate from './components/security/MfaChallengeGate'
+import NewPasswordScreen from './components/security/NewPasswordScreen'
 import PlanGateToast from './components/plan/PlanGateToast'
 import { ADLER_MEMBERS, ADLER_RELATIONSHIPS, ADLER_TREES } from './data/adlerFamily'
-import { isPendingOnboarding, clearPendingOnboarding } from './lib/pendingOnboarding'
+import { isPendingOnboarding, clearPendingOnboarding, markPendingOnboarding } from './lib/pendingOnboarding'
 import type { Profile } from './types'
 import type { Session } from '@supabase/supabase-js'
 
@@ -335,6 +336,11 @@ export default function App() {
     // localStorage on every mutation, which would re-fire the effect.
   }, [demoMode, session?.user?.id])
 
+  // Password-recovery flow: the email link lands the user back here
+  // with a recovery session; instead of the app, they get the
+  // set-a-new-password screen until they choose one.
+  const [recoveryMode, setRecoveryMode] = useState(false)
+
   // Supabase auth
   useEffect(() => {
     if (!SUPABASE_CONFIGURED) return
@@ -342,7 +348,10 @@ export default function App() {
       setSession(session)
       setAuthLoading(false)
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      setSession(s)
+      if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true)
+    })
     return () => subscription.unsubscribe()
   }, [])
 
@@ -374,6 +383,20 @@ export default function App() {
         full_name: session.user.user_metadata?.full_name ?? session.user.email ?? 'User',
         role: 'user',
       })
+      // Fresh signups get routed through the onboarding wizard. The
+      // email-signup path sets the pending flag in Auth.tsx, but OAuth
+      // (Google) can't — the page redirects away before we know whether
+      // this account is new. "Created in the last 10 minutes and not
+      // onboarded" is the provider-agnostic signal; old accounts with a
+      // legacy null onboarded_at are untouched.
+      const createdAtMs = new Date(session.user.created_at).getTime()
+      if (
+        Number.isFinite(createdAtMs) &&
+        Date.now() - createdAtMs < 10 * 60_000 &&
+        !(data as { onboarded_at?: string | null } | null)?.onboarded_at
+      ) {
+        markPendingOnboarding()
+      }
       fetchMembers(); fetchRelationships(); fetchEditRequests(); fetchTrees(); fetchMyPlan()
     }
     load()
@@ -455,6 +478,15 @@ export default function App() {
           transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
           className="w-8 h-8 border-2 border-[#007AFF]/20 border-t-[#007AFF] rounded-full"
         />
+      </div>
+    )
+  }
+
+  // Recovery-link wall: choose a new password before anything else.
+  if (SUPABASE_CONFIGURED && recoveryMode && session) {
+    return (
+      <div dir={dir}>
+        <NewPasswordScreen onDone={() => setRecoveryMode(false)} />
       </div>
     )
   }

@@ -617,6 +617,25 @@ export default function MemberPanel({ onClose }: Props) {
               <span>{t.panelEdit}</span>
             </button>
             )}
+            {/* Members outside the user's nuclear family: same form, but
+                saving submits an edit PROPOSAL for admin approval — this
+                is the producer side of the admin "requests" tab, which
+                previously had no way to receive anything. Guests stay
+                read-only. */}
+            {!editAllowed && profile?.role === 'user' && (
+            <button
+              type="button"
+              onClick={() => setEditOpen(true)}
+              aria-label={t.panelSuggestEdit}
+              title={t.panelSuggestEdit}
+              className="w-full py-3 rounded-2xl bg-[#007AFF]/10 text-[#007AFF] text-sf-subhead font-bold active:scale-[0.98] transition flex items-center justify-center gap-2"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M2.5 12V14H4.5L13 5.5L11 3.5L2.5 12Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+              </svg>
+              <span>{t.panelSuggestEdit}</span>
+            </button>
+            )}
             {relAllowed && (
             <button
               type="button"
@@ -699,7 +718,12 @@ export default function MemberPanel({ onClose }: Props) {
         )}
       </div>
 
-      <EditMemberModal open={editOpen} onClose={() => setEditOpen(false)} member={member} />
+      <EditMemberModal
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        member={member}
+        suggestMode={!editAllowed}
+      />
       <RelationshipManager open={relOpen} onClose={() => setRelOpen(false)} member={member} />
 
       {/* Build-from-text → real local parser. The modal frames itself

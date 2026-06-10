@@ -106,6 +106,11 @@ interface FamilyState {
 
   approveEditRequest: (requestId: string) => Promise<void>
   rejectEditRequest: (requestId: string) => Promise<void>
+  /** Regular-user path: propose a member edit for admin approval. */
+  submitEditRequest: (
+    targetMemberId: string,
+    changeData: Record<string, unknown>,
+  ) => Promise<boolean>
 
   // ── Onboarding + RBAC (Phase C/D) ───────────────────────────────────
   accessRequests: AccessRequest[]
@@ -623,6 +628,43 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     // Refresh from the server so any constraints / triggers that
     // shape the result (computed columns, defaults) are reflected.
     await get().fetchMembers()
+  },
+
+  submitEditRequest: async (targetMemberId, changeData) => {
+    const me = get().profile
+    if (!me) return false
+    // Optimistic append so a demo admin (or the requester themselves,
+    // pre-refresh) sees the proposal immediately in the requests tab.
+    const member = get().members.find((m) => m.id === targetMemberId)
+    const localId = `er-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    const optimistic: EditRequest = {
+      id: localId,
+      requester_id: me.id,
+      requester_name: me.full_name,
+      target_member_id: targetMemberId,
+      target_member_name: member ? `${member.first_name} ${member.last_name}` : undefined,
+      change_data: changeData,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+    }
+    set((s) => ({ editRequests: [optimistic, ...s.editRequests] }))
+    if (!isSupabaseConfigured) return true
+    try {
+      const { error } = await supabase.from('edit_requests').insert({
+        requester_id: me.id,
+        target_member_id: targetMemberId,
+        change_data: changeData,
+        status: 'pending',
+      })
+      if (error) {
+        reportSupabaseFailure('submitEditRequest', error)
+        return false
+      }
+      return true
+    } catch (err) {
+      reportSupabaseFailure('submitEditRequest', err)
+      return false
+    }
   },
 
   rejectEditRequest: async (requestId) => {
