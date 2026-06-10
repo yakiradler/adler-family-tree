@@ -295,7 +295,6 @@ export default function AdminDashboard() {
       if (error) {
         // Surface the underlying failure (RLS blocks, missing table)
         // so admins can act on it instead of staring at an empty list.
-        // eslint-disable-next-line no-console
         console.warn('[admin] profiles fetch failed:', error.message)
         setBackendError(error.message)
       } else {
@@ -1180,7 +1179,7 @@ function SpecialAdminControls({
       localStorage.clear()
       sessionStorage.clear()
       if (SUPABASE_CONFIGURED) {
-        try { await supabase.auth.signOut() } catch {}
+        try { await supabase.auth.signOut() } catch { /* best-effort — reload follows anyway */ }
       }
     } finally {
       window.location.reload()
