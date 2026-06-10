@@ -100,6 +100,10 @@
 - [ ] **AI Suggest relationships** — מציע קשרים חסרים על בסיס שמות + תאריכים
 
 ### Multi-tree
+- [ ] **Combined-trees view** — תצוגת שילוב בין 2 עצים זה-לצד-זה.
+      התשתית כבר קיימת: `src/layout/compose.ts` (הרכבת LayoutResults
+      עם offset פר-עץ) + `src/layout/selectTreeGraph.ts` (בידוד/בחירת
+      עצים). נדרש רק UI + טבלת "גשרים" לנישואים בין-עציים.
 - [ ] **Cross-tree marriage** — יצירת קשר spouse בין חברים מ-trees שונים
 - [ ] **Tree-level RLS** — משתמש רואה רק עצים שהוא חבר בהם
 - [ ] **Trees admin tab** — ניהול עצים (rename / delete / re-color)

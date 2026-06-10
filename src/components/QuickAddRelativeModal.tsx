@@ -41,7 +41,7 @@ interface Props {
 export default function QuickAddRelativeModal({ open, onClose, anchor, direction }: Props) {
   const { t, lang } = useLang()
   const rtl = isRTL(lang)
-  const { addMember, addRelationship, relationships } = useFamilyStore()
+  const { addMember, addRelationship, relationships, setSelectedMemberId } = useFamilyStore()
 
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -92,6 +92,10 @@ export default function QuickAddRelativeModal({ open, onClose, anchor, direction
         return
       }
       await linkRelative({ created, anchor, direction, addRelationship, relationships })
+      // Select the new member — TreeView pans the camera to any
+      // selected member that is outside the current viewport, so the
+      // user always SEES where their new relative landed.
+      setSelectedMemberId(created.id)
       handleClose()
     } finally {
       setBusy(false)

@@ -3,7 +3,11 @@ import { motion } from 'framer-motion'
 import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang, type Translations } from '../../i18n/useT'
 import { Avatar } from '../MemberCard'
-import type { Member, Relationship } from '../../types'
+import type { Member } from '../../types'
+import { buildFamilyGraph, solveGenerations } from '../../layout'
+import { getParentMap, resolveLineage } from '../../lib/lineage'
+import { applyTreeFilters } from './applyTreeFilters'
+import type { FilterState } from './AdvancedFilter'
 
 interface GenGroup {
   generation: number
@@ -11,40 +15,46 @@ interface GenGroup {
   members: Member[]
 }
 
-function assignGenerations(members: Member[], relationships: Relationship[]): Map<string, number> {
-  const parentOf = new Map<string, string[]>()
-  relationships.filter((r) => r.type === 'parent-child').forEach((r) => {
-    if (!parentOf.has(r.member_a_id)) parentOf.set(r.member_a_id, [])
-    parentOf.get(r.member_a_id)!.push(r.member_b_id)
-  })
-  const genMap = new Map<string, number>()
-  const roots = members.filter((m) => !relationships.some((r) => r.type === 'parent-child' && r.member_b_id === m.id))
-  const queue = roots.map((m) => ({ id: m.id, gen: 0 }))
-  while (queue.length) {
-    const { id, gen } = queue.shift()!
-    if (genMap.has(id)) continue
-    genMap.set(id, gen)
-    ;(parentOf.get(id) ?? []).forEach((cid) => queue.push({ id: cid, gen: gen + 1 }))
-  }
-  members.forEach((m) => { if (!genMap.has(m.id)) genMap.set(m.id, 0) })
-  return genMap
-}
-
-export default function SchematicView() {
-  const { members, relationships, selectedMemberId, setSelectedMemberId } = useFamilyStore()
+export default function SchematicView({ filters }: { filters?: FilterState }) {
+  const { members: allMembers, relationships, selectedMemberId, setSelectedMemberId, activeTreeId } =
+    useFamilyStore()
   const { t } = useLang()
+
+  // Per-tree isolation — the schematic used to show ALL trees mixed.
+  const members = useMemo(
+    () =>
+      activeTreeId == null
+        ? allMembers.filter((m) => !m.tree_id)
+        : allMembers.filter((m) => m.tree_id === activeTreeId),
+    [allMembers, activeTreeId],
+  )
+
+  // Same filter pipeline as the tree view (lineage, search, hidden…).
+  const visible = useMemo(() => {
+    if (!filters) return { members, relationships }
+    const parentMap = getParentMap(members, relationships)
+    const lineageById = new Map<string, ReturnType<typeof resolveLineage>>()
+    for (const m of members) lineageById.set(m.id, resolveLineage(m, parentMap))
+    return applyTreeFilters(members, relationships, filters, lineageById)
+  }, [members, relationships, filters])
 
   const genLabels = [t.genGreatGrandparents, t.genGrandparents, t.genParents, t.genMine, t.genChildren, t.genGrandchildren]
 
   const groups = useMemo<GenGroup[]>(() => {
-    if (members.length === 0) return []
-    const genMap = assignGenerations(members, relationships)
+    if (visible.members.length === 0) return []
+    // ONE source of truth for "which generation am I": the layout
+    // engine's unit-based solver. A married-in spouse with no recorded
+    // parents lands on their partner's row (couples are one unit) —
+    // the old local BFS used to put them in generation 0.
+    const graph = buildFamilyGraph({ members: visible.members, relationships: visible.relationships })
+    const { genOfUnit } = solveGenerations(graph)
     const byGen = new Map<number, Member[]>()
-    members.forEach((m) => {
-      const g = genMap.get(m.id) ?? 0
+    for (const m of visible.members) {
+      const unitId = graph.unitOfMember.get(m.id)
+      const g = unitId != null ? genOfUnit.get(unitId) ?? 0 : 0
       if (!byGen.has(g)) byGen.set(g, [])
       byGen.get(g)!.push(m)
-    })
+    }
     return Array.from(byGen.entries())
       .sort((a, b) => a[0] - b[0])
       .map(([gen, mems]) => ({
@@ -52,7 +62,8 @@ export default function SchematicView() {
         label: genLabels[gen] ?? `${t.genLabel} ${gen + 1}`,
         members: mems,
       }))
-  }, [members, relationships, t])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, t])
 
   if (members.length === 0) {
     return <div className="flex items-center justify-center h-full pt-20 text-[#8E8E93] text-sf-subhead">{t.noMembers}</div>

@@ -43,11 +43,12 @@ export const translations = {
     treeEmptyTitle: 'התחל את עץ המשפחה שלך',
     treeEmptyTitleWithName: 'העץ "{name}" עדיין ריק',
     treeEmptyDesc: 'הוסף את חבר המשפחה הראשון שלך כדי להתחיל לבנות את העץ.',
-    layoutPicker: 'פריסה',
-    layoutClassic: 'רגיל',
-    layoutGrid: 'רשת',
-    layoutArc: 'קשת',
-    layoutStaggered: 'זיגזג',
+    treeIssuesTitle: 'נמצאו {count} בעיות בנתוני העץ — לחץ לפרטים',
+    treeIssueCycle: 'קשר מעגלי בין הורים וילדים',
+    treeIssueMultipleSpouses: 'יותר מבן/בת זוג נוכחי אחד',
+    treeIssueInvalidEdge: 'קשר לא תקין בנתונים',
+    treeIssueUnroutable: 'לא ניתן לצייר קו נקי לקשר הזה',
+    treeIssueUnplaced: 'חבר משפחה שלא ניתן היה למקם',
 
     // Schematic View
     genGreatGrandparents: 'סבא רבא וסבתא רבא',
@@ -338,29 +339,15 @@ export const translations = {
     navHide: 'הסתר',
     navShow: 'הצג',
 
-    // Tree density (compact / wide)
-    treeDensityCompact: 'תצוגה ממוקדת',
-    treeDensityWide: 'תצוגה מלאה',
-    treeShowMoreAncestors: 'הצג דור הורים נוסף',
-    treeShowMoreDescendants: 'הצג דור צאצאים נוסף',
-    treeHideAncestors: 'הסתר דור עליון',
-    treeHideDescendants: 'הסתר דור תחתון',
-    treeDensityCompactTip: 'מציג רק 3 דורות בלבד — הורים, האדם המרכזי, וילדים. אפשר להרחיב למעלה/למטה דור בכל פעם.',
-    treeDensityWideTip: 'מציג את כל הדורות בעץ. לחץ למעבר לתצוגה ממוקדת.',
-
     // Tree-view floating-controls hamburger
     treeControlsOpen: 'אפשרויות תצוגה',
     treeControlsClose: 'סגור',
 
-    // Layout picker (now inside the bottom nav)
-    layoutPickerNavLabel: 'פריסה',
-
     // ── Friendly tooltip copy — readable for kids + adults ──
-    tipTreeControlsToggle: 'תפריט אפשרויות התצוגה — מיקוד דינמי, סינון מתקדם, ומספר דורות',
+    tipTreeControlsToggle: 'תפריט אפשרויות התצוגה — מיקוד דינמי וסינון מתקדם',
     tipTreeTutorial: 'מדריך',
     tipFocusedCentric: 'מצב מיקוד: מציג רק את האדם שבחרת ומשפחתו הקרובה',
     tipAdvancedFilter: 'סינון מתקדם: כהן/לוי, גרושים, נפטרים, חיפוש ועוד',
-    tipDensityToggle: 'ממוקדת מציגה 3 דורות בלבד · מלאה מציגה את כל העץ',
     tipZoomIn: 'הגדל (זום פנימה)',
     tipZoomOut: 'הקטן (זום החוצה)',
     tipFitToView: 'התאם את העץ למסך',
@@ -368,8 +355,6 @@ export const translations = {
     tipMiniMapShow: 'הצג מפת סקירה של העץ',
     tipMiniMapHide: 'הסתר מפת סקירה',
     tipMiniMapNav: 'מפת סקירה — לחץ או גרור כדי לעבור לחלק אחר של העץ',
-    tipExpandUp: 'הצג דור הורים נוסף מעל הדור הנוכחי',
-    tipExpandDown: 'הצג דור צאצאים נוסף מתחת',
     tipAddMember: 'הוסף חבר משפחה חדש לעץ',
     tipSearch: 'חיפוש לפי שם בתוך העץ',
     tipBackHome: 'חזרה למסך הבית',
@@ -378,7 +363,6 @@ export const translations = {
     tipNavSchematic: 'תצוגה סכמטית של ענפי המשפחה',
     tipNavTimeline: 'ציר זמן של אירועי המשפחה',
     tipNavAdmin: 'אזור ניהול — אישור משתמשים והרשאות',
-    tipNavLayout: 'בחירת פריסה: קלאסי / גריד / קשת / מדורג',
     tipNavHide: 'הסתר את שורת הניווט מתחת',
     tipNavShow: 'הצג חזרה את שורת הניווט',
     tipPanelClose: 'סגור את כרטיס הפרופיל',
@@ -735,11 +719,12 @@ export const translations = {
     treeEmptyTitle: 'Start Your Family Tree',
     treeEmptyTitleWithName: 'The "{name}" tree is empty',
     treeEmptyDesc: 'Add your first family member to begin building your tree.',
-    layoutPicker: 'Layout',
-    layoutClassic: 'Classic',
-    layoutGrid: 'Grid',
-    layoutArc: 'Arc',
-    layoutStaggered: 'Zigzag',
+    treeIssuesTitle: '{count} data issues found in the tree — tap for details',
+    treeIssueCycle: 'Circular parent-child chain',
+    treeIssueMultipleSpouses: 'More than one current spouse',
+    treeIssueInvalidEdge: 'Invalid relationship in the data',
+    treeIssueUnroutable: 'No clean line could be drawn for this link',
+    treeIssueUnplaced: 'A member could not be placed',
 
     genGreatGrandparents: 'Great-Grandparents',
     genGrandparents: 'Grandparents',
@@ -1023,29 +1008,15 @@ export const translations = {
     navHide: 'Hide',
     navShow: 'Show',
 
-    // Tree density (compact / wide)
-    treeDensityCompact: 'Compact view',
-    treeDensityWide: 'Full view',
-    treeShowMoreAncestors: 'Show another generation up',
-    treeShowMoreDescendants: 'Show another generation down',
-    treeHideAncestors: 'Hide top generation',
-    treeHideDescendants: 'Hide bottom generation',
-    treeDensityCompactTip: 'Shows only 3 generations — parents, the focal person, and children. You can expand one generation up or down at a time.',
-    treeDensityWideTip: 'Shows all generations in the tree. Tap to switch to focused view.',
-
     // Tree-view floating-controls hamburger
     treeControlsOpen: 'View options',
     treeControlsClose: 'Close',
 
-    // Layout picker (now inside the bottom nav)
-    layoutPickerNavLabel: 'Layout',
-
     // ── Tooltip copy — friendly for kids + adults ──
-    tipTreeControlsToggle: 'View options menu — focus mode, advanced filter, and generation count',
+    tipTreeControlsToggle: 'View options menu — focus mode and advanced filter',
     tipTreeTutorial: 'Tutorial',
     tipFocusedCentric: 'Focus mode: shows only the selected person and their close family',
     tipAdvancedFilter: 'Advanced filter: Kohen/Levi, divorced, deceased, search and more',
-    tipDensityToggle: 'Compact shows 3 generations only · Full shows the whole tree',
     tipZoomIn: 'Zoom in (closer)',
     tipZoomOut: 'Zoom out (further)',
     tipFitToView: 'Fit the entire tree to the screen',
@@ -1053,8 +1024,6 @@ export const translations = {
     tipMiniMapShow: 'Show a small overview map of the tree',
     tipMiniMapHide: 'Hide the overview map',
     tipMiniMapNav: 'Overview map — tap or drag to jump around the tree',
-    tipExpandUp: 'Show another generation of parents above',
-    tipExpandDown: 'Show another generation of descendants below',
     tipAddMember: 'Add a new family member to the tree',
     tipSearch: 'Search by name inside the tree',
     tipBackHome: 'Back to the home screen',
@@ -1063,7 +1032,6 @@ export const translations = {
     tipNavSchematic: 'Schematic view of family branches',
     tipNavTimeline: 'Timeline of family events',
     tipNavAdmin: 'Admin — user approvals and permissions',
-    tipNavLayout: 'Pick a layout: classic / grid / arc / staggered',
     tipNavHide: 'Hide the bottom navigation bar',
     tipNavShow: 'Show the bottom navigation bar again',
     tipPanelClose: 'Close the profile card',
