@@ -224,6 +224,91 @@ describe('computeLayout — determinism', () => {
   })
 })
 
+describe('computeLayout — menorah (in-law parents above the spouse)', () => {
+  const menorahInput = () => ({
+    members: [
+      m('gpaL', { gender: 'male' }),
+      m('gmaL', { gender: 'female' }),
+      m('gpaR', { gender: 'male' }),
+      m('gmaR', { gender: 'female' }),
+      m('dad', { gender: 'male' }),
+      m('mom', { gender: 'female' }),
+      m('kid'),
+    ],
+    relationships: [
+      sp('r1', 'gpaL', 'gmaL'),
+      sp('r2', 'gpaR', 'gmaR'),
+      sp('r3', 'dad', 'mom'),
+      pc('r4', 'gpaL', 'dad'),
+      pc('r5', 'gmaL', 'dad'),
+      pc('r6', 'gpaR', 'mom'),
+      pc('r7', 'gmaR', 'mom'),
+      pc('r8', 'dad', 'kid'),
+      pc('r9', 'mom', 'kid'),
+    ],
+  })
+
+  it("places the spouse's parents ABOVE the spouse with a solid rail, not a dashed link", () => {
+    const r = computeLayout(menorahInput())
+    expectValid(r)
+    // No dashed secondary edges at all — both parent couples get rails.
+    expect(r.edges.filter((e) => e.kind === 'secondary-parent')).toHaveLength(0)
+    const familyParents = r.edges.filter((e) => e.kind === 'family').map((e) => e.kind === 'family' && e.parentUnitId)
+    expect(familyParents).toHaveLength(3) // gpaL couple, gpaR couple, dad+mom couple
+    // The in-law couple is a satellite, centred over mom's card.
+    expect(r.satelliteUnitIds).toHaveLength(1)
+    const mom = r.nodes.find((n) => n.member.id === 'mom')!
+    const gpaR = r.nodes.find((n) => n.member.id === 'gpaR')!
+    const gmaR = r.nodes.find((n) => n.member.id === 'gmaR')!
+    const satCenter = (Math.min(gpaR.x, gmaR.x) + Math.max(gpaR.x, gmaR.x) + CARD.W) / 2
+    expect(Math.abs(satCenter - (mom.x + CARD.W / 2))).toBeLessThan(1)
+    // Same row as the blood grandparents.
+    const gpaL = r.nodes.find((n) => n.member.id === 'gpaL')!
+    expect(gpaR.generation).toBe(gpaL.generation)
+  })
+
+  it('mirror symmetry: his parents over him, her parents over her, widened couple gap', () => {
+    const r = computeLayout(menorahInput())
+    const dad = r.nodes.find((n) => n.member.id === 'dad')!
+    const mom = r.nodes.find((n) => n.member.id === 'mom')!
+    const gpaL = r.nodes.find((n) => n.member.id === 'gpaL')!
+    const gmaL = r.nodes.find((n) => n.member.id === 'gmaL')!
+    // Blood parents centred over dad's card.
+    const leftCenter = (Math.min(gpaL.x, gmaL.x) + Math.max(gpaL.x, gmaL.x) + CARD.W) / 2
+    expect(Math.abs(leftCenter - (dad.x + CARD.W / 2))).toBeLessThan(1)
+    // The couple gap widened beyond the default so both parent couples fit.
+    expect(mom.x - (dad.x + CARD.W)).toBeGreaterThan(GAPS.COUPLE)
+  })
+
+  it('in-law parents bring their other children along beside the couple', () => {
+    const input = menorahInput()
+    input.members.push(m('momSister', { gender: 'female' }))
+    input.relationships.push(pc('r10', 'gpaR', 'momSister'), pc('r11', 'gmaR', 'momSister'))
+    const r = computeLayout(input)
+    expectValid(r)
+    const sister = r.nodes.find((n) => n.member.id === 'momSister')!
+    const mom = r.nodes.find((n) => n.member.id === 'mom')!
+    expect(sister.generation).toBe(mom.generation)
+  })
+
+  it('random families with in-law parents keep every invariant at depth', { timeout: 30000 }, () => {
+    for (let seed = 1; seed <= 10; seed++) {
+      const fam = generateFamily(9000 + seed, {
+        generations: 8,
+        maxChildrenPerCouple: 3,
+        inLawParentsRate: 0.35,
+        cousinMarriageRate: 0.05,
+      })
+      const r = computeLayout(fam, { showFormerSpouses: true })
+      expect(
+        validateLayout(r).map((v) => `${v.rule}: ${v.message}`),
+        `seed ${9000 + seed}, ${fam.members.length} members`,
+      ).toEqual([])
+      expect(r.nodes.length).toBe(fam.members.length)
+    }
+  })
+})
+
 describe('computeLayout — couples and bloodlines', () => {
   it('cousin marriage (diamond) renders without hanging and with one placement', { timeout: 2000 }, () => {
     // Two brothers' children marry each other.

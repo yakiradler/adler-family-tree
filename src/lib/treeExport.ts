@@ -230,9 +230,9 @@ export async function exportTreeAsPNG(opts: ExportTreeOptions): Promise<void> {
         ctx.lineWidth = 1.8
         ctx.setLineDash([])
       } else if (edge.kind === 'secondary-parent') {
-        ctx.strokeStyle = '#8E8E93'
-        ctx.lineWidth = 1.6
-        ctx.setLineDash([6, 4])
+        ctx.strokeStyle = '#6C47FF'
+        ctx.lineWidth = 1.8
+        ctx.setLineDash([7, 5])
       } else {
         ctx.strokeStyle = '#5E5CE6'
         ctx.lineWidth = 2.2

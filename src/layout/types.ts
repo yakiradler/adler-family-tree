@@ -121,6 +121,12 @@ export interface LayoutResult {
   bounds: { width: number; height: number }
   generationRows: GenerationRow[]
   issues: LayoutIssue[]
+  /** Units placed as in-law "satellites" above a married-in spouse —
+   *  their alignment is best-effort, so symmetry checks skip them. */
+  satelliteUnitIds: UnitId[]
+  /** Actual horizontal gap inside each couple (the gap widens when
+   *  both spouses have parent couples above them — the "menorah"). */
+  coupleGaps: Record<UnitId, number>
 }
 
 export interface LayoutInput {
@@ -153,6 +159,14 @@ export interface FamilyGraph {
   /** Parent→child links that are real but don't drive placement. */
   secondaryParentEdges: Array<{ parentId: string; childId: string }>
   secondaryPartnersOf: Map<string, SecondaryPartner[]>
+  /**
+   * In-law parent units ("satellites"): a root parent unit whose tie to
+   * the tree is a married-in child. Instead of floating as a distant
+   * root with a dashed link, it is placed ABOVE that child's card and
+   * connected with a normal family rail — the "menorah" shape the
+   * owner asked for (his parents over him, her parents over her).
+   */
+  satellites: Array<{ unitId: UnitId; hostUnitId: UnitId; anchorMemberId: string }>
   /** Single-member units with no family edges at all. */
   orphanUnitIds: Set<UnitId>
   issues: LayoutIssue[]

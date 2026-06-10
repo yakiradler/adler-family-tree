@@ -176,18 +176,33 @@ export function buildConnectors(
     return req
   }
 
+  // Family-rail children per parent unit: blood children (primaries of
+  // anchored child units) PLUS married-in satellite anchors — the
+  // in-law parents connect with the same solid rail as everyone else.
+  const familyChildren = new Map<UnitId, Array<{ id: string; gen: number }>>()
+  for (const [parentUnitId, childUnits] of graph.childUnitsOf) {
+    familyChildren.set(
+      parentUnitId,
+      childUnits
+        .map((cu) => graph.unitById.get(cu)!)
+        .map((u) => ({ id: u.primary.id, gen: genOfUnit.get(u.id) ?? 0 })),
+    )
+  }
+  for (const sat of graph.satellites) {
+    const list = familyChildren.get(sat.unitId) ?? []
+    list.push({ id: sat.anchorMemberId, gen: genOfMember(sat.anchorMemberId) })
+    familyChildren.set(sat.unitId, list)
+  }
+
   const familyPlans: FamilyPlan[] = []
-  for (const [parentUnitId, childUnits] of [...graph.childUnitsOf.entries()].sort()) {
+  for (const [parentUnitId, childInfos] of [...familyChildren.entries()].sort()) {
     const parentUnit = graph.unitById.get(parentUnitId)
-    if (!parentUnit || childUnits.length === 0) continue
+    if (!parentUnit || childInfos.length === 0) continue
     const parentGen = genOfUnit.get(parentUnitId) ?? 0
     const trunkX = centerOfUnit.get(parentUnitId) ?? 0
     const trunkFromCoupleMidline = parentUnit.members.length === 2
 
     // The rail sits in the gutter just above the SHALLOWEST child.
-    const childInfos = childUnits
-      .map((cu) => graph.unitById.get(cu)!)
-      .map((u) => ({ id: u.primary.id, gen: genOfUnit.get(u.id) ?? 0 }))
     const railGutter = Math.min(...childInfos.map((c) => c.gen)) - 1
 
     const dropXs = childInfos.map((c) => {

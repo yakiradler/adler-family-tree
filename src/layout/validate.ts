@@ -103,7 +103,7 @@ export function validateLayout(result: LayoutResult): LayoutViolation[] {
     }
   }
 
-  // V4 — couple adjacency.
+  // V4 — couple adjacency (the gap may widen per couple — menorah).
   const nodeById = new Map(result.nodes.map((n) => [n.member.id, n]))
   const couplesChecked = new Set<string>()
   for (const n of result.nodes) {
@@ -118,10 +118,11 @@ export function validateLayout(result: LayoutResult): LayoutViolation[] {
       continue
     }
     const [left, right] = a.x <= b.x ? [a, b] : [b, a]
-    if (Math.abs(a.y - b.y) > EPS || Math.abs(right.x - (left.x + CARD.W + GAPS.COUPLE)) > EPS) {
+    const expectedGap = result.coupleGaps[n.unitId] ?? GAPS.COUPLE
+    if (Math.abs(a.y - b.y) > EPS || Math.abs(right.x - (left.x + CARD.W + expectedGap)) > EPS) {
       violations.push({
         rule: 'V4',
-        message: `Couple not adjacent: ${name(left)} at (${left.x},${left.y}) / ${name(right)} at (${right.x},${right.y})`,
+        message: `Couple not adjacent: ${name(left)} at (${left.x},${left.y}) / ${name(right)} at (${right.x},${right.y}), expected gap ${expectedGap}`,
       })
     }
   }
@@ -182,14 +183,11 @@ export function validateLayout(result: LayoutResult): LayoutViolation[] {
     }
   }
 
-  // V8 — symmetry: parent centred over children (or children under parent).
-  const childrenByUnit = new Map<string, PlacedNode[]>()
-  for (const e of result.edges) {
-    if (e.kind !== 'family') continue
-    const kids = e.childIds.map((id) => nodeById.get(id)).filter((n): n is PlacedNode => !!n)
-    if (kids.length > 0) childrenByUnit.set(e.parentUnitId, kids)
-  }
-  // Unit centre = midpoint of the unit's full card extent (couple = both cards).
+  // V8 — symmetry: a parent unit is centred on the midpoint of its
+  // rail's leftmost and rightmost DROP points (the blood-child card
+  // centres). In-law satellites are exempt — their alignment is
+  // best-effort (they slide right when the preferred slot is taken).
+  const satelliteSet = new Set(result.satelliteUnitIds)
   const unitExtent = new Map<string, { min: number; max: number }>()
   for (const n of result.nodes) {
     const ext = unitExtent.get(n.unitId) ?? { min: Infinity, max: -Infinity }
@@ -201,21 +199,21 @@ export function validateLayout(result: LayoutResult): LayoutViolation[] {
     const ext = unitExtent.get(unitId)
     return ext ? (ext.min + ext.max) / 2 : null
   }
-  for (const [unitId, kids] of childrenByUnit) {
-    const parentCenter = unitCenter(unitId)
+  for (const e of result.edges) {
+    if (e.kind !== 'family') continue
+    if (satelliteSet.has(e.parentUnitId)) continue
+    const parentCenter = unitCenter(e.parentUnitId)
     if (parentCenter == null) continue
-    // The engine centres a parent on the midpoint of its first and last
-    // child UNITS (a married child's unit includes their spouse).
-    const centers = [...new Set(kids.map((k) => k.unitId))]
-      .map((uid) => unitCenter(uid))
-      .filter((c): c is number => c != null)
+    const dropXs = e.endpoints
+      .filter((ep) => ep.anchorKind === 'top')
+      .map((ep) => ep.point.x)
       .sort((a, b) => a - b)
-    if (centers.length === 0) continue
-    const childMid = (centers[0] + centers[centers.length - 1]) / 2
+    if (dropXs.length === 0) continue
+    const childMid = (dropXs[0] + dropXs[dropXs.length - 1]) / 2
     if (Math.abs(parentCenter - childMid) > EPS) {
       violations.push({
         rule: 'V8',
-        message: `Unit ${unitId} not centred over its children: parent centre ${parentCenter}, children midpoint ${childMid}`,
+        message: `Unit ${e.parentUnitId} not centred over its children: parent centre ${parentCenter}, drops midpoint ${childMid}`,
       })
     }
   }

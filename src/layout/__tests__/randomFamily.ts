@@ -20,6 +20,9 @@ export interface FamilySpec {
   formerSpouseRate?: number
   /** Chance a new spouse is drawn from in-tree members (cousin marriage). */
   cousinMarriageRate?: number
+  /** Chance a married-in spouse gets their own parent couple (in-law
+   *  satellites — the "menorah" placement). */
+  inLawParentsRate?: number
   missingGenderRate?: number
   connectorOverrideRate?: number
   orphanCount?: number
@@ -50,6 +53,7 @@ export function generateFamily(seed: number, spec: FamilySpec): GeneratedFamily 
     marryRate = 0.7,
     formerSpouseRate = 0.1,
     cousinMarriageRate = 0.05,
+    inLawParentsRate = 0,
     missingGenderRate = 0.04,
     connectorOverrideRate = 0.05,
     orphanCount = 2,
@@ -138,6 +142,16 @@ export function generateFamily(seed: number, spec: FamilySpec): GeneratedFamily 
         }
         if (!spouse) {
           spouse = newMember(childGender === 'male' ? 'female' : 'male', gen)
+          // In-law parents: the married-in spouse gets their own parent
+          // couple, which the engine places as a satellite above them.
+          if (rnd() < inLawParentsRate) {
+            const ilDad = newMember('male', gen - 1)
+            const ilMom = newMember('female', gen - 1)
+            marry(ilDad, ilMom)
+            married.add(ilDad.id).add(ilMom.id)
+            parent(ilDad, spouse)
+            parent(ilMom, spouse)
+          }
         }
         marry(child, spouse)
         married.add(child.id).add(spouse.id)
