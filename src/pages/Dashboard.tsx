@@ -307,6 +307,7 @@ export default function Dashboard({ demoMode }: Props) {
       name: string
       count: number
       color: string
+      icon: string | null
       isMain: boolean
     }[] = []
 
@@ -329,6 +330,7 @@ export default function Dashboard({ demoMode }: Props) {
           : (lang === 'he' ? 'עץ המשפחה הראשי' : 'Main Family Tree'),
         count: mainPool.length,
         color: '#007AFF',
+        icon: null,
         isMain: true,
       })
     }
@@ -346,6 +348,7 @@ export default function Dashboard({ demoMode }: Props) {
         name: tr.name || (lang === 'he' ? 'עץ ללא שם' : 'Unnamed tree'),
         count: pool.length,
         color: tr.color ?? palette[(i + 1) % palette.length]!,
+        icon: tr.icon_url ?? null,
         isMain: false,
       })
     })
@@ -645,13 +648,26 @@ export default function Dashboard({ demoMode }: Props) {
                       background: `linear-gradient(135deg, ${tree.color}, ${tree.color}AA)`,
                     }}
                   >
-                    <svg width="34" height="34" viewBox="0 0 32 32" fill="none" aria-hidden>
-                      <circle cx="16" cy="9" r="3.4" fill="white" opacity="0.95" />
-                      <circle cx="8" cy="20" r="3" fill="white" opacity="0.78" />
-                      <circle cx="24" cy="20" r="3" fill="white" opacity="0.78" />
-                      <line x1="16" y1="12.4" x2="8" y2="17" stroke="white" strokeWidth="1.4" strokeOpacity="0.7" strokeLinecap="round" />
-                      <line x1="16" y1="12.4" x2="24" y2="17" stroke="white" strokeWidth="1.4" strokeOpacity="0.7" strokeLinecap="round" />
-                    </svg>
+                    {/* Custom uploaded icon wins; the silhouette is the
+                        fallback. Rounded on the img itself — the parent
+                        must NOT clip (the count pill + balloon overflow
+                        its corners on purpose). */}
+                    {tree.icon ? (
+                      <img
+                        src={tree.icon}
+                        alt=""
+                        className="absolute inset-0 w-full h-full object-cover rounded-2xl"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <svg width="34" height="34" viewBox="0 0 32 32" fill="none" aria-hidden>
+                        <circle cx="16" cy="9" r="3.4" fill="white" opacity="0.95" />
+                        <circle cx="8" cy="20" r="3" fill="white" opacity="0.78" />
+                        <circle cx="24" cy="20" r="3" fill="white" opacity="0.78" />
+                        <line x1="16" y1="12.4" x2="8" y2="17" stroke="white" strokeWidth="1.4" strokeOpacity="0.7" strokeLinecap="round" />
+                        <line x1="16" y1="12.4" x2="24" y2="17" stroke="white" strokeWidth="1.4" strokeOpacity="0.7" strokeLinecap="round" />
+                      </svg>
+                    )}
                     {/* Member count pill — tucked in the corner so
                         the user can tell at a glance which tree is
                         biggest without opening it. */}

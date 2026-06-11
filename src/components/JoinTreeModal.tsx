@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { supabase } from '../lib/supabase'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang } from '../i18n/useT'
 
@@ -24,7 +23,7 @@ export default function JoinTreeModal({
   onClose: () => void
 }) {
   const { t } = useLang()
-  const { setActiveTreeId, fetchMembers, fetchRelationships } = useFamilyStore()
+  const joinTreeWithCode = useFamilyStore((s) => s.joinTreeWithCode)
   const navigate = useNavigate()
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
@@ -52,57 +51,14 @@ export default function JoinTreeModal({
     }
     setBusy(true)
     try {
-      // A valid invite code IS the authorization — no need to file
-      // an access request and wait for an admin. Validate the code,
-      // decrement uses_left (if capped), then drop the user straight
-      // into the target tree. Mirrors how share-links work in
-      // Notion / Figma: holding the link is the grant.
-      const { data } = await supabase
-        .from('tree_invites')
-        .select('id, tree_id, expires_at, uses_left')
-        .eq('code', trimmed)
-        .maybeSingle()
-      const valid =
-        !!data &&
-        (data.expires_at == null || new Date(data.expires_at) > new Date()) &&
-        (data.uses_left == null || data.uses_left > 0)
-      if (!valid || !data) {
+      // All the redeem logic (validate → burn use → grant tree_access
+      // → switch + refetch) lives in the store so the /join deep-link
+      // route shares it verbatim.
+      const result = await joinTreeWithCode(trimmed)
+      if (!result.ok) {
         setError(t.onbInviteInvalid)
         return
       }
-      // Burn one use on capped codes. Uncapped codes (`uses_left` null)
-      // are share-links that never expire by count.
-      if (data.uses_left != null) {
-        await supabase
-          .from('tree_invites')
-          .update({ uses_left: Math.max(0, data.uses_left - 1) })
-          .eq('id', data.id)
-      }
-      // Grant DB-level access to the target tree.  Without this row
-      // the new RLS in migration 008 would refuse to return members /
-      // relationships for the tree — the UI would join "into" an
-      // empty space.  We insert before fetching so the next reads
-      // already see the rows.
-      if (data.tree_id) {
-        const { data: auth } = await supabase.auth.getUser()
-        const uid = auth.user?.id
-        if (uid) {
-          // ignoreDuplicates (ON CONFLICT DO NOTHING): tree_access has
-          // no UPDATE policy, so re-joining a tree you already have
-          // access to would otherwise fail the upsert's update half.
-          await supabase
-            .from('tree_access')
-            .upsert(
-              { user_id: uid, tree_id: data.tree_id, role: 'member' },
-              { onConflict: 'user_id,tree_id', ignoreDuplicates: true },
-            )
-        }
-      }
-      // Switch the UI to the target tree and refresh data so the
-      // user's next paint shows the tree they joined, not the empty
-      // skeleton they came from.
-      if (data.tree_id) setActiveTreeId(data.tree_id)
-      await Promise.all([fetchMembers(), fetchRelationships()])
       setSuccess(true)
       // Auto-close after a beat and navigate so the user lands on
       // their new tree without an extra click.

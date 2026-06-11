@@ -53,3 +53,69 @@ export async function fileToDownscaledDataURL(file: File): Promise<string> {
 
   return canvas.toDataURL('image/jpeg', JPEG_QUALITY)
 }
+
+// ─── Tree icon uploads (tree-icons storage bucket) ───────────────────
+// Icons render at 60px, so a 256px centred square is plenty — keeps
+// the bucket tiny at thousands of trees.
+
+export const ICON_MAX_DIM = 256
+
+export interface IconBlob {
+  blob: Blob
+  contentType: string
+  ext: string
+}
+
+/** Storage object path: `<treeId>/icon-<ts>.<ext>`. The tree id as the
+ *  FIRST path segment is the storage-RLS ownership anchor
+ *  (split_part(name,'/',1), migration 014). Pure, unit-tested. */
+export function iconStoragePath(treeId: string, ext: string, ts: number): string {
+  return `${treeId}/icon-${ts}.${ext.replace(/^\./, '')}`
+}
+
+/**
+ * Downscale to a centred square crop and encode as webp, falling back
+ * to jpeg (Safari's canvas silently returns png when asked for webp,
+ * which would triple the size). Uses the same FileReader+Image decode
+ * path as fileToDownscaledDataURL above — createImageBitmap is missing
+ * on older iOS Safari.
+ */
+export async function fileToIconBlob(file: File, maxDim: number = ICON_MAX_DIM): Promise<IconBlob> {
+  const raw = await new Promise<string>((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(r.result as string)
+    r.onerror = () => reject(r.error ?? new Error('FileReader failed'))
+    r.readAsDataURL(file)
+  })
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const i = new Image()
+    i.onload = () => resolve(i)
+    i.onerror = () => reject(new Error('Image decode failed'))
+    i.src = raw
+  })
+
+  const side = Math.min(img.width, img.height)
+  const target = Math.min(maxDim, side)
+  const canvas = document.createElement('canvas')
+  canvas.width = target
+  canvas.height = target
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas 2D context unavailable')
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, target, target)
+  // Centred square crop, scaled down.
+  const sx = (img.width - side) / 2
+  const sy = (img.height - side) / 2
+  ctx.drawImage(img, sx, sy, side, side, 0, 0, target, target)
+
+  const tryEncode = (type: string, quality: number) =>
+    new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality))
+
+  let blob = await tryEncode('image/webp', 0.85)
+  if (!blob || blob.type !== 'image/webp') {
+    blob = await tryEncode('image/jpeg', 0.85)
+    if (!blob) throw new Error('image encode failed')
+    return { blob, contentType: 'image/jpeg', ext: 'jpg' }
+  }
+  return { blob, contentType: 'image/webp', ext: 'webp' }
+}

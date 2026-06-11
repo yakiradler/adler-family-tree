@@ -154,6 +154,13 @@ interface FamilyState {
    * one. Returns null when the mint is refused (RLS / offline).
    */
   mintShareCode: (treeId: string) => Promise<TreeInvite | null>
+
+  /**
+   * Redeem an invite code: validate, burn a use (capped codes), grant
+   * tree_access, switch the active tree and refresh data. Shared by
+   * JoinTreeModal and the /join deep-link route.
+   */
+  joinTreeWithCode: (code: string) => Promise<{ ok: true; treeId: string | null } | { ok: false }>
   decideAccessRequest: (
     id: string, decision: 'approved' | 'rejected',
     grantedRole?: UserRole,
@@ -908,6 +915,57 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   markAllNotificationsRead: async () => {
     const unreadIds = get().notifications.filter((n) => n.read_at == null).map((n) => n.id)
     await get().markNotificationsRead(unreadIds)
+  },
+
+  joinTreeWithCode: async (code) => {
+    const trimmed = code.trim()
+    if (!trimmed || !isSupabaseConfigured) return { ok: false as const }
+    try {
+      // A valid invite code IS the authorization — holding the code is
+      // the grant (mirrors Notion/Figma share links).
+      const { data } = await supabase
+        .from('tree_invites')
+        .select('id, tree_id, expires_at, uses_left')
+        .eq('code', trimmed)
+        .maybeSingle()
+      const valid =
+        !!data &&
+        (data.expires_at == null || new Date(data.expires_at) > new Date()) &&
+        (data.uses_left == null || data.uses_left > 0)
+      if (!valid || !data) return { ok: false as const }
+      // Burn one use on capped codes.
+      if (data.uses_left != null) {
+        await supabase
+          .from('tree_invites')
+          .update({ uses_left: Math.max(0, data.uses_left - 1) })
+          .eq('id', data.id)
+      }
+      // DB-level access grant — without this row the RLS from
+      // migration 008/009 keeps the tree invisible. ignoreDuplicates:
+      // tree_access has no UPDATE policy, so a DO UPDATE upsert would
+      // be rejected when re-joining.
+      if (data.tree_id) {
+        const { data: auth } = await supabase.auth.getUser()
+        const uid = auth.user?.id
+        if (uid) {
+          await supabase
+            .from('tree_access')
+            .upsert(
+              { user_id: uid, tree_id: data.tree_id, role: 'member' },
+              { onConflict: 'user_id,tree_id', ignoreDuplicates: true },
+            )
+        }
+        get().setActiveTreeId(data.tree_id)
+      }
+      await Promise.all([
+        get().fetchMembers(), get().fetchRelationships(),
+        get().fetchTrees(), get().fetchMyTreeAccess(),
+      ])
+      return { ok: true as const, treeId: data.tree_id ?? null }
+    } catch (err) {
+      reportSupabaseFailure('joinTreeWithCode', err)
+      return { ok: false as const }
+    }
   },
 
   mintShareCode: async (treeId) => {
