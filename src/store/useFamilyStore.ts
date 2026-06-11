@@ -3,9 +3,12 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { canApproveEditRequests, isAdmin } from '../lib/permissions'
 import { resolveRequestTreeId } from '../lib/accessRequests'
 import { gateAddMember, gateAddTree, SIGNUP_GIFT_LEAVES, TRIAL_DAYS } from '../lib/plans'
+import { isShareCodeRequest, mergeNotificationLists } from '../lib/notifications'
+import { shareInviteDraft, pickReusableShareInvite, generateCode } from '../lib/invites'
 import type {
   Member, Relationship, EditRequest, ViewMode, Profile,
   AccessRequest, UserRole, FamilyTree, MemberNote, FeedbackItem, UserPlan,
+  NotificationItem, TreeInvite,
 } from '../types'
 
 // Surface Supabase failures to the UI. The "נשמר מקומית — סנכרון
@@ -137,6 +140,20 @@ interface FamilyState {
   /** Tree ids the current user holds a tree_access row for. */
   myTreeAccessIds: string[]
   fetchMyTreeAccess: () => Promise<void>
+
+  // ── Notifications (migration 014) ───────────────────────────────────
+  notifications: NotificationItem[]
+  /** Last 30 + all unread (cap 200), merged + deduped. */
+  fetchNotifications: () => Promise<void>
+  markNotificationsRead: (ids: string[]) => Promise<void>
+  markAllNotificationsRead: () => Promise<void>
+
+  /**
+   * Get a share code for a tree the caller owns (or is admin of):
+   * reuses the newest active generic code, else mints a fresh 30-day
+   * one. Returns null when the mint is refused (RLS / offline).
+   */
+  mintShareCode: (treeId: string) => Promise<TreeInvite | null>
   decideAccessRequest: (
     id: string, decision: 'approved' | 'rejected',
     grantedRole?: UserRole,
@@ -825,6 +842,113 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     }
   },
 
+  // ── Notifications (migration 014) ───────────────────────────────────
+  // Two queries keep this scale-safe: the latest page for history plus
+  // ALL unread (capped) so the badge never under-counts when more than
+  // a page of notifications piled up between visits.
+  notifications: [],
+  fetchNotifications: async () => {
+    if (!isSupabaseConfigured) return
+    const me = get().profile
+    if (!me) return
+    try {
+      const [recent, unread] = await Promise.all([
+        supabase
+          .from('notifications')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(30),
+        supabase
+          .from('notifications')
+          .select('*')
+          .is('read_at', null)
+          .order('created_at', { ascending: false })
+          .limit(200),
+      ])
+      if (recent.error || unread.error) {
+        reportSupabaseFailure('fetchNotifications', recent.error ?? unread.error, 'read')
+        return
+      }
+      set({
+        notifications: mergeNotificationLists(
+          (recent.data ?? []) as NotificationItem[],
+          (unread.data ?? []) as NotificationItem[],
+        ),
+      })
+    } catch (err) {
+      reportSupabaseFailure('fetchNotifications', err, 'read')
+    }
+  },
+
+  markNotificationsRead: async (ids) => {
+    if (ids.length === 0) return
+    const readAt = new Date().toISOString()
+    const idSet = new Set(ids)
+    set((s) => ({
+      notifications: s.notifications.map((n) =>
+        idSet.has(n.id) && n.read_at == null ? { ...n, read_at: readAt } : n,
+      ),
+    }))
+    if (!isSupabaseConfigured) return
+    const me = get().profile
+    if (!me) return
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read_at: readAt })
+        .in('id', ids)
+        .eq('user_id', me.id)
+        .is('read_at', null)
+      if (error) reportSupabaseFailure('markNotificationsRead', error)
+    } catch (err) {
+      reportSupabaseFailure('markNotificationsRead', err)
+    }
+  },
+
+  markAllNotificationsRead: async () => {
+    const unreadIds = get().notifications.filter((n) => n.read_at == null).map((n) => n.id)
+    await get().markNotificationsRead(unreadIds)
+  },
+
+  mintShareCode: async (treeId) => {
+    const me = get().profile
+    if (!me) return null
+    // Demo mode: synthetic local code so the flow is exercisable.
+    if (!isSupabaseConfigured) {
+      const draft = shareInviteDraft(treeId, me.id)
+      return { ...draft, id: `local-${Date.now()}`, created_at: new Date().toISOString() }
+    }
+    try {
+      // Reuse the newest active generic code for this tree — repeated
+      // long-presses must not pile up rows.
+      const { data: existing } = await supabase
+        .from('tree_invites')
+        .select('*')
+        .eq('tree_id', treeId)
+        .is('created_for', null)
+        .order('created_at', { ascending: false })
+        .limit(10)
+      const reusable = pickReusableShareInvite((existing ?? []) as TreeInvite[], treeId)
+      if (reusable) return reusable
+
+      const draft = shareInviteDraft(treeId, me.id)
+      const first = await supabase.from('tree_invites').insert(draft).select('*').single()
+      if (!first.error && first.data) return first.data as TreeInvite
+      // Unique collision on `code` — re-roll once.
+      const retry = await supabase
+        .from('tree_invites')
+        .insert({ ...draft, code: generateCode() })
+        .select('*')
+        .single()
+      if (!retry.error && retry.data) return retry.data as TreeInvite
+      reportSupabaseFailure('mintShareCode', retry.error ?? first.error)
+      return null
+    } catch (err) {
+      reportSupabaseFailure('mintShareCode', err)
+      return null
+    }
+  },
+
   decideAccessRequest: async (id, decision, grantedRole) => {
     // App-level admin gate. RLS still authoritative server-side; this
     // mirrors that policy locally so the action is rejected before any
@@ -850,6 +974,31 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
             .maybeSingle()
           grantTreeId = (inv as { tree_id: string | null } | null)?.tree_id ?? null
         } catch { /* unresolvable code — role grant still proceeds */ }
+      }
+    }
+    // ── Share-code requests: mint the code BEFORE flipping status ────
+    // The on_access_request_decided trigger (migration 014) embeds the
+    // newest active code minted FOR the requester into their approval
+    // notification — so the invite row must be committed first. On
+    // mint failure we continue: the requester still gets an approval
+    // notification, just without a code.
+    if (
+      decision === 'approved' && req && grantTreeId &&
+      isShareCodeRequest(req) && isSupabaseConfigured
+    ) {
+      const me = get().profile
+      const draft = shareInviteDraft(grantTreeId, me?.id ?? '', Date.now(), req.requester_id)
+      try {
+        const { error: mintErr } = await supabase.from('tree_invites').insert(draft)
+        if (mintErr) {
+          // Most common cause: unique collision on `code`. Re-roll once.
+          const retry = await supabase
+            .from('tree_invites')
+            .insert({ ...draft, code: generateCode() })
+          if (retry.error) reportSupabaseFailure('decideAccessRequest:mint', retry.error)
+        }
+      } catch (err) {
+        reportSupabaseFailure('decideAccessRequest:mint', err)
       }
     }
     // Optimistic update first so the admin sees the decision land

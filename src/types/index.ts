@@ -146,8 +146,46 @@ export interface FamilyTree {
   description?: string
   /** Hex accent — colors the tree connectors and the active dot in the switcher. */
   color?: string
+  /** Custom icon image (tree-icons storage bucket); falls back to the SVG silhouette. */
+  icon_url?: string | null
   created_by: string
   created_at?: string
+}
+
+/** Row in `tree_invites` — a join code for a tree. */
+export interface TreeInvite {
+  id: string
+  code: string
+  tree_id: string | null
+  created_by?: string | null
+  /** Minted FOR this user (share-code approval). UI pointer only — codes stay bearer tokens. */
+  created_for?: string | null
+  expires_at: string | null
+  uses_left: number | null
+  note?: string | null
+  created_at?: string
+}
+
+/**
+ * Persistent per-user notification (migration 014). Display text is
+ * rendered client-side from `type` + `data` so it follows the UI
+ * language; the row stores no strings.
+ */
+export type NotificationType =
+  | 'access_request'      // someone asked to join / get tree access (→ admins)
+  | 'share_code_request'  // someone asked for a share code (→ admins)
+  | 'edit_request'        // someone proposed a member edit (→ admins)
+  | 'feedback'            // someone filed a bug/question report (→ admins)
+  | 'request_approved'    // your access request was approved (→ requester)
+  | 'request_rejected'    // your access request was declined (→ requester)
+
+export interface NotificationItem {
+  id: string
+  user_id: string
+  type: NotificationType
+  data: Record<string, unknown>
+  read_at: string | null
+  created_at: string
 }
 
 export interface Relationship {

@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../lib/supabase'
+import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang, type Translations } from '../../i18n/useT'
+import { generateCode, expiryToIso, type ExpiryChoice } from '../../lib/invites'
+import type { TreeInvite } from '../../types'
 
 /**
  * Admin tool — generate and manage `tree_invites` codes.
@@ -16,40 +19,14 @@ import { useLang, type Translations } from '../../i18n/useT'
  * Supabase) keeps everything in component state so the UI is still
  * exercisable end-to-end.
  */
-interface TreeInvite {
-  id: string
-  code: string
-  created_at: string
-  expires_at: string | null
-  uses_left: number | null
-  note: string | null
-}
-
 const SUPABASE_CONFIGURED =
   !!import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_URL !== ''
-
-// 10-char base32-ish code. We avoid 0/O/1/I to make codes phone-readable.
-const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-function generateCode(len = 10): string {
-  let out = ''
-  const arr = new Uint32Array(len)
-  crypto.getRandomValues(arr)
-  for (let i = 0; i < len; i++) {
-    out += CODE_ALPHABET[arr[i] % CODE_ALPHABET.length]
-  }
-  // Stylise: ABCDE-12345 for readability.
-  return `${out.slice(0, 5)}-${out.slice(5)}`
-}
-
-type ExpiryChoice = 'never' | '7d' | '30d' | '90d'
-function expiryToIso(choice: ExpiryChoice): string | null {
-  if (choice === 'never') return null
-  const days = choice === '7d' ? 7 : choice === '30d' ? 30 : 90
-  return new Date(Date.now() + days * 86_400_000).toISOString()
-}
+// Code generation + expiry helpers live in src/lib/invites.ts — shared
+// with the tree long-press mint flow and decideAccessRequest.
 
 export default function InviteCodeManager() {
   const { t, lang } = useLang()
+  const { trees, profile, activeTreeId } = useFamilyStore()
   // Demo mode (no Supabase) seeds one practise invite at init so the
   // admin can exercise the flow; live mode starts empty and loads below.
   const [invites, setInvites] = useState<TreeInvite[]>(() =>
@@ -59,6 +36,7 @@ export default function InviteCodeManager() {
           {
             id: 'demo-1',
             code: 'ADLER-DEMO1',
+            tree_id: null,
             created_at: new Date(Date.now() - 86_400_000 * 2).toISOString(),
             expires_at: new Date(Date.now() + 86_400_000 * 28).toISOString(),
             uses_left: 5,
@@ -71,6 +49,10 @@ export default function InviteCodeManager() {
   const [note, setNote] = useState('')
   const [uses, setUses] = useState<string>('')   // '' = unlimited, else integer
   const [expiry, setExpiry] = useState<ExpiryChoice>('30d')
+  // Which tree the code grants access to. Codes used to be minted
+  // WITHOUT a tree (the original bug) — joining with them granted
+  // nothing. Defaults to the active tree.
+  const [treeId, setTreeId] = useState<string>(activeTreeId ?? '')
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
   // Initial load (live mode only — demo mode is seeded at init above).
@@ -80,20 +62,26 @@ export default function InviteCodeManager() {
       setLoading(true)
       const { data } = await supabase
         .from('tree_invites')
-        .select('id, code, created_at, expires_at, uses_left, note')
+        .select('*')
         .order('created_at', { ascending: false })
       setInvites((data ?? []) as TreeInvite[])
       setLoading(false)
     })()
   }, [])
 
+  const treeNameById = (id: string | null | undefined): string | null =>
+    id ? trees.find((tr) => tr.id === id)?.name ?? null : null
+
   const createInvite = async () => {
+    if (SUPABASE_CONFIGURED && !treeId) return
     setCreating(true)
     try {
       const usesParsed = uses.trim() === '' ? null : Math.max(1, parseInt(uses, 10) || 1)
       const expiresIso = expiryToIso(expiry)
-      const draft: Omit<TreeInvite, 'id' | 'created_at'> & { code: string } = {
+      const draft = {
         code: generateCode(),
+        tree_id: treeId || null,
+        created_by: profile?.id ?? null,
         expires_at: expiresIso,
         uses_left: usesParsed,
         note: note.trim() || null,
@@ -110,14 +98,14 @@ export default function InviteCodeManager() {
         const { data, error } = await supabase
           .from('tree_invites')
           .insert(draft)
-          .select('id, code, created_at, expires_at, uses_left, note')
+          .select('*')
           .single()
         if (error) {
           // Most common cause: collision on `code` unique. Re-roll once.
           const retry = await supabase
             .from('tree_invites')
             .insert({ ...draft, code: generateCode() })
-            .select('id, code, created_at, expires_at, uses_left, note')
+            .select('*')
             .single()
           if (retry.data) setInvites((rows) => [retry.data as TreeInvite, ...rows])
         } else if (data) {
@@ -168,6 +156,21 @@ export default function InviteCodeManager() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="sm:col-span-3">
+            <label className="text-[10px] font-semibold text-[#8E8E93] uppercase mb-1 block">
+              {t.adminInvitesTreeLabel}
+            </label>
+            <select
+              value={treeId}
+              onChange={(e) => setTreeId(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-[#F2F2F7] text-sf-body text-[#1C1C1E] outline-none focus:ring-2 focus:ring-[#5E5CE6]/40"
+            >
+              <option value="">{t.adminInvitesTreePick}</option>
+              {trees.map((tr) => (
+                <option key={tr.id} value={tr.id}>{tr.name}</option>
+              ))}
+            </select>
+          </div>
           <div className="sm:col-span-3">
             <label className="text-[10px] font-semibold text-[#8E8E93] uppercase mb-1 block">
               {t.adminInvitesNoteLabel}
@@ -224,7 +227,7 @@ export default function InviteCodeManager() {
         <button
           type="button"
           onClick={createInvite}
-          disabled={creating}
+          disabled={creating || (SUPABASE_CONFIGURED && !treeId)}
           className="w-full py-2.5 rounded-2xl bg-gradient-to-r from-[#5E5CE6] to-[#BF5AF2] text-white text-sf-subhead font-bold shadow-md disabled:opacity-50 active:scale-[0.98] transition"
         >
           {creating ? '…' : t.adminInvitesGenerate}
@@ -252,6 +255,7 @@ export default function InviteCodeManager() {
                 <InviteRow
                   key={inv.id}
                   inv={inv}
+                  treeName={treeNameById(inv.tree_id)}
                   copied={copiedId === inv.id}
                   onCopy={() => copy(inv)}
                   onRevoke={() => revoke(inv.id)}
@@ -268,9 +272,10 @@ export default function InviteCodeManager() {
 }
 
 function InviteRow({
-  inv, copied, onCopy, onRevoke, t, lang,
+  inv, treeName, copied, onCopy, onRevoke, t, lang,
 }: {
   inv: TreeInvite
+  treeName: string | null
   copied: boolean
   onCopy: () => void
   onRevoke: () => void
@@ -303,13 +308,16 @@ function InviteRow({
           >
             {inv.code}
           </span>
+          {treeName && (
+            <span className="text-[11px] font-semibold text-[#5E5CE6]">🌳 {treeName}</span>
+          )}
           {inv.note && (
             <span className="text-[11px] text-[#636366]">— {inv.note}</span>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-[#8E8E93] mt-0.5">
           <span>
-            {t.adminInvitesGenerated}: {fmt(inv.created_at)}
+            {t.adminInvitesGenerated}: {inv.created_at ? fmt(inv.created_at) : '—'}
           </span>
           <span>
             {t.adminInvitesExpiresOn}:{' '}
