@@ -116,9 +116,11 @@ create table if not exists public.family_trees (
   name         text not null,
   description  text,
   color        text,
+  icon_url     text,            -- custom icon image (tree-icons bucket), migration 014
   created_by   uuid references auth.users(id) on delete set null,
   created_at   timestamptz not null default now()
 );
+alter table public.family_trees add column if not exists icon_url text;
 
 -- ============================================================
 -- MEMBERS
@@ -217,11 +219,16 @@ create table if not exists public.tree_invites (
   code        text not null unique,
   tree_id     uuid references public.family_trees(id) on delete cascade,
   created_by  uuid references auth.users(id) on delete set null,
+  -- Minted FOR a specific user (share-code approval flow, migration
+  -- 014). UI pointer only — codes stay bearer tokens.
+  created_for uuid references auth.users(id) on delete set null,
   expires_at  timestamptz,
   uses_left   int,
   note        text,
   created_at  timestamptz not null default now()
 );
+alter table public.tree_invites add column if not exists created_for uuid references auth.users(id) on delete set null;
+create index if not exists inv_created_for_idx on public.tree_invites(created_for, tree_id);
 
 -- ============================================================
 -- MEMBER NOTES — comments + memories left on each profile
@@ -457,7 +464,20 @@ drop policy if exists "inv_delete_admin" on public.tree_invites;
 -- Any signed-in user can look up a code (so the onboarding wizard
 -- can validate the code they typed). Only admins can mint/delete.
 create policy "inv_select_auth"  on public.tree_invites for select using (auth.role() = 'authenticated');
-create policy "inv_insert_admin" on public.tree_invites for insert with check (public.is_admin(auth.uid()));
+-- Admins mint codes for any tree; tree OWNERS mint codes for their
+-- own trees (migration 014 — owner long-press "create share code").
+create policy "inv_insert_admin" on public.tree_invites for insert with check (
+  public.is_admin(auth.uid())
+  or (
+    tree_id is not null
+    and created_by = auth.uid()
+    and exists (
+      select 1 from public.family_trees ft
+      where ft.id = tree_invites.tree_id
+        and ft.created_by = auth.uid()
+    )
+  )
+);
 create policy "inv_update_admin" on public.tree_invites for update using (public.is_admin(auth.uid()));
 create policy "inv_delete_admin" on public.tree_invites for delete using (public.is_admin(auth.uid()));
 
@@ -623,6 +643,195 @@ create index if not exists er_status_idx           on public.edit_requests(statu
 create index if not exists ar_status_idx           on public.access_requests(status);
 create index if not exists inv_code_idx            on public.tree_invites(code);
 create index if not exists feedback_status_idx     on public.feedback(status);
+
+-- ============================================================
+-- NOTIFICATIONS — persistent per-user inbox (migration 014)
+-- ============================================================
+-- Rows are written ONLY by the SECURITY DEFINER triggers below (no
+-- client INSERT policy): new requests fan out to admins; decisions
+-- notify the requester (approval embeds the minted share code). Text
+-- is rendered client-side from type+data so it localizes he/en.
+create table if not exists public.notifications (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references auth.users(id) on delete cascade,
+  type        text not null check (type in (
+    'access_request', 'share_code_request', 'edit_request',
+    'feedback', 'request_approved', 'request_rejected'
+  )),
+  data        jsonb not null default '{}'::jsonb,
+  read_at     timestamptz,
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists ntf_user_created_idx
+  on public.notifications(user_id, created_at desc);
+create index if not exists ntf_user_unread_idx
+  on public.notifications(user_id) where read_at is null;
+
+alter table public.notifications enable row level security;
+drop policy if exists "ntf_select_own" on public.notifications;
+drop policy if exists "ntf_update_own" on public.notifications;
+drop policy if exists "ntf_delete_own" on public.notifications;
+create policy "ntf_select_own" on public.notifications for select
+  using (user_id = auth.uid());
+create policy "ntf_update_own" on public.notifications for update
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "ntf_delete_own" on public.notifications for delete
+  using (user_id = auth.uid());
+-- NO insert policy on purpose — and do NOT add FORCE ROW LEVEL
+-- SECURITY (the trigger functions rely on owner bypass).
+
+create or replace function public.notify_admins(p_type text, p_data jsonb)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  insert into public.notifications (user_id, type, data)
+  select p.id, p_type, coalesce(p_data, '{}'::jsonb)
+  from public.profiles p
+  where p.role = 'admin'
+    and coalesce(p.active, true) = true
+    and p.deleted_at is null;
+$$;
+
+create or replace function public.handle_access_request_created()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_name text;
+  v_type text;
+begin
+  select full_name into v_name from public.profiles where id = new.requester_id;
+  v_type := case
+    when new.answers->>'intent' = 'request_share_code' then 'share_code_request'
+    else 'access_request'
+  end;
+  perform public.notify_admins(v_type, jsonb_build_object(
+    'request_id', new.id,
+    'requester_id', new.requester_id,
+    'requester_name', coalesce(v_name, ''),
+    'tree_id', new.answers->>'target_tree_id',
+    'tree_name', new.answers->>'target_tree_name',
+    'requested_role', new.requested_role
+  ));
+  return new;
+end;
+$$;
+
+drop trigger if exists on_access_request_created on public.access_requests;
+create trigger on_access_request_created
+  after insert on public.access_requests
+  for each row execute procedure public.handle_access_request_created();
+
+create or replace function public.handle_edit_request_created()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_name text;
+begin
+  select full_name into v_name from public.profiles where id = new.requester_id;
+  perform public.notify_admins('edit_request', jsonb_build_object(
+    'request_id', new.id,
+    'requester_id', new.requester_id,
+    'requester_name', coalesce(v_name, ''),
+    'target_member_id', new.target_member_id
+  ));
+  return new;
+end;
+$$;
+
+drop trigger if exists on_edit_request_created on public.edit_requests;
+create trigger on_edit_request_created
+  after insert on public.edit_requests
+  for each row execute procedure public.handle_edit_request_created();
+
+create or replace function public.handle_feedback_created()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public.notify_admins('feedback', jsonb_build_object(
+    'feedback_id', new.id,
+    'category', new.category,
+    'author_name', new.author_name
+  ));
+  return new;
+end;
+$$;
+
+drop trigger if exists on_feedback_created on public.feedback;
+create trigger on_feedback_created
+  after insert on public.feedback
+  for each row execute procedure public.handle_feedback_created();
+
+create or replace function public.handle_access_request_decided()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_code text;
+  v_tree_id uuid;
+  v_tree_name text;
+begin
+  if new.status = 'approved' then
+    select i.code, i.tree_id into v_code, v_tree_id
+    from public.tree_invites i
+    where i.created_for = new.requester_id
+      and (i.expires_at is null or i.expires_at > now())
+      and (i.uses_left is null or i.uses_left > 0)
+      and (
+        new.answers->>'target_tree_id' is null
+        or i.tree_id = (new.answers->>'target_tree_id')::uuid
+      )
+    order by i.created_at desc
+    limit 1;
+    if v_tree_id is not null then
+      select t.name into v_tree_name from public.family_trees t where t.id = v_tree_id;
+    end if;
+    insert into public.notifications (user_id, type, data)
+    values (new.requester_id, 'request_approved', jsonb_build_object(
+      'request_id', new.id,
+      'code', v_code,
+      'tree_id', coalesce(v_tree_id::text, new.answers->>'target_tree_id'),
+      'tree_name', coalesce(v_tree_name, new.answers->>'target_tree_name')
+    ));
+  else
+    insert into public.notifications (user_id, type, data)
+    values (new.requester_id, 'request_rejected', jsonb_build_object(
+      'request_id', new.id,
+      'tree_name', new.answers->>'target_tree_name'
+    ));
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_access_request_decided on public.access_requests;
+create trigger on_access_request_decided
+  after update of status on public.access_requests
+  for each row
+  when (old.status = 'pending' and new.status in ('approved', 'rejected'))
+  execute procedure public.handle_access_request_decided();
+
+-- ─── tree-icons storage bucket ──────────────────────────────
+-- Public-read icon images; writes restricted to the tree's owner or
+-- an admin (path convention: <tree_id>/icon-<ts>.<ext>). See
+-- migrations/014 for the Dashboard fallback when this role can't
+-- create policies on storage.objects.
+insert into storage.buckets (id, name, public)
+values ('tree-icons', 'tree-icons', true)
+on conflict (id) do nothing;
 
 -- ============================================================
 -- DONE

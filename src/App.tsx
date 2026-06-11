@@ -19,6 +19,7 @@ import NewPasswordScreen from './components/security/NewPasswordScreen'
 import PlanGateToast from './components/plan/PlanGateToast'
 import { ADLER_MEMBERS, ADLER_RELATIONSHIPS, ADLER_TREES } from './data/adlerFamily'
 import { isPendingOnboarding, clearPendingOnboarding, markPendingOnboarding } from './lib/pendingOnboarding'
+import { useNotificationPolling } from './hooks/useNotificationPolling'
 import type { Profile } from './types'
 import type { Session } from '@supabase/supabase-js'
 
@@ -476,6 +477,11 @@ export default function App() {
   // be bypassed by typing a URL. Reset-on-session-change is adjusted
   // during render (react-hooks v7 forbids sync setState in effects);
   // the async AAL probe sets state from its callback, which is fine.
+  // Notification inbox freshness — on load, focus return + 60s while
+  // visible. Lives here (not in Dashboard) so the badge is warm on
+  // every route.
+  useNotificationPolling(SUPABASE_CONFIGURED && !!session)
+
   const [mfaGate, setMfaGate] = useState(false)
   const [prevSession, setPrevSession] = useState<Session | null>(session)
   if (session !== prevSession) {

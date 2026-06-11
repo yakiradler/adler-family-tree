@@ -1,16 +1,26 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang } from '../i18n/useT'
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import { isAdmin } from '../lib/permissions'
+import { pickPersonalShareInvite } from '../lib/invites'
+import { unseenShareCodeIds } from '../lib/notifications'
+import type { TreeInvite } from '../types'
 
 /**
  * Long-press / right-click action sheet for a tree card on the
- * Dashboard.  The only action that's actually wired today is
- * "request share code" — it files an access_request with an
- * `intent: 'request_share_code'` marker that the admin can act on by
- * minting a tree_invites code via InviteCodeManager.  The other rows
- * stay surfaced (with a "coming soon" pill) so the affordance is
- * discoverable while the backend lands.
+ * Dashboard.
+ *
+ * Sharing is role-aware (pilot round 2):
+ *   • tree owner / admin → "create share code": mints (or reuses) a
+ *     30-day code on the spot and shows it with a copy button — no
+ *     more "requesting" a code from yourself.
+ *   • everyone else → "request share code" files an access_request;
+ *     once approved, a code minted FOR them shows up right here (and
+ *     in their notification inbox), so it's always recoverable.
+ * The remaining rows stay surfaced with a "coming soon" pill while
+ * their backends land.
  */
 interface Props {
   open: boolean
@@ -20,16 +30,73 @@ interface Props {
 
 export default function TreeCardActionMenu({ open, onClose, target }: Props) {
   const { t, lang } = useLang()
-  const { profile, submitAccessRequest } = useFamilyStore()
+  const { profile, submitAccessRequest, trees, mintShareCode } = useFamilyStore()
+  const notifications = useFamilyStore((s) => s.notifications)
+  const markNotificationsRead = useFamilyStore((s) => s.markNotificationsRead)
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [minted, setMinted] = useState<TreeInvite | null>(null)
+  const [personal, setPersonal] = useState<TreeInvite | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  const tree = target?.id ? trees.find((tr) => tr.id === target.id) ?? null : null
+  // The implicit main tree (id === null) has no tree_invites row to
+  // hang a code on — sharing stays request-only there.
+  const canMint = Boolean(
+    tree && profile && (isAdmin(profile) || tree.created_by === profile.id),
+  )
+
+  // Member opening the menu: surface the code that was minted FOR
+  // them (share-code approval flow) and clear the card's red balloon.
+  useEffect(() => {
+    if (!open || !target?.id || !profile || canMint) return
+    const unseen = unseenShareCodeIds(notifications, target.id)
+    if (unseen.length > 0) void markNotificationsRead(unseen)
+    if (!isSupabaseConfigured) return
+    let cancelled = false
+    void (async () => {
+      const { data } = await supabase
+        .from('tree_invites')
+        .select('*')
+        .eq('tree_id', target.id)
+        .eq('created_for', profile.id)
+        .order('created_at', { ascending: false })
+        .limit(5)
+      if (cancelled) return
+      setPersonal(pickPersonalShareInvite((data ?? []) as TreeInvite[], target.id!, profile.id))
+    })()
+    return () => { cancelled = true }
+    // notifications intentionally omitted: re-running on every poll
+    // would refetch invites for an open sheet with no visual change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, target?.id, profile?.id, canMint])
 
   const close = () => {
     setSent(false)
     setError(null)
     setBusy(false)
+    setMinted(null)
+    setPersonal(null)
+    setCopied(false)
     onClose()
+  }
+
+  const createShareCode = async () => {
+    if (!target?.id) return
+    setBusy(true)
+    setError(null)
+    try {
+      const invite = await mintShareCode(target.id)
+      if (!invite) {
+        throw new Error(lang === 'he' ? 'יצירת הקוד נכשלה — נסו שוב' : 'Creating the code failed — try again')
+      }
+      setMinted(invite)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
   }
 
   const requestShareCode = async () => {
@@ -60,6 +127,18 @@ export default function TreeCardActionMenu({ open, onClose, target }: Props) {
       setBusy(false)
     }
   }
+
+  const copyCode = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(code)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch {
+      window.prompt(t.notifCopyCode, code)
+    }
+  }
+
+  const shownCode = minted ?? personal
 
   return (
     <AnimatePresence>
@@ -92,6 +171,33 @@ export default function TreeCardActionMenu({ open, onClose, target }: Props) {
                   : `Options for "${target.name}"`}
               </h2>
 
+              {/* The code card — either the one just minted (owner) or
+                  the one minted FOR this member on approval. */}
+              {shownCode && (
+                <div className="mt-4 rounded-2xl bg-[#34C759]/10 border border-[#34C759]/25 p-4 text-center">
+                  <p className="text-[12px] font-semibold text-[#1C7C36] mb-2">
+                    {minted ? t.treeMenuCodeReady : t.treeMenuYourCode}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void copyCode(shownCode.code)}
+                    className="inline-flex items-center gap-2 rounded-xl bg-white border border-black/8 px-3.5 py-2 font-mono text-[17px] font-bold tracking-wider text-[#1C1C1E] shadow-sm active:scale-[0.97] transition"
+                    dir="ltr"
+                  >
+                    {shownCode.code}
+                    <span className="text-[11px] text-[#007AFF] font-sans font-semibold">
+                      {copied ? t.notifCodeCopied : t.notifCopyCode}
+                    </span>
+                  </button>
+                  {shownCode.expires_at && (
+                    <p className="text-[11px] text-[#636366] mt-2">
+                      {t.treeMenuCodeExpires}{' '}
+                      {new Date(shownCode.expires_at).toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-US')}
+                    </p>
+                  )}
+                </div>
+              )}
+
               {sent ? (
                 <div className="mt-5 rounded-2xl bg-[#34C759]/12 p-4 text-center">
                   <div className="flex items-center justify-center gap-1.5 text-[#1C7C36] text-sf-subhead font-bold">
@@ -106,13 +212,27 @@ export default function TreeCardActionMenu({ open, onClose, target }: Props) {
                 </div>
               ) : (
                 <div className="mt-4 space-y-2">
-                  <ActionRow
-                    icon="🔑"
-                    label={t.treeMenuRequestCode}
-                    hint={t.treeMenuRequestCodeHint}
-                    onClick={requestShareCode}
-                    busy={busy}
-                  />
+                  {canMint ? (
+                    !minted && (
+                      <ActionRow
+                        icon="🔑"
+                        label={t.treeMenuCreateCode}
+                        hint={t.treeMenuCreateCodeHint}
+                        onClick={createShareCode}
+                        busy={busy}
+                      />
+                    )
+                  ) : (
+                    !personal && (
+                      <ActionRow
+                        icon="🔑"
+                        label={t.treeMenuRequestCode}
+                        hint={t.treeMenuRequestCodeHint}
+                        onClick={requestShareCode}
+                        busy={busy}
+                      />
+                    )
+                  )}
                   <ActionRow
                     icon="🖼️"
                     label={t.treeMenuChangeIcon}

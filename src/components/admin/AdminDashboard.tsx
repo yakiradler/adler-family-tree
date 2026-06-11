@@ -10,6 +10,7 @@ import { PersonAvatarIcon } from '../MemberNode'
 import { getRingGradient, getFallbackGradient } from '../memberVisuals'
 import type { EditRequest, Member, Profile, UserRole, MasterPermissions, AccessRequest, UserPlan, PlanId } from '../../types'
 import type { PermissionKey } from '../../lib/permissions'
+import { adminInboxCounts } from '../../lib/notifications'
 
 type Tab = 'overview' | 'users' | 'members' | 'requests' | 'access' | 'reports' | 'invites' | 'system'
 
@@ -401,9 +402,21 @@ export default function AdminDashboard() {
     )
   }, [members, searchTerm])
 
-  const pendingCount = editRequests.length
+  // Unified inbox — every queue that can hold pending admin work, in
+  // one place. The header badge, tab pills and the overview card all
+  // read from this so the numbers can never disagree.
+  const inbox = useMemo(
+    () => adminInboxCounts(editRequests, accessRequests, feedback),
+    [editRequests, accessRequests, feedback],
+  )
+  const pendingCount = inbox.total
   const deceased = members.filter(m => m.death_date).length
   const alive = members.length - deceased
+  const tabBadges: Partial<Record<Tab, number>> = {
+    requests: inbox.edits,
+    access: inbox.access + inbox.shareCodes,
+    reports: inbox.reports,
+  }
 
   return (
     <div dir={rtl ? 'rtl' : 'ltr'} className="min-h-screen bg-mesh-gradient pb-10">
@@ -554,6 +567,17 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
             >
               <span>{icon}</span>
               {label}
+              {/* Pending-work pill — keeps the queue sizes visible
+                  without opening each tab. */}
+              {(tabBadges[key] ?? 0) > 0 && (
+                <span
+                  className={`min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${
+                    tab === key ? 'bg-white text-[#007AFF]' : 'bg-[#FF3B30] text-white'
+                  }`}
+                >
+                  {tabBadges[key]}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -584,22 +608,41 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
                 </div>
               </div>
 
-              {pendingCount > 0 && (
-                <button
-                  onClick={() => setTab('requests')}
-                  className="w-full glass-strong rounded-3xl p-4 shadow-glass flex items-center justify-between hover:bg-white/60 transition"
-                >
-                  <div className={rtl ? 'text-right' : 'text-left'}>
-                    <p className="text-sf-subhead font-bold text-[#1C1C1E]">
-                      {pendingCount} {pendingCount !== 1 ? t.pendingRequests : t.pendingRequest}
-                    </p>
-                    <p className="text-[11px] text-[#8E8E93]">{t.proposedChanges}</p>
-                  </div>
-                  <div className="w-9 h-9 bg-[#FF3B30] rounded-full flex items-center justify-center text-white font-bold">
-                    {pendingCount}
-                  </div>
-                </button>
-              )}
+              {/* Unified inbox — one card, four queues, each a direct
+                  jump to its tab. Answers "כמה בקשות מחכות לי" at a
+                  glance instead of forcing a tab-by-tab hunt. */}
+              <div className="glass-strong rounded-3xl p-5 shadow-glass">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sf-subhead font-bold text-[#1C1C1E]">📥 {t.adminInboxTitle}</h3>
+                  {pendingCount > 0 && (
+                    <span className="w-7 h-7 bg-[#FF3B30] rounded-full flex items-center justify-center text-white text-[11px] font-bold">
+                      {pendingCount}
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {([
+                    ['requests', t.adminInboxEdits, '✏️', inbox.edits],
+                    ['access', t.adminInboxAccess, '🚪', inbox.access],
+                    ['access', t.adminInboxShareCodes, '🔑', inbox.shareCodes],
+                    ['reports', t.adminInboxReports, '🐞', inbox.reports],
+                  ] as const).map(([targetTab, label, icon, count], i) => (
+                    <button
+                      key={`${targetTab}-${i}`}
+                      onClick={() => setTab(targetTab)}
+                      className="rounded-2xl bg-white/70 border border-white/60 px-3 py-2.5 flex flex-col items-center gap-1 hover:bg-white transition"
+                    >
+                      <span className="text-lg" aria-hidden>{icon}</span>
+                      <span className={`text-[18px] font-extrabold leading-none ${count > 0 ? 'text-[#FF3B30]' : 'text-[#1C1C1E]'}`}>
+                        {count}
+                      </span>
+                      <span className="text-[10px] text-[#636366] font-semibold text-center leading-tight">
+                        {label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </motion.div>
           )}
 

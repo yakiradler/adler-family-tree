@@ -203,11 +203,7 @@ export default function SecuritySettingsModal({ open, onClose }: { open: boolean
                 <p className="text-[12.5px] text-[#636366] leading-relaxed">{t.mfaScanQr}</p>
                 {enrollData && (
                   <div className="flex flex-col items-center gap-3">
-                    <img
-                      src={`data:image/svg+xml;utf8,${encodeURIComponent(enrollData.qr)}`}
-                      alt="QR"
-                      className="w-44 h-44 rounded-2xl border border-black/8 bg-white"
-                    />
+                    <QrImage qr={enrollData.qr} fallbackText={t.mfaQrFailed} />
                     <p className="text-[10.5px] text-[#8E8E93] text-center break-all px-2" dir="ltr">
                       {t.mfaManualKey}: <span className="font-mono">{enrollData.secret}</span>
                     </p>
@@ -241,5 +237,53 @@ export default function SecuritySettingsModal({ open, onClose }: { open: boolean
         </motion.div>
       )}
     </AnimatePresence>
+  )
+}
+
+/**
+ * Robust renderer for the TOTP enrollment QR. supabase-js has shipped
+ * `totp.qr_code` in two shapes over time: a ready `data:` URI and raw
+ * `<svg>` markup. The old code always wrapped the value in
+ * `data:image/svg+xml;utf8,${encodeURIComponent(...)}` — double-wrapping
+ * the data-URI variant into a broken image (the pilot bug). Handle all
+ * three shapes and show a readable fallback instead of a broken icon;
+ * the manual secret below stays the always-works path.
+ */
+function QrImage({ qr, fallbackText }: { qr: string; fallbackText: string }) {
+  const [failed, setFailed] = useState(false)
+  const trimmed = qr.trim()
+  const frame = 'w-44 h-44 rounded-2xl border border-black/8 bg-white'
+
+  if (failed || !trimmed) {
+    return (
+      <div className={`${frame} flex items-center justify-center p-3`}>
+        <p className="text-[11px] text-[#8E8E93] text-center leading-snug">{fallbackText}</p>
+      </div>
+    )
+  }
+  if (trimmed.startsWith('<svg')) {
+    // Raw SVG markup straight from our own auth server — inline it.
+    return (
+      <div
+        className={`${frame} [&>svg]:w-full [&>svg]:h-full`}
+        role="img"
+        aria-label="QR"
+        dangerouslySetInnerHTML={{ __html: trimmed }}
+      />
+    )
+  }
+  const src = trimmed.startsWith('data:')
+    ? trimmed
+    : `data:image/svg+xml;utf8,${encodeURIComponent(trimmed)}`
+  return (
+    <img
+      src={src}
+      alt="QR"
+      className={frame}
+      onError={() => {
+        console.warn('[mfa] QR render failed; shape:', trimmed.slice(0, 40))
+        setFailed(true)
+      }}
+    />
   )
 }

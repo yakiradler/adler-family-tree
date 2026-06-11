@@ -6,7 +6,9 @@ import { useLang, isRTL } from '../i18n/useT'
 import { supabase } from '../lib/supabase'
 import { isAdmin, isOnboarded } from '../lib/permissions'
 import { scopePersonalTrees } from '../lib/treeScope'
+import { countUnreadAdminInbox, hasUnseenShareCode } from '../lib/notifications'
 import AccessRequestStatusToast from '../components/AccessRequestStatusToast'
+import NotificationBell from '../components/notifications/NotificationBell'
 import { PersonAvatarIcon } from '../components/MemberNode'
 import { getRingGradient, getFallbackGradient } from '../components/memberVisuals'
 import AIScanModal from '../components/ai/AIScanModal'
@@ -112,6 +114,7 @@ export default function Dashboard({ demoMode }: Props) {
   const { members, relationships, profile, setSelectedMemberId, trees, setActiveTreeId } = useFamilyStore()
   const myTreeAccessIds = useFamilyStore((s) => s.myTreeAccessIds)
   const fetchMyTreeAccess = useFamilyStore((s) => s.fetchMyTreeAccess)
+  const notifications = useFamilyStore((s) => s.notifications)
   // Hydrate the shared-with-me tree list once the profile is known —
   // it feeds scopePersonalTrees below (admin dashboard scoping).
   useEffect(() => {
@@ -393,6 +396,9 @@ export default function Dashboard({ demoMode }: Props) {
             >
               {lang === 'he' ? 'EN' : 'עב'}
             </button>
+            {/* Persistent notification inbox — approvals, requests,
+                reports. Hidden in demo mode (no backend rows). */}
+            {!demoMode && <NotificationBell />}
             {!demoMode && (
               <button
                 onClick={() => setSecurityOpen(true)}
@@ -655,6 +661,16 @@ export default function Dashboard({ demoMode }: Props) {
                     >
                       {tree.count}
                     </span>
+                    {/* Share-code balloon — an approved request minted
+                        a code for this tree that the user hasn't seen
+                        yet. Cleared when the long-press menu (or the
+                        notification panel) shows it. */}
+                    {hasUnseenShareCode(notifications, tree.id) && (
+                      <span
+                        className="absolute -top-1 -start-1 w-3.5 h-3.5 rounded-full bg-[#FF3B30] border-2 border-white shadow"
+                        aria-hidden
+                      />
+                    )}
                   </div>
                   <p
                     className="text-[10.5px] font-semibold text-[#1C1C1E] text-center leading-tight w-full"
@@ -804,6 +820,7 @@ export default function Dashboard({ demoMode }: Props) {
                 label={lang === 'he' ? 'ניהול' : 'Admin'}
                 gradient="from-[#5AC8FA] to-[#64D2FF]"
                 onClick={() => navigate('/admin')}
+                badge={countUnreadAdminInbox(notifications)}
               />
             )}
           </div>
@@ -902,7 +919,7 @@ function MiniAvatar({ member }: { member: Member }) {
 }
 
 function AppTile({
-  icon, label, gradient, onClick, comingSoon, tooltip, index = 0,
+  icon, label, gradient, onClick, comingSoon, tooltip, index = 0, badge = 0,
 }: {
   icon: string
   label: string
@@ -917,6 +934,8 @@ function AppTile({
   /** Position in the grid — drives the staggered fade-in so tiles
    *  ripple onto the dashboard instead of all appearing at once. */
   index?: number
+  /** Red counter chip (e.g. pending admin requests). 0 hides it. */
+  badge?: number
 }) {
   return (
     <motion.button
@@ -964,6 +983,14 @@ function AppTile({
       {comingSoon && (
         <span className="absolute top-2 end-2 z-10 rounded-full bg-[#FF9F0A] text-white text-[9px] font-bold px-1.5 py-0.5 shadow-sm">
           🚀
+        </span>
+      )}
+
+      {/* Pending-work counter (admin tile) — red so it reads as
+          "things are waiting for you", capped for sanity. */}
+      {badge > 0 && (
+        <span className="absolute top-2 start-2 z-10 min-w-[20px] h-5 px-1.5 rounded-full bg-[#FF3B30] text-white text-[11px] font-bold flex items-center justify-center shadow">
+          {badge > 9 ? '9+' : badge}
         </span>
       )}
 
