@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { canApproveEditRequests, isAdmin } from '../lib/permissions'
+import { resolveRequestTreeId } from '../lib/accessRequests'
 import { gateAddMember, gateAddTree, SIGNUP_GIFT_LEAVES, TRIAL_DAYS } from '../lib/plans'
 import type {
   Member, Relationship, EditRequest, ViewMode, Profile,
@@ -45,6 +46,16 @@ function reportSupabaseFailure(op: string, err: unknown, kind: 'read' | 'write' 
   window.dispatchEvent(
     new CustomEvent('ft-supabase-failed', { detail: { op, message } }),
   )
+}
+
+// A write the server REJECTED outright (RLS: 0 rows matched). Unlike
+// reportSupabaseFailure this is not "saved locally, will sync later" —
+// the optimistic state was rolled back, so the toast must say the edit
+// was refused, not that it's pending.
+function reportSupabaseRejection(op: string) {
+  if (typeof window === 'undefined' || !isSupabaseConfigured) return
+  console.warn(`[supabase rejected ${op}] 0 rows affected — RLS denied the write`)
+  window.dispatchEvent(new CustomEvent('ft-supabase-rejected', { detail: { op } }))
 }
 
 // Inserts guarded by member_visible_to() occasionally hit a transient
@@ -115,9 +126,17 @@ interface FamilyState {
   // ── Onboarding + RBAC (Phase C/D) ───────────────────────────────────
   accessRequests: AccessRequest[]
   fetchAccessRequests: () => Promise<void>
+  /**
+   * Returns true when the request row reached the server (or demo
+   * mode, where local-only IS success). False = the admin will never
+   * see it — callers must tell the user instead of faking success.
+   */
   submitAccessRequest: (
     payload: Pick<AccessRequest, 'requested_role' | 'answers' | 'invite_code'>,
-  ) => Promise<void>
+  ) => Promise<boolean>
+  /** Tree ids the current user holds a tree_access row for. */
+  myTreeAccessIds: string[]
+  fetchMyTreeAccess: () => Promise<void>
   decideAccessRequest: (
     id: string, decision: 'approved' | 'rejected',
     grantedRole?: UserRole,
@@ -449,13 +468,34 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   updateMember: async (id, updates) => {
     // Optimistic local update FIRST so the UI reflects the change even
     // if Supabase isn't reachable (demo mode, transient network blip).
+    const prev = get().members.find((m) => m.id === id)
     set((s) => ({
       members: s.members.map((m) => (m.id === id ? { ...m, ...updates } : m)),
     }))
+    if (!isSupabaseConfigured) return
+    // `.select('id')` turns an RLS-swallowed write (error=null, 0 rows)
+    // into something detectable. Without it the pilot saw "נשמר" while
+    // the server silently kept the old values — and the next fetch
+    // wiped the local edit. On a confirmed miss we roll the optimistic
+    // state back and surface a rejection toast instead of lying.
+    const rollback = () => {
+      if (!prev) return
+      set((s) => ({ members: s.members.map((m) => (m.id === id ? prev : m)) }))
+    }
     try {
-      const { error } = await supabase.from('members').update(updates).eq('id', id)
-      if (error) reportSupabaseFailure('updateMember', error)
-    } catch (err) { reportSupabaseFailure('updateMember', err) }
+      const { data, error } = await supabase
+        .from('members').update(updates).eq('id', id).select('id')
+      if (error) {
+        rollback()
+        reportSupabaseFailure('updateMember', error)
+      } else if (!data || data.length === 0) {
+        rollback()
+        reportSupabaseRejection('updateMember')
+      }
+    } catch (err) {
+      rollback()
+      reportSupabaseFailure('updateMember', err)
+    }
   },
 
   deleteMember: async (id) => {
@@ -711,7 +751,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
 
   submitAccessRequest: async ({ requested_role, answers, invite_code }) => {
     const me = get().profile
-    if (!me) return
+    if (!me) return false
     // Optimistic write first so the admin instantly sees the request
     // even in demo mode (where Supabase returns nothing) and even when
     // the backend INSERT fails because of RLS / missing table. The
@@ -729,6 +769,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       created_at: new Date().toISOString(),
     }
     set((s) => ({ accessRequests: [optimistic, ...s.accessRequests] }))
+    if (!isSupabaseConfigured) return true
     try {
       const { data, error } = await supabase.from('access_requests').insert({
         requester_id: me.id,
@@ -738,8 +779,11 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
         status: 'pending',
       }).select().single()
       if (error) {
+        // Drop the optimistic row — a request the admin can never see
+        // must not sit in the requester's UI looking "pending".
+        set((s) => ({ accessRequests: s.accessRequests.filter((r) => r.id !== localId) }))
         reportSupabaseFailure('submitAccessRequest', error)
-        return
+        return false
       }
       if (data) {
         set((s) => ({
@@ -748,8 +792,36 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
           ),
         }))
       }
+      return true
     } catch (err) {
+      set((s) => ({ accessRequests: s.accessRequests.filter((r) => r.id !== localId) }))
       reportSupabaseFailure('submitAccessRequest', err)
+      return false
+    }
+  },
+
+  // ── Per-user tree access (which trees were shared with ME) ─────────
+  // Drives the personal dashboard scoping: owned trees + these. Kept
+  // separate from `trees` because for admins the RLS tree list is
+  // "everything in the system", which must NOT leak into their
+  // personal rail.
+  myTreeAccessIds: [],
+  fetchMyTreeAccess: async () => {
+    if (!isSupabaseConfigured) return
+    const me = get().profile
+    if (!me) return
+    try {
+      const { data, error } = await supabase
+        .from('tree_access')
+        .select('tree_id')
+        .eq('user_id', me.id)
+      if (error) {
+        reportSupabaseFailure('fetchMyTreeAccess', error, 'read')
+        return
+      }
+      set({ myTreeAccessIds: (data ?? []).map((r: { tree_id: string }) => r.tree_id) })
+    } catch (err) {
+      reportSupabaseFailure('fetchMyTreeAccess', err, 'read')
     }
   },
 
@@ -760,6 +832,26 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     if (!isAdmin(get().profile)) return
     const req = get().accessRequests.find(r => r.id === id)
     const decidedAt = new Date().toISOString()
+    // ── Resolve which tree the requester asked for ──────────────────
+    // Approving used to flip the request row + role and stop there: no
+    // tree_access row was ever written, so the requester "was approved"
+    // into nothing — no tree, no code, no feedback (pilot bug). Resolve
+    // the target tree (answers.target_tree_id / target_tree_name, else
+    // the invite code via tree_invites) and grant access below.
+    let grantTreeId: string | null = null
+    if (decision === 'approved' && req) {
+      grantTreeId = resolveRequestTreeId(req, get().trees)
+      if (!grantTreeId && req.invite_code && isSupabaseConfigured) {
+        try {
+          const { data: inv } = await supabase
+            .from('tree_invites')
+            .select('tree_id')
+            .eq('code', req.invite_code.trim())
+            .maybeSingle()
+          grantTreeId = (inv as { tree_id: string | null } | null)?.tree_id ?? null
+        } catch { /* unresolvable code — role grant still proceeds */ }
+      }
+    }
     // Optimistic update first so the admin sees the decision land
     // instantly even when Supabase is offline or RLS-blocked.
     set((s) => ({
@@ -775,6 +867,26 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       if (aErr) reportSupabaseFailure('decideAccessRequest:request', aErr)
     } catch (err) {
       reportSupabaseFailure('decideAccessRequest:request', err)
+    }
+    // ── Grant DB-level tree access ───────────────────────────────────
+    // Mirrors what JoinTreeModal does for direct codes: without this
+    // row the RLS in migration 008/009 keeps the tree invisible to the
+    // requester no matter what their role says.
+    if (decision === 'approved' && req && grantTreeId && isSupabaseConfigured) {
+      try {
+        // ignoreDuplicates (ON CONFLICT DO NOTHING) — tree_access has
+        // INSERT policies but no UPDATE policy, so a DO UPDATE upsert
+        // would be RLS-rejected when the grant already exists.
+        const { error: gErr } = await supabase
+          .from('tree_access')
+          .upsert(
+            { user_id: req.requester_id, tree_id: grantTreeId, role: 'member' },
+            { onConflict: 'user_id,tree_id', ignoreDuplicates: true },
+          )
+        if (gErr) reportSupabaseFailure('decideAccessRequest:grant', gErr)
+      } catch (err) {
+        reportSupabaseFailure('decideAccessRequest:grant', err)
+      }
     }
     if (decision === 'approved' && req) {
       const role = grantedRole ?? req.requested_role

@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang } from '../i18n/useT'
 import { useCloseOnBack } from '../hooks/useCloseOnBack'
+import { scopePersonalTrees } from '../lib/treeScope'
+import { isSupabaseConfigured } from '../lib/supabase'
 import type { FamilyTree } from '../types/index'
 
 /**
@@ -18,7 +20,12 @@ export default function TreeSwitcher({
 }: {
   variant?: 'compact' | 'full'
 }) {
-  const { trees, activeTreeId, setActiveTreeId, addTree, deleteTree, profile } = useFamilyStore()
+  const { trees: allTrees, activeTreeId, setActiveTreeId, addTree, deleteTree, profile } = useFamilyStore()
+  const myTreeAccessIds = useFamilyStore((s) => s.myTreeAccessIds)
+  // Same personal scoping as the dashboard rail: admins switch between
+  // their OWN + shared trees here, not every family in the system. The
+  // admin panel keeps its full system view separately.
+  const trees = scopePersonalTrees(allTrees, profile, myTreeAccessIds, !isSupabaseConfigured)
   const { t, lang } = useLang()
   const [open, setOpen] = useState(false)
   const [creating, setCreating] = useState(false)

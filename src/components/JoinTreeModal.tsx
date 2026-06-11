@@ -87,11 +87,14 @@ export default function JoinTreeModal({
         const { data: auth } = await supabase.auth.getUser()
         const uid = auth.user?.id
         if (uid) {
+          // ignoreDuplicates (ON CONFLICT DO NOTHING): tree_access has
+          // no UPDATE policy, so re-joining a tree you already have
+          // access to would otherwise fail the upsert's update half.
           await supabase
             .from('tree_access')
             .upsert(
               { user_id: uid, tree_id: data.tree_id, role: 'member' },
-              { onConflict: 'user_id,tree_id' },
+              { onConflict: 'user_id,tree_id', ignoreDuplicates: true },
             )
         }
       }
