@@ -1,5 +1,12 @@
 # Development Workflow
 
+> **STATUS (2026-06-10): PLANNED, NOT ACTIVE.** The two-environment
+> setup below was never completed — there is no dev Supabase project
+> and Vercel preview env vars are not split. The ACTUAL current flow
+> is: feature branch → PR to `main` → all CI checks green → owner
+> approves the merge → Vercel deploys production. Treat everything
+> below as the future plan, not as instructions.
+
 This project runs in TWO isolated environments:
 
 | Where           | Production                  | Development                          |

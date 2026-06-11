@@ -10,7 +10,7 @@
 
 הבעלים: **יקיר אדלר** (`yakiradler` ב-GitHub). הוא הלקוח שלך — הוא ידבר איתך בעברית בעיקר. תענה לו בעברית כברירת מחדל.
 
-המערכת בפרודקשן ב-https://yakiradler.github.io/adler-family-tree/ ומתעדכנת אוטומטית מ-`main`.
+המערכת בפרודקשן ב-https://infinitree.vercel.app (Vercel, מתעדכן אוטומטית מ-`main`). ה-Supabase של הפרודקשן: פרויקט פרנקפורט `wkbdqdytfjycbbcnzjuv`.
 
 ---
 
@@ -119,8 +119,8 @@ updateRelationship: async (id, updates) => {
    - `/tree` עם פילטר "כהנים" → 16 תוצאות
    - לחיצה על חבר → MemberPanel נפתח, X סוגר ולא משנה את הזום
    - ניהול קשרים → סטטוס נשמר עם toast "נשמר"
-7. **commit** בסגנון Conventional: `feat(scope): ...` / `fix(scope): ...` / `docs: ...`. גוף ההודעה מסביר *למה*. תמיד עם `Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>` בסוף.
-8. **push ל-`main`** — GitHub Pages יפרוס אוטומטית.
+7. **commit** בסגנון Conventional: `feat(scope): ...` / `fix(scope): ...` / `docs: ...`. גוף ההודעה מסביר *למה*. תמיד עם שורת `Co-Authored-By` של המודל בסוף.
+8. **ענף פיצ'ר → PR ל-`main`** (לא push ישיר): פותחים PR, מחכים שכל בדיקות ה-CI ירוקות, ושואלים את הבעלים לפני מיזוג. אחרי מיזוג Vercel פורס אוטומטית — לבצע בדיקת עשן באתר החי.
 
 ---
 
@@ -166,7 +166,7 @@ updateRelationship: async (id, updates) => {
 ## 9. קישורים שימושיים
 
 - **Repo:** https://github.com/yakiradler/adler-family-tree
-- **Live:** https://yakiradler.github.io/adler-family-tree/
+- **Live:** https://infinitree.vercel.app
 - **Issues:** https://github.com/yakiradler/adler-family-tree/issues
 - **Roadmap:** [./ROADMAP.md](./ROADMAP.md)
 - **Architecture:** [./ARCHITECTURE.md](./ARCHITECTURE.md)
