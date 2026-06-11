@@ -35,6 +35,19 @@ const PricingPage = lazy(() => import('./pages/PricingPage'))
 const SUPABASE_CONFIGURED =
   !!import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_URL !== ''
 
+// OAuth (Google) sends the user back to `/#access_token=…`. supabase-js
+// consumes + strips that hash, which leaves the HashRouter on `/` — the
+// marketing landing — so the pilot users thought sign-in had failed and
+// "bounced them back to the start". Capture the marker at module-load
+// time (BEFORE supabase-js strips it); an effect below then drops the
+// signed-in user straight into /home. Password-recovery links also
+// carry access_token but must keep going to the NewPasswordScreen wall,
+// so they're excluded.
+let oauthReturnPending =
+  typeof window !== 'undefined' &&
+  /[#&]access_token=/.test(window.location.hash) &&
+  !window.location.hash.includes('type=recovery')
+
 export default function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [authLoading, setAuthLoading] = useState(SUPABASE_CONFIGURED)
@@ -355,6 +368,15 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [])
 
+  // Post-OAuth landing: once the session from the URL hash is in, route
+  // the user INTO the app instead of leaving them on the marketing page
+  // (or, worse, the login screen). One-shot per page load.
+  useEffect(() => {
+    if (authLoading || !session || !oauthReturnPending) return
+    oauthReturnPending = false
+    window.location.hash = '#/home'
+  }, [authLoading, session])
+
   useEffect(() => {
     if (!session || !SUPABASE_CONFIGURED) return
     const load = async () => {
@@ -398,6 +420,9 @@ export default function App() {
         markPendingOnboarding()
       }
       fetchMembers(); fetchRelationships(); fetchEditRequests(); fetchTrees(); fetchMyPlan()
+      // Which trees were shared with me — feeds the personal-dashboard
+      // scoping (scopePersonalTrees) and the tree switcher.
+      useFamilyStore.getState().fetchMyTreeAccess()
     }
     load()
     // The store actions are stable zustand references — listing them

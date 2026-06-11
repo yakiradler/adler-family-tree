@@ -6,7 +6,7 @@ import { useLang, isRTL } from '../i18n/useT'
 import { useCloseOnBack } from '../hooks/useCloseOnBack'
 import { PersonAvatarIcon } from './MemberNode'
 import { getRingGradient, getFallbackGradient } from './memberVisuals'
-import { canManageRelationships } from '../lib/permissions'
+import { canManageRelationships, computeNuclearFamilyIds } from '../lib/permissions'
 import type { Member, Gender, RelationshipType, SpouseStatus, ParentType, Relationship } from '../types'
 
 interface Props {
@@ -89,11 +89,12 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
   // "can manage relationships" via the centralised permission helper —
   // admins always pass; users + masters with the toggle pass; plain
   // users only pass for their own nuclear family OR their own card).
-  const nuclearFamilyIds = new Set<string>([
-    ...parents.map(p => p.id),
-    ...children.map(c => c.id),
-    ...spouses.map(s => s.id),
-  ])
+  // Anchored to the LOGGED-IN user's card (linked_member_id), not the
+  // member being viewed — see computeNuclearFamilyIds for why.
+  const nuclearFamilyIds = computeNuclearFamilyIds(
+    profile?.linked_member_id,
+    relationships,
+  )
   const isAdmin = canManageRelationships(profile, {
     targetMemberId: member.id,
     nuclearFamilyIds,

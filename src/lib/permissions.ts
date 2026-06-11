@@ -81,6 +81,37 @@ export function canManageRelationships(
   return Boolean(ctx.nuclearFamilyIds?.has(target))
 }
 
+/**
+ * The logged-in user's own nuclear family, walked outward from THEIR
+ * member card (profile.linked_member_id): spouses, children, parents.
+ *
+ * This is the set `canEditMember` / `canManageRelationships` expect as
+ * `ctx.nuclearFamilyIds`. Callers used to build it from the *selected*
+ * member's relations, which made the `has(target)` check vacuously
+ * false (a member is never inside their own relatives set) — so plain
+ * users could edit nobody but themselves. Centralising the computation
+ * here keeps every gate anchored to the user, not the target.
+ */
+export function computeNuclearFamilyIds(
+  ownMemberId: string | null | undefined,
+  relationships: Relationship[],
+): Set<string> {
+  const out = new Set<string>()
+  if (!ownMemberId) return out
+  for (const r of relationships) {
+    if (r.type === 'spouse') {
+      if (r.member_a_id === ownMemberId) out.add(r.member_b_id)
+      else if (r.member_b_id === ownMemberId) out.add(r.member_a_id)
+    } else if (r.type === 'parent-child') {
+      // a = parent, b = child. Both directions are first-degree:
+      // my children (I'm the parent) and my parents (I'm the child).
+      if (r.member_a_id === ownMemberId) out.add(r.member_b_id)
+      else if (r.member_b_id === ownMemberId) out.add(r.member_a_id)
+    }
+  }
+  return out
+}
+
 export function canApproveEditRequests(profile: Profile | null | undefined): boolean {
   return profile?.role === 'admin' || masterCan(profile, 'canApproveEditRequests')
 }

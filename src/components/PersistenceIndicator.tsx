@@ -20,6 +20,7 @@ type State =
   | { kind: 'saved'; at: number }
   | { kind: 'failed'; reason: 'quota' | 'unknown'; at: number }
   | { kind: 'remote-failed'; op: string; message: string; at: number }
+  | { kind: 'rejected'; op: string; at: number }
 
 export default function PersistenceIndicator() {
   const { lang } = useLang()
@@ -45,13 +46,22 @@ export default function PersistenceIndicator() {
         at: Date.now(),
       })
     }
+    // Server refused the write (RLS) and the optimistic change was
+    // rolled back — different from remote-failed, where the change is
+    // kept locally and may sync later.
+    const onRejected = (e: Event) => {
+      const detail = (e as CustomEvent<{ op: string }>).detail
+      setState({ kind: 'rejected', op: detail?.op ?? 'unknown', at: Date.now() })
+    }
     window.addEventListener('ft-saved', onSaved)
     window.addEventListener('ft-save-failed', onFailed)
     window.addEventListener('ft-supabase-failed', onRemoteFailed)
+    window.addEventListener('ft-supabase-rejected', onRejected)
     return () => {
       window.removeEventListener('ft-saved', onSaved)
       window.removeEventListener('ft-save-failed', onFailed)
       window.removeEventListener('ft-supabase-failed', onRemoteFailed)
+      window.removeEventListener('ft-supabase-rejected', onRejected)
     }
   }, [])
 
@@ -63,25 +73,27 @@ export default function PersistenceIndicator() {
       const id = window.setTimeout(() => setState({ kind: 'idle' }), 1400)
       return () => window.clearTimeout(id)
     }
-    if (state.kind === 'remote-failed') {
+    if (state.kind === 'remote-failed' || state.kind === 'rejected') {
       const id = window.setTimeout(() => setState({ kind: 'idle' }), 4500)
       return () => window.clearTimeout(id)
     }
   }, [state])
 
-  const heText = (kind: 'saved' | 'quota' | 'unknown' | 'remote'): string => {
+  const heText = (kind: 'saved' | 'quota' | 'unknown' | 'remote' | 'rejected'): string => {
     if (kind === 'saved') return 'נשמר'
     if (kind === 'quota') return 'אין מקום בזיכרון — תמונות הוסרו'
     if (kind === 'remote') return 'נשמר מקומית — סנכרון לשרת נכשל'
+    if (kind === 'rejected') return 'השמירה נדחתה — אין לך הרשאה לערוך פרופיל זה'
     return 'שגיאת שמירה'
   }
-  const enText = (kind: 'saved' | 'quota' | 'unknown' | 'remote'): string => {
+  const enText = (kind: 'saved' | 'quota' | 'unknown' | 'remote' | 'rejected'): string => {
     if (kind === 'saved') return 'Saved'
     if (kind === 'quota') return 'Storage full — photos dropped'
     if (kind === 'remote') return 'Saved locally — server sync failed'
+    if (kind === 'rejected') return 'Save refused — you lack permission to edit this profile'
     return 'Save failed'
   }
-  const text = (kind: 'saved' | 'quota' | 'unknown' | 'remote') => (lang === 'he' ? heText(kind) : enText(kind))
+  const text = (kind: 'saved' | 'quota' | 'unknown' | 'remote' | 'rejected') => (lang === 'he' ? heText(kind) : enText(kind))
 
   return (
     <AnimatePresence>
@@ -100,8 +112,8 @@ export default function PersistenceIndicator() {
                 ? { background: '#FF9F0A', color: '#FFFFFF' }
                 : { background: '#FF3B30', color: '#FFFFFF' }
           }
-          role={state.kind === 'failed' || state.kind === 'remote-failed' ? 'alert' : 'status'}
-          aria-live={state.kind === 'failed' || state.kind === 'remote-failed' ? 'assertive' : 'polite'}
+          role={state.kind === 'saved' ? 'status' : 'alert'}
+          aria-live={state.kind === 'saved' ? 'polite' : 'assertive'}
         >
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
             {state.kind === 'saved' ? (
@@ -116,7 +128,9 @@ export default function PersistenceIndicator() {
             ? text('saved')
             : state.kind === 'remote-failed'
               ? text('remote')
-              : text(state.reason === 'quota' ? 'quota' : 'unknown')}
+              : state.kind === 'rejected'
+                ? text('rejected')
+                : text(state.reason === 'quota' ? 'quota' : 'unknown')}
         </motion.div>
       )}
     </AnimatePresence>

@@ -41,7 +41,7 @@ export default function TreeCardActionMenu({ open, onClose, target }: Props) {
       // pending-requests list already surfaces these.  We park the
       // intent + target tree in `answers` so the admin can tell at a
       // glance that this is a share-code ask, not a join-tree ask.
-      await submitAccessRequest({
+      const ok = await submitAccessRequest({
         requested_role: (profile.role as 'user' | 'master' | 'admin' | 'guest') ?? 'user',
         invite_code: null,
         answers: {
@@ -51,6 +51,7 @@ export default function TreeCardActionMenu({ open, onClose, target }: Props) {
           requested_at: new Date().toISOString(),
         },
       })
+      if (!ok) throw new Error('request did not reach the server')
       setSent(true)
       window.setTimeout(close, 1500)
     } catch (e) {

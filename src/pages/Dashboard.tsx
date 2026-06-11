@@ -5,6 +5,8 @@ import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
 import { supabase } from '../lib/supabase'
 import { isAdmin, isOnboarded } from '../lib/permissions'
+import { scopePersonalTrees } from '../lib/treeScope'
+import AccessRequestStatusToast from '../components/AccessRequestStatusToast'
 import { PersonAvatarIcon } from '../components/MemberNode'
 import { getRingGradient, getFallbackGradient } from '../components/memberVisuals'
 import AIScanModal from '../components/ai/AIScanModal'
@@ -108,6 +110,13 @@ function computeBranchFounders(members: Member[], relationships: Relationship[])
 
 export default function Dashboard({ demoMode }: Props) {
   const { members, relationships, profile, setSelectedMemberId, trees, setActiveTreeId } = useFamilyStore()
+  const myTreeAccessIds = useFamilyStore((s) => s.myTreeAccessIds)
+  const fetchMyTreeAccess = useFamilyStore((s) => s.fetchMyTreeAccess)
+  // Hydrate the shared-with-me tree list once the profile is known —
+  // it feeds scopePersonalTrees below (admin dashboard scoping).
+  useEffect(() => {
+    if (!demoMode && profile) fetchMyTreeAccess()
+  }, [demoMode, profile, fetchMyTreeAccess])
   const { t, lang, toggleLang } = useLang()
   const dir = isRTL(lang) ? 'rtl' : 'ltr'
   const navigate = useNavigate()
@@ -232,24 +241,32 @@ export default function Dashboard({ demoMode }: Props) {
         ]
   ), [lang])
 
-  // Visibility gate (same rule as treeSummaries below): non-admin
-  // users only see members in trees they own. Admins + demo see all.
-  // Everything that exposes a member list — birthdays, stats,
-  // generation count, branch founders — must respect this filter or
-  // the new user gets a peek at the Adler population through the
-  // back door.
+  // Visibility gate (same rule as treeSummaries below): everyone —
+  // including admins — sees only members of trees they own or that
+  // were explicitly shared with them (tree_access). Admins used to
+  // bypass this and got every family in the system mixed into their
+  // personal dashboard; the admin PANEL still sees all via its own
+  // queries. Joined-via-code trees count (the old owned-only filter
+  // hid them from the very users who joined). Everything that exposes
+  // a member list — birthdays, stats, generation count, branch
+  // founders — must respect this filter.
+  const scopedTrees = useMemo(
+    () => scopePersonalTrees(trees, profile, myTreeAccessIds, demoMode),
+    [trees, profile, myTreeAccessIds, demoMode],
+  )
   const visibleMembers = useMemo(() => {
-    if (demoMode || isAdmin(profile)) return members
-    const ownedTreeIds = new Set(
-      trees.filter((t) => t.created_by === profile?.id).map((t) => t.id),
-    )
-    return members.filter((m) => m.tree_id != null && ownedTreeIds.has(m.tree_id))
-  }, [members, trees, profile, demoMode])
+    if (demoMode) return members
+    const ids = new Set(scopedTrees.map((t) => t.id))
+    // Legacy members without tree_id (the pre-multi-tree pool) stay
+    // admin-only, same as the main-tree card below.
+    const includeMain = isAdmin(profile)
+    return members.filter((m) => (m.tree_id != null ? ids.has(m.tree_id) : includeMain))
+  }, [members, scopedTrees, profile, demoMode])
   const visibleRelationships = useMemo(() => {
-    if (demoMode || isAdmin(profile)) return relationships
+    if (demoMode) return relationships
     const ids = new Set(visibleMembers.map((m) => m.id))
     return relationships.filter((r) => ids.has(r.member_a_id) && ids.has(r.member_b_id))
-  }, [relationships, visibleMembers, profile, demoMode])
+  }, [relationships, visibleMembers, demoMode])
 
   const upcoming = useMemo(() => getUpcomingBirthdays(visibleMembers), [visibleMembers])
   const generations = useMemo(() => computeGenerations(visibleMembers, visibleRelationships), [visibleMembers, visibleRelationships])
@@ -315,12 +332,10 @@ export default function Dashboard({ demoMode }: Props) {
 
     // The server already restricts `trees` to ones the current user
     // has access to (owner via family_trees.created_by OR membership via
-    // tree_access), so we don't need to filter again here — that filter
-    // used to hide trees a user joined via an invite code (created_by
-    // pointed at the inviter, not them), which made the rail look empty
-    // for anyone but the tree's creator.  Admin + demo keep seeing all
-    // trees in the store.
-    const visibleTrees = trees
+    // tree_access). Admins are the exception — their RLS bypass returns
+    // every tree in the system, so scopePersonalTrees narrows the rail
+    // to owned + explicitly-shared, same as everyone else.
+    const visibleTrees = scopedTrees
     visibleTrees.forEach((tr, i) => {
       const pool = members.filter((m) => m.tree_id === tr.id)
       summaries.push({
@@ -333,7 +348,7 @@ export default function Dashboard({ demoMode }: Props) {
     })
 
     return summaries
-  }, [members, trees, lang, profile, demoMode])
+  }, [members, scopedTrees, lang, profile, demoMode])
 
   const today = new Date()
   const dateStr = today.toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-US', {
@@ -348,6 +363,8 @@ export default function Dashboard({ demoMode }: Props) {
   return (
     <div dir={dir} className="min-h-screen bg-mesh-gradient pb-10">
       {/* Demo banner hidden — the setup hint surfaces only on /login when relevant. */}
+      {/* One-shot "your access request was approved/declined" banner. */}
+      {!demoMode && <AccessRequestStatusToast />}
 
       {/* ─── HERO ─── */}
       <motion.div
@@ -787,24 +804,6 @@ export default function Dashboard({ demoMode }: Props) {
                 label={lang === 'he' ? 'ניהול' : 'Admin'}
                 gradient="from-[#5AC8FA] to-[#64D2FF]"
                 onClick={() => navigate('/admin')}
-              />
-            )}
-            {/* Experimental lab tile — gated to admins so it stays out
-                of the way for normal users while the editor's UX is
-                still being prototyped. The /lab route itself is
-                public (no auth needed); this is just the entry point. */}
-            {isAdmin(profile) && (
-              <AppTile
-                index={8}
-                icon="🧪"
-                label={lang === 'he' ? 'מעבדת קווים' : 'Lab'}
-                gradient="from-[#34C759] to-[#06D6A0]"
-                onClick={() => navigate('/lab')}
-                tooltip={
-                  lang === 'he'
-                    ? 'עורך קווי-עץ ניסיוני — נתונים מבודדים'
-                    : 'Experimental tree-edge editor — isolated data'
-                }
               />
             )}
           </div>

@@ -358,7 +358,7 @@ export default function OnboardingWizard() {
         // tree's admin can review. Personal details are parked in
         // `answers.personal` so the admin can copy them onto the
         // matching Member record on approval.
-        await submitAccessRequest({
+        const sent = await submitAccessRequest({
           requested_role: effectiveRole,
           invite_code: a.inviteCode.trim() || null,
           answers: {
@@ -377,6 +377,18 @@ export default function OnboardingWizard() {
             },
           },
         })
+        // A request the server refused will never reach the admin —
+        // showing the green "request sent" screen would repeat the
+        // pilot bug ("הבקשה לא הגיעה למנהל"). Stay on the form with a
+        // retry-able error instead.
+        if (!sent) {
+          setError(
+            lang === 'he'
+              ? 'שליחת הבקשה למנהל נכשלה. בדקו את החיבור ונסו שוב.'
+              : 'Sending the request to the admin failed. Check your connection and try again.',
+          )
+          return
+        }
       }
       // The user is done with the gate — clear the localStorage flag
       // so App.tsx's route guard stops sending them to /onboarding the

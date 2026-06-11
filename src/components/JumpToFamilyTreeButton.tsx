@@ -96,7 +96,7 @@ export default function JumpToFamilyTreeButton({ member }: { member: Member }) {
   const doRequest = async () => {
     setBusy(true)
     try {
-      await submitAccessRequest({
+      const ok = await submitAccessRequest({
         requested_role: profile?.role ?? 'user',
         invite_code: null,
         answers: {
@@ -108,7 +108,9 @@ export default function JumpToFamilyTreeButton({ member }: { member: Member }) {
             : `Access request to tree "${targetName}" via ${member.first_name}`,
         },
       })
-      setOutcome('requested')
+      // Only report "request sent" when it actually reached the
+      // server — a refused insert never shows up for the admin.
+      if (ok) setOutcome('requested')
     } finally {
       setBusy(false)
       setConfirm(null)

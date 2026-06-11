@@ -11,7 +11,7 @@ import LineageBadge from './LineageBadge'
 import MemberNotesSection from './MemberNotesSection'
 import ComingSoonModal from './ComingSoonModal'
 import BuildFromTextModal from './BuildFromTextModal'
-import { canEditMember, canManageRelationships } from '../lib/permissions'
+import { canEditMember, canManageRelationships, computeNuclearFamilyIds } from '../lib/permissions'
 import { getParentMap, resolveLineage } from '../lib/lineage'
 import type { Member, SpouseStatus } from '../types'
 
@@ -153,18 +153,14 @@ export default function MemberPanel({ onClose }: Props) {
   if (!member) return null
 
   // ── Phase D RBAC gates ───────────────────────────────────────────────
-  // The `nuclearFamilyIds` set lets `canEditMember` permit users to edit
-  // their parents/children/spouses without admin rights.
-  const nuclearFamilyIds = new Set<string>([
-    ...spouses.map(s => s.id),
-    ...parents.map(p => p.id),
-    ...children.map(c => c.id),
-  ])
   // `linked_member_id` comes from the profile and points at the user's
   // "own card" on the tree (seeded during onboarding). This lets a
   // plain `user`-role account self-edit without admin rights — see
-  // migration 010.
+  // migration 010. The nuclear set is computed from THAT card outward
+  // (the user's spouses/children/parents) — not from the selected
+  // member's relations, which made the gate vacuously false.
   const ownMemberId = profile?.linked_member_id ?? undefined
+  const nuclearFamilyIds = computeNuclearFamilyIds(ownMemberId, relationships)
   const editAllowed = canEditMember(profile, {
     targetMemberId: member.id,
     nuclearFamilyIds,
