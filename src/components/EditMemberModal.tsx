@@ -11,6 +11,12 @@ interface Props {
   open: boolean
   onClose: () => void
   member: Member
+  /**
+   * Regular-user path: the same form, but saving SUBMITS an edit
+   * request for admin approval instead of writing the member directly
+   * (the requester has no edit rights on this member).
+   */
+  suggestMode?: boolean
 }
 
 interface FormState {
@@ -62,8 +68,8 @@ function readFileAsDataUrl(file: File): Promise<string> {
   })
 }
 
-export default function EditMemberModal({ open, onClose, member }: Props) {
-  const { updateMember, members, relationships } = useFamilyStore()
+export default function EditMemberModal({ open, onClose, member, suggestMode = false }: Props) {
+  const { updateMember, submitEditRequest, members, relationships } = useFamilyStore()
   // Parents of this member — used by the "connector parent" picker so
   // the user can choose which parent the descending tree-line draws
   // from (default: mother).
@@ -129,7 +135,7 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
   const handleSave = async () => {
     setSaving(true)
     const parsedOrder = form.birth_order.trim() === '' ? null : parseInt(form.birth_order, 10)
-    await updateMember(member.id, {
+    const changes = {
       first_name: form.first_name.trim() || member.first_name,
       last_name: form.last_name.trim(),
       maiden_name: form.maiden_name.trim() || undefined,
@@ -146,7 +152,17 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
       photos: form.photos.length ? form.photos : undefined,
       hidden: form.hidden,
       connector_parent_id: form.connector_parent_id || null,
-    })
+    }
+    if (suggestMode) {
+      // No edit rights on this member — the change lands in the admin's
+      // requests tab instead of being written directly.
+      const sent = await submitEditRequest(member.id, changes)
+      setSaving(false)
+      if (sent) window.alert(t.editSuggestSent)
+      onClose()
+      return
+    }
+    await updateMember(member.id, changes)
     setSaving(false)
     onClose()
   }
@@ -189,7 +205,7 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
                 disabled={saving}
                 className="px-3 py-1.5 text-sf-subhead font-bold text-[#007AFF] rounded-lg active:bg-[#007AFF]/10 disabled:opacity-60"
               >
-                {saving ? t.editSaving : t.save}
+                {saving ? t.editSaving : suggestMode ? t.editSuggestSubmit : t.save}
               </button>
             </div>
 
@@ -547,7 +563,7 @@ export default function EditMemberModal({ open, onClose, member }: Props) {
                 disabled={saving}
                 className="btn-primary w-full mt-2 disabled:opacity-60"
               >
-                {saving ? t.editSaving : t.editSaveChanges}
+                {saving ? t.editSaving : suggestMode ? t.editSuggestSubmit : t.editSaveChanges}
               </button>
             </div>
           </motion.div>
