@@ -20,6 +20,7 @@ import PlanGateToast from './components/plan/PlanGateToast'
 import { ADLER_MEMBERS, ADLER_RELATIONSHIPS, ADLER_TREES } from './data/adlerFamily'
 import { isPendingOnboarding, clearPendingOnboarding, markPendingOnboarding } from './lib/pendingOnboarding'
 import { useNotificationPolling } from './hooks/useNotificationPolling'
+import { readPendingJoinCode } from './lib/joinLink'
 import type { Profile } from './types'
 import type { Session } from '@supabase/supabase-js'
 
@@ -32,6 +33,7 @@ const BirthdayPage = lazy(() => import('./pages/BirthdayPage'))
 const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'))
 const OnboardingWizard = lazy(() => import('./components/onboarding/OnboardingWizard'))
 const PricingPage = lazy(() => import('./pages/PricingPage'))
+const JoinPage = lazy(() => import('./pages/JoinPage'))
 
 const SUPABASE_CONFIGURED =
   !!import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_URL !== ''
@@ -375,7 +377,9 @@ export default function App() {
   useEffect(() => {
     if (authLoading || !session || !oauthReturnPending) return
     oauthReturnPending = false
-    window.location.hash = '#/home'
+    // A stashed join code (external share link → login round-trip)
+    // outranks the default landing: finish the join first.
+    window.location.hash = readPendingJoinCode() ? '#/join' : '#/home'
   }, [authLoading, session])
 
   useEffect(() => {
@@ -594,10 +598,13 @@ export default function App() {
               path="/login"
               element={
                 isAuth
-                  ? <Navigate to="/home" replace />
+                  ? <Navigate to={readPendingJoinCode() ? '/join' : '/home'} replace />
                   : <Auth demoMode={demoMode} onDemoEnter={() => setDemoEntered(true)} />
               }
             />
+            {/* External share-link landing — public on purpose: it
+                stashes the code and routes guests through /login. */}
+            <Route path="/join" element={<JoinPage isAuth={isAuth} />} />
             {/*
               Protected routes redirect to "/" (the Landing marketing
               page), NOT to "/login". Two reasons:

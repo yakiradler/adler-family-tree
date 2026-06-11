@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang } from '../i18n/useT'
@@ -6,6 +6,8 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { isAdmin } from '../lib/permissions'
 import { pickPersonalShareInvite } from '../lib/invites'
 import { unseenShareCodeIds } from '../lib/notifications'
+import { buildJoinUrl } from '../lib/joinLink'
+import { fileToIconBlob, fileToDownscaledDataURL, iconStoragePath } from '../lib/imageResize'
 import type { TreeInvite } from '../types'
 
 /**
@@ -30,7 +32,7 @@ interface Props {
 
 export default function TreeCardActionMenu({ open, onClose, target }: Props) {
   const { t, lang } = useLang()
-  const { profile, submitAccessRequest, trees, mintShareCode } = useFamilyStore()
+  const { profile, submitAccessRequest, trees, mintShareCode, updateTree } = useFamilyStore()
   const notifications = useFamilyStore((s) => s.notifications)
   const markNotificationsRead = useFamilyStore((s) => s.markNotificationsRead)
   const [busy, setBusy] = useState(false)
@@ -39,6 +41,11 @@ export default function TreeCardActionMenu({ open, onClose, target }: Props) {
   const [minted, setMinted] = useState<TreeInvite | null>(null)
   const [personal, setPersonal] = useState<TreeInvite | null>(null)
   const [copied, setCopied] = useState(false)
+  const [iconBusy, setIconBusy] = useState(false)
+  const [iconDone, setIconDone] = useState(false)
+  const [linkBusy, setLinkBusy] = useState(false)
+  const [linkCopied, setLinkCopied] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const tree = target?.id ? trees.find((tr) => tr.id === target.id) ?? null : null
   // The implicit main tree (id === null) has no tree_invites row to
@@ -79,7 +86,69 @@ export default function TreeCardActionMenu({ open, onClose, target }: Props) {
     setMinted(null)
     setPersonal(null)
     setCopied(false)
+    setIconBusy(false)
+    setIconDone(false)
+    setLinkBusy(false)
+    setLinkCopied(false)
     onClose()
+  }
+
+  // ── Custom tree icon (owner/admin) ────────────────────────────────
+  // Downscale to a 256px square client-side, upload to the public
+  // tree-icons bucket, persist the URL on the tree row. Demo mode
+  // stores a small data-URI locally instead.
+  const onIconFile = async (file: File | null) => {
+    if (!file || !target?.id) return
+    setIconBusy(true)
+    setError(null)
+    try {
+      if (!isSupabaseConfigured) {
+        const dataUrl = await fileToDownscaledDataURL(file)
+        await updateTree(target.id, { icon_url: dataUrl })
+      } else {
+        const { blob, contentType, ext } = await fileToIconBlob(file)
+        const path = iconStoragePath(target.id, ext, Date.now())
+        const { error: upErr } = await supabase.storage
+          .from('tree-icons')
+          .upload(path, blob, { contentType })
+        if (upErr) throw upErr
+        const { data: pub } = supabase.storage.from('tree-icons').getPublicUrl(path)
+        if (!pub?.publicUrl) throw new Error('no public url')
+        await updateTree(target.id, { icon_url: pub.publicUrl })
+      }
+      setIconDone(true)
+      window.setTimeout(close, 1200)
+    } catch (e) {
+      console.warn('[tree-icon] upload failed', e)
+      setError(t.treeIconFailed)
+    } finally {
+      setIconBusy(false)
+    }
+  }
+
+  // ── External share link (owner/admin) ─────────────────────────────
+  // Same 30-day code as the direct mint, wrapped in a /#/join URL so
+  // one tap covers signup + join.
+  const copyShareLink = async () => {
+    if (!target?.id) return
+    setLinkBusy(true)
+    setError(null)
+    try {
+      const invite = await mintShareCode(target.id)
+      if (!invite) throw new Error('mint failed')
+      const url = buildJoinUrl(window.location.origin, invite.code)
+      try {
+        await navigator.clipboard.writeText(url)
+      } catch {
+        window.prompt(t.treeMenuShareLink, url)
+      }
+      setLinkCopied(true)
+      window.setTimeout(() => setLinkCopied(false), 2500)
+    } catch {
+      setError(lang === 'he' ? 'יצירת הקישור נכשלה — נסו שוב' : 'Creating the link failed — try again')
+    } finally {
+      setLinkBusy(false)
+    }
   }
 
   const createShareCode = async () => {
@@ -233,18 +302,50 @@ export default function TreeCardActionMenu({ open, onClose, target }: Props) {
                       />
                     )
                   )}
-                  <ActionRow
-                    icon="🖼️"
-                    label={t.treeMenuChangeIcon}
-                    hint={t.treeMenuChangeIconHint}
-                    comingSoon
-                  />
-                  <ActionRow
-                    icon="🔗"
-                    label={t.treeMenuShareLink}
-                    hint={t.treeMenuShareLinkHint}
-                    comingSoon
-                  />
+                  {canMint ? (
+                    <>
+                      {/* Hidden file input — the ActionRow proxies to it. */}
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          void onIconFile(e.target.files?.[0] ?? null)
+                          e.target.value = ''
+                        }}
+                      />
+                      <ActionRow
+                        icon="🖼️"
+                        label={iconDone ? t.treeIconUpdated : t.treeMenuChangeIcon}
+                        hint={iconBusy ? t.treeIconUploading : t.treeMenuChangeIconHint}
+                        onClick={() => fileInputRef.current?.click()}
+                        busy={iconBusy}
+                      />
+                      <ActionRow
+                        icon="🔗"
+                        label={linkCopied ? t.treeMenuShareLinkCopied : t.treeMenuShareLink}
+                        hint={t.treeMenuShareLinkHint}
+                        onClick={copyShareLink}
+                        busy={linkBusy}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <ActionRow
+                        icon="🖼️"
+                        label={t.treeMenuChangeIcon}
+                        hint={t.treeMenuChangeIconHint}
+                        comingSoon
+                      />
+                      <ActionRow
+                        icon="🔗"
+                        label={t.treeMenuShareLink}
+                        hint={t.treeMenuShareLinkHint}
+                        comingSoon
+                      />
+                    </>
+                  )}
                   <ActionRow
                     icon="🌲"
                     label={t.treeMenuDepthLimit}
