@@ -80,6 +80,61 @@ export function iconStoragePath(treeId: string, ext: string, ts: number): string
  * path as fileToDownscaledDataURL above — createImageBitmap is missing
  * on older iOS Safari.
  */
+/** Storage object path for a member photo: `<treeId>/p-<rand>-<ts>.<ext>`.
+ *  The tree id as the FIRST path segment is the storage-RLS ownership
+ *  anchor (split_part(name,'/',1), migration 018) — write access mirrors
+ *  tree write access. `rand` keeps concurrent uploads from colliding.
+ *  Pure + unit-tested. */
+export function photoStoragePath(treeId: string, ext: string, ts: number, rand: string): string {
+  return `${treeId}/p-${rand}-${ts}.${ext.replace(/^\./, '')}`
+}
+
+/**
+ * Downscale a photo (aspect-ratio preserved, max 1280px long edge) and
+ * encode as webp, falling back to jpeg (Safari's canvas silently returns
+ * png for webp, which would balloon the size). Returns a Blob for direct
+ * Storage upload — the persistent counterpart to fileToDownscaledDataURL,
+ * which is only for inline/demo fallback. Same FileReader+Image decode
+ * path (createImageBitmap is missing on older iOS Safari).
+ */
+export async function fileToPhotoBlob(file: File, maxDim: number = MAX_DIMENSION): Promise<IconBlob> {
+  const raw = await new Promise<string>((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(r.result as string)
+    r.onerror = () => reject(r.error ?? new Error('FileReader failed'))
+    r.readAsDataURL(file)
+  })
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const i = new Image()
+    i.onload = () => resolve(i)
+    i.onerror = () => reject(new Error('Image decode failed'))
+    i.src = raw
+  })
+
+  const scale = Math.min(1, maxDim / Math.max(img.width, img.height))
+  const w = Math.round(img.width * scale)
+  const h = Math.round(img.height * scale)
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas 2D context unavailable')
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, w, h)
+  ctx.drawImage(img, 0, 0, w, h)
+
+  const tryEncode = (type: string, quality: number) =>
+    new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality))
+
+  let blob = await tryEncode('image/webp', JPEG_QUALITY)
+  if (!blob || blob.type !== 'image/webp') {
+    blob = await tryEncode('image/jpeg', JPEG_QUALITY)
+    if (!blob) throw new Error('image encode failed')
+    return { blob, contentType: 'image/jpeg', ext: 'jpg' }
+  }
+  return { blob, contentType: 'image/webp', ext: 'webp' }
+}
+
 export async function fileToIconBlob(file: File, maxDim: number = ICON_MAX_DIM): Promise<IconBlob> {
   const raw = await new Promise<string>((resolve, reject) => {
     const r = new FileReader()

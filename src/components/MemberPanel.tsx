@@ -7,12 +7,15 @@ import { getRingGradient, getFallbackGradient } from './memberVisuals'
 import EditMemberModal from './EditMemberModal'
 import JumpToFamilyTreeButton from './JumpToFamilyTreeButton'
 import RelationshipManager from './RelationshipManager'
+import QuickAddRelativeModal from './QuickAddRelativeModal'
+import type { RelativeDirection } from '../lib/relatives'
 import LineageBadge from './LineageBadge'
+import { telHref, whatsappHref, mailtoHref, facebookHref, instagramHref } from '../lib/contactLinks'
 import MemberNotesSection from './MemberNotesSection'
-import ComingSoonModal from './ComingSoonModal'
 import BuildFromTextModal from './BuildFromTextModal'
 import { canEditMember, canManageRelationships, computeNuclearFamilyIds } from '../lib/permissions'
 import { getParentMap, resolveLineage } from '../lib/lineage'
+import { uploadMemberPhoto } from '../lib/photoUpload'
 import type { Member, SpouseStatus } from '../types'
 
 interface Props {
@@ -39,6 +42,11 @@ export default function MemberPanel({ onClose }: Props) {
   const [tab, setTab] = useState<'about' | 'family' | 'photos'>('about')
   const [editOpen, setEditOpen] = useState(false)
   const [relOpen, setRelOpen] = useState(false)
+  // "Add relative" — the most-wanted action, surfaced right on the card.
+  // `addRelExpanded` toggles the 4 direction choices; `quickAddDir` opens
+  // the compact QuickAddRelativeModal anchored to this member.
+  const [addRelExpanded, setAddRelExpanded] = useState(false)
+  const [quickAddDir, setQuickAddDir] = useState<RelativeDirection | null>(null)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [copyToTreeOpen, setCopyToTreeOpen] = useState(false)
@@ -55,7 +63,6 @@ export default function MemberPanel({ onClose }: Props) {
   // "Coming soon" feature placeholders — wired to a friendly modal
   // that explains what each will do once the backend lands.
   const [aiTreeFromTextOpen, setAiTreeFromTextOpen] = useState(false)
-  const [aiPhotoEnhanceOpen, setAiPhotoEnhanceOpen] = useState(false)
 
   const member = useMemo(
     () => members.find(m => m.id === selectedMemberId) ?? null,
@@ -211,6 +218,10 @@ export default function MemberPanel({ onClose }: Props) {
   const photos = member.photos && member.photos.length > 0
     ? member.photos
     : (member.photo_url ? [member.photo_url] : [])
+
+  // Contact / social links shown under the "Contact" section.
+  const contact = member.contact ?? null
+  const hasContact = !!(contact && (contact.phone || contact.email || contact.facebook || contact.instagram))
 
   const relationCount = spouses.length + parents.length + children.length + siblings.length
 
@@ -449,7 +460,55 @@ export default function MemberPanel({ onClose }: Props) {
                 {member.maiden_name && (
                   <InfoRow icon="🌸" label={t.maidenNameLabel} value={member.maiden_name} />
                 )}
-                {!member.birth_date && !member.death_date && !member.bio && !member.maiden_name && !lineageInfo?.showBadge && !lineageInfo?.daughterOf && (
+                {/* ── Contact + social links — one tap to call / WhatsApp /
+                    email / open a family member's social profile. ── */}
+                {hasContact && contact && (
+                  <div className="bg-[#F2F2F7] rounded-2xl p-3">
+                    <p className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wide mb-2">{t.contactSection}</p>
+                    <div className="space-y-1.5">
+                      {contact.phone && (
+                        <div className="flex items-center gap-1.5">
+                          <a href={telHref(contact.phone) ?? '#'} className="contact-link flex-1">
+                            <span aria-hidden>📞</span><span className="flex-1 truncate" dir="ltr">{contact.phone}</span>
+                          </a>
+                          <a href={whatsappHref(contact.phone) ?? '#'} target="_blank" rel="noopener noreferrer"
+                            aria-label="WhatsApp" className="contact-link contact-link--wa">
+                            <span aria-hidden>💬</span>
+                          </a>
+                        </div>
+                      )}
+                      {contact.email && (
+                        <a href={mailtoHref(contact.email) ?? '#'} className="contact-link">
+                          <span aria-hidden>✉️</span><span className="flex-1 truncate" dir="ltr">{contact.email}</span>
+                        </a>
+                      )}
+                      {contact.facebook && (
+                        <a href={facebookHref(contact.facebook) ?? '#'} target="_blank" rel="noopener noreferrer" className="contact-link">
+                          <span aria-hidden>📘</span><span className="flex-1 truncate">{t.contactFacebook}</span>
+                          <span className="text-[#8E8E93]" aria-hidden>↗</span>
+                        </a>
+                      )}
+                      {contact.instagram && (
+                        <a href={instagramHref(contact.instagram) ?? '#'} target="_blank" rel="noopener noreferrer" className="contact-link">
+                          <span aria-hidden>📷</span><span className="flex-1 truncate">{t.contactInstagram}</span>
+                          <span className="text-[#8E8E93]" aria-hidden>↗</span>
+                        </a>
+                      )}
+                    </div>
+                    <style>{`
+                      .contact-link {
+                        display: flex; align-items: center; gap: 0.6rem;
+                        padding: 0.6rem 0.75rem; border-radius: 0.75rem;
+                        background: #FFFFFF; border: 1px solid rgba(0,0,0,0.05);
+                        font-size: 13px; font-weight: 600; color: #1C1C1E;
+                        transition: transform 0.1s ease, background 0.15s ease;
+                      }
+                      .contact-link:active { transform: scale(0.98); }
+                      .contact-link--wa { flex: 0 0 auto; color: #25D366; }
+                    `}</style>
+                  </div>
+                )}
+                {!member.birth_date && !member.death_date && !member.bio && !member.maiden_name && !lineageInfo?.showBadge && !lineageInfo?.daughterOf && !hasContact && (
                   <EmptyTab icon="📝" text={t.panelNoInfo} />
                 )}
               </motion.div>
@@ -508,22 +567,15 @@ export default function MemberPanel({ onClose }: Props) {
                   className="hidden"
                   onChange={(e) => {
                     const files = Array.from(e.target.files ?? [])
-                    if (files.length === 0) return
-                    Promise.all(
-                      files.map(
-                        (f) =>
-                          new Promise<string>((resolve, reject) => {
-                            const r = new FileReader()
-                            r.onerror = reject
-                            r.onload = () => resolve(r.result as string)
-                            r.readAsDataURL(f)
-                          }),
-                      ),
-                    ).then((urls) => {
-                      const next = [...(member.photos ?? []), ...urls]
-                      updateMember(member.id, { photos: next })
-                    }).catch(() => { /* read failures are rare */ })
                     e.target.value = ''
+                    if (files.length === 0) return
+                    // Upload to Storage; persist URLs, not raw base64.
+                    Promise.all(files.map((f) => uploadMemberPhoto(f, member.tree_id)))
+                      .then((urls) => {
+                        const next = [...(member.photos ?? []), ...urls]
+                        updateMember(member.id, { photos: next })
+                      })
+                      .catch(() => { /* upload failures fall back inline in helper */ })
                   }}
                 />
                 {photos.length === 0 ? (
@@ -599,6 +651,50 @@ export default function MemberPanel({ onClose }: Props) {
                 the component). Lets families navigate between linked
                 trees without leaving the profile card. */}
             <JumpToFamilyTreeButton member={member} />
+            {/* ── Add relative — the #1 thing a family member wants, made
+                obvious right here instead of hidden behind tree edit-mode.
+                Gated by relAllowed; opens the compact quick-add modal. ── */}
+            {relAllowed && (
+              <div className="space-y-1.5">
+                <button
+                  type="button"
+                  onClick={() => setAddRelExpanded((v) => !v)}
+                  aria-expanded={addRelExpanded}
+                  aria-label={t.panelAddRelative}
+                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#34C759] to-[#30D158] text-white text-sf-subhead font-bold active:scale-[0.98] transition flex items-center justify-center gap-2 shadow-md"
+                >
+                  <span className="text-lg leading-none" aria-hidden>＋</span>
+                  <span>{t.panelAddRelative}</span>
+                </button>
+                <AnimatePresence>
+                  {addRelExpanded && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="grid grid-cols-2 gap-1.5 overflow-hidden"
+                    >
+                      {([
+                        ['parent', t.addParent, '🧓'],
+                        ['child', t.addChild, '👶'],
+                        ['spouse', t.addSpouse, '💍'],
+                        ['sibling', t.addSibling, '🧑‍🤝‍🧑'],
+                      ] as const).map(([dir, label, icon]) => (
+                        <button
+                          key={dir}
+                          type="button"
+                          onClick={() => { setQuickAddDir(dir); setAddRelExpanded(false) }}
+                          className="py-2.5 rounded-xl border border-[#34C759]/40 text-[#1F7A3A] text-sf-footnote font-semibold active:scale-95 transition flex items-center justify-center gap-1.5 hover:bg-[#34C759]/5"
+                        >
+                          <span aria-hidden>{icon}</span>
+                          <span>{label}</span>
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
             {editAllowed && (
             <button
               type="button"
@@ -664,21 +760,6 @@ export default function MemberPanel({ onClose }: Props) {
               <span>{t.aiTreeFromTextLabel}</span>
             </button>
 
-            {/* ── AI: enhance photo (coming soon) ── */}
-            <button
-              type="button"
-              onClick={() => setAiPhotoEnhanceOpen(true)}
-              aria-label={t.aiPhotoEnhanceLabel}
-              title={t.aiComingSoonTip}
-              className="w-full py-2.5 rounded-2xl border border-[#34C759]/40 text-[#1F7A3A] text-sf-subhead font-semibold active:scale-[0.98] transition flex items-center justify-center gap-2 hover:bg-[#34C759]/5 relative"
-            >
-              <span className="absolute top-1 end-2 text-[8.5px] font-bold text-[#34C759] bg-[#34C759]/12 rounded-full px-1.5 py-0.5">
-                🚀
-              </span>
-              <span>🖼</span>
-              <span>{t.aiPhotoEnhanceLabel}</span>
-            </button>
-
             {/* ── Copy to another tree ── */}
             {editAllowed && (
             <button
@@ -721,6 +802,12 @@ export default function MemberPanel({ onClose }: Props) {
         suggestMode={!editAllowed}
       />
       <RelationshipManager open={relOpen} onClose={() => setRelOpen(false)} member={member} />
+      <QuickAddRelativeModal
+        open={quickAddDir !== null}
+        onClose={() => setQuickAddDir(null)}
+        anchor={member}
+        direction={quickAddDir ?? 'child'}
+      />
 
       {/* Build-from-text → real local parser. The modal frames itself
           around the currently-selected member as the anchor so any
@@ -730,15 +817,6 @@ export default function MemberPanel({ onClose }: Props) {
         open={aiTreeFromTextOpen}
         onClose={() => setAiTreeFromTextOpen(false)}
         anchorMember={member}
-      />
-      <ComingSoonModal
-        open={aiPhotoEnhanceOpen}
-        onClose={() => setAiPhotoEnhanceOpen(false)}
-        icon="🖼"
-        title={t.aiPhotoEnhanceLabel}
-        description={t.aiPhotoEnhanceDesc}
-        bullets={[t.aiPhotoEnhanceBullet1, t.aiPhotoEnhanceBullet2, t.aiPhotoEnhanceBullet3]}
-        gradient="from-[#34C759] to-[#30B454]"
       />
 
       {/* ── Copy to tree dialog ── */}

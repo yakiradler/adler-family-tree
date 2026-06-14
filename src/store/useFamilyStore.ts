@@ -31,6 +31,24 @@ import type {
 const REMOTE_FAIL_THROTTLE_MS = 20_000
 let lastRemoteFailureAt = 0
 
+// True when an error is an RLS / permission rejection rather than a
+// transient/network failure. On INSERT, Postgres surfaces a denied
+// write as a hard error (code 42501 / "row-level security policy"),
+// unlike UPDATE/DELETE which silently match 0 rows. Retrying never
+// fixes it, and it isn't an offline state — the user simply can't
+// write here (e.g. a viewer editing someone else's tree).
+function isPermissionError(err: unknown): boolean {
+  const code =
+    typeof err === 'object' && err && 'code' in err
+      ? String((err as { code: unknown }).code)
+      : ''
+  const message =
+    err instanceof Error ? err.message
+    : typeof err === 'object' && err && 'message' in err ? String((err as { message: unknown }).message)
+    : ''
+  return code === '42501' || /row-level security|violates row-level security|permission denied/i.test(message)
+}
+
 function reportSupabaseFailure(op: string, err: unknown, kind: 'read' | 'write' = 'write') {
   if (typeof window === 'undefined') return
   const message =
@@ -41,6 +59,14 @@ function reportSupabaseFailure(op: string, err: unknown, kind: 'read' | 'write' 
 
   if (kind === 'read') return                   // read failure — log only
   if (!isSupabaseConfigured) return             // demo mode — local-only is expected
+
+  // A permission rejection is not "saved locally, will sync later" — the
+  // write can never land. Route it to the friendly "no permission" toast
+  // instead of the scary orange "server sync failed".
+  if (isPermissionError(err)) {
+    reportSupabaseRejection(op)
+    return
+  }
 
   const now = Date.now()
   if (now - lastRemoteFailureAt < REMOTE_FAIL_THROTTLE_MS) return
@@ -75,7 +101,9 @@ async function insertWithRetry<T>(
 ): Promise<{ data: T | null; error: unknown }> {
   let res = await attempt()
   let i = 0
-  while (res.error && i < delays.length) {
+  // Don't retry a deterministic permission rejection — it will never
+  // succeed and would just stall the UI for the full backoff window.
+  while (res.error && !isPermissionError(res.error) && i < delays.length) {
     await new Promise((r) => setTimeout(r, delays[i++]))
     res = await attempt()
   }
@@ -189,7 +217,7 @@ interface FamilyState {
   setActiveTreeId: (id: string | null) => void
   addTree: (tree: Omit<FamilyTree, 'id'>) => Promise<FamilyTree | null>
   updateTree: (id: string, patch: Partial<FamilyTree>) => Promise<void>
-  deleteTree: (id: string) => Promise<void>
+  deleteTree: (id: string) => Promise<{ ok: boolean }>
   fetchTrees: () => Promise<void>
 
   // ── Tree layout mode (lifted from TreeView) ────────────────────────
@@ -478,14 +506,34 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     // are added back-to-back the visibility-check helper can race the
     // previous tuple's commit and reject. Retry with growing backoff.
     const tryInsert = () => supabase.from('members').insert(payload).select().single()
+    const rollback = () => set((s) => ({ members: s.members.filter((m) => m.id !== localId) }))
     try {
       const { data, error } = await insertWithRetry(tryInsert)
-      if (error) reportSupabaseFailure('addMember', error)
+      if (error) {
+        // Permission denied → roll back the optimistic card. Leaving it
+        // would show a "saved" member that the server refused and that
+        // vanishes on the next refresh — the exact "looks saved, then
+        // gone" confusion behind the sync-failed reports. A transient
+        // failure keeps the row (it may still sync) per the offline model.
+        if (isPermissionError(error)) {
+          rollback()
+          reportSupabaseRejection('addMember')
+          return null
+        }
+        reportSupabaseFailure('addMember', error)
+      }
       if (data) {
         set((s) => ({ members: s.members.map((m) => (m.id === localId ? (data as Member) : m)) }))
         return data as Member
       }
-    } catch (err) { reportSupabaseFailure('addMember', err) }
+    } catch (err) {
+      if (isPermissionError(err)) {
+        rollback()
+        reportSupabaseRejection('addMember')
+        return null
+      }
+      reportSupabaseFailure('addMember', err)
+    }
     return optimistic
   },
 
@@ -921,47 +969,26 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     const trimmed = code.trim()
     if (!trimmed || !isSupabaseConfigured) return { ok: false as const }
     try {
-      // A valid invite code IS the authorization — holding the code is
-      // the grant (mirrors Notion/Figma share links).
-      const { data } = await supabase
-        .from('tree_invites')
-        .select('id, tree_id, expires_at, uses_left')
-        .eq('code', trimmed)
-        .maybeSingle()
-      const valid =
-        !!data &&
-        (data.expires_at == null || new Date(data.expires_at) > new Date()) &&
-        (data.uses_left == null || data.uses_left > 0)
-      if (!valid || !data) return { ok: false as const }
-      // Burn one use on capped codes.
-      if (data.uses_left != null) {
-        await supabase
-          .from('tree_invites')
-          .update({ uses_left: Math.max(0, data.uses_left - 1) })
-          .eq('id', data.id)
+      // Redemption runs entirely server-side (migration 015). The
+      // redeemer is neither the code's creator nor its target, so they
+      // have no SELECT/UPDATE rights on tree_invites — the SECURITY
+      // DEFINER redeem_invite() RPC validates the code, burns a use on
+      // capped codes, and writes the tree_access grant for us. An empty
+      // result set means the code was missing / expired / exhausted.
+      const { data, error } = await supabase.rpc('redeem_invite', { p_code: trimmed })
+      if (error) {
+        reportSupabaseFailure('joinTreeWithCode', error)
+        return { ok: false as const }
       }
-      // DB-level access grant — without this row the RLS from
-      // migration 008/009 keeps the tree invisible. ignoreDuplicates:
-      // tree_access has no UPDATE policy, so a DO UPDATE upsert would
-      // be rejected when re-joining.
-      if (data.tree_id) {
-        const { data: auth } = await supabase.auth.getUser()
-        const uid = auth.user?.id
-        if (uid) {
-          await supabase
-            .from('tree_access')
-            .upsert(
-              { user_id: uid, tree_id: data.tree_id, role: 'member' },
-              { onConflict: 'user_id,tree_id', ignoreDuplicates: true },
-            )
-        }
-        get().setActiveTreeId(data.tree_id)
-      }
+      const row = Array.isArray(data) ? data[0] : data
+      if (!row) return { ok: false as const } // invalid / expired / used up
+      const treeId = (row as { redeemed_tree_id: string | null }).redeemed_tree_id ?? null
+      if (treeId) get().setActiveTreeId(treeId)
       await Promise.all([
         get().fetchMembers(), get().fetchRelationships(),
         get().fetchTrees(), get().fetchMyTreeAccess(),
       ])
-      return { ok: true as const, treeId: data.tree_id ?? null }
+      return { ok: true as const, treeId }
     } catch (err) {
       reportSupabaseFailure('joinTreeWithCode', err)
       return { ok: false as const }
@@ -1096,7 +1123,11 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       }
     }
     if (decision === 'approved' && req) {
-      const role = grantedRole ?? req.requested_role
+      // Defence-in-depth: if the caller didn't pass an explicit role, fall
+      // back to the baseline `user` role — NEVER to the requester's own
+      // `requested_role`, which would let a requester self-select an
+      // elevated role and have it auto-applied (see AccessRequestCard).
+      const role = grantedRole ?? 'user'
       try {
         const { error: pErr } = await supabase
           .from('profiles')
@@ -1209,22 +1240,46 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     const localId = `tree-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     const optimistic: FamilyTree = { ...tree, id: localId }
     set((s) => ({ trees: [...s.trees, optimistic] }))
+    // Demo mode (no backend): the optimistic row IS the tree.
+    if (!isSupabaseConfigured) return optimistic
+
+    const rollback = () => set((s) => ({ trees: s.trees.filter((t) => t.id !== localId) }))
     try {
       const { data, error } = await supabase
         .from('family_trees')
         .insert(tree)
         .select('*')
         .single()
-      if (!error && data) {
-        set((s) => ({ trees: s.trees.map((t) => (t.id === localId ? (data as FamilyTree) : t)) }))
-        return data as FamilyTree
+      if (error) {
+        // CRITICAL: never keep a server-rejected tree as a local-only
+        // "ghost". The old code fell through to `return optimistic`, so
+        // a failed insert left a tree with a fake `tree-…` id in the UI —
+        // and every member later added to it carried that non-existent
+        // tree_id, so its insert failed the FK and surfaced the
+        // "saved locally, sync failed" toast on every add. Roll back and
+        // report so the user knows the tree wasn't actually created.
+        rollback()
+        reportSupabaseFailure('addTree', error)
+        return null
       }
-    } catch { /* offline / no table — keep optimistic row */ }
-    return optimistic
+      set((s) => ({ trees: s.trees.map((t) => (t.id === localId ? (data as FamilyTree) : t)) }))
+      return data as FamilyTree
+    } catch (err) {
+      rollback()
+      reportSupabaseFailure('addTree', err)
+      return null
+    }
   },
   updateTree: async (id, patch) => {
+    // Optimistic local update kept even on server failure (a rename
+    // shouldn't snap back), but we now surface a sync failure instead of
+    // swallowing it silently.
     set((s) => ({ trees: s.trees.map((t) => (t.id === id ? { ...t, ...patch } : t)) }))
-    try { await supabase.from('family_trees').update(patch).eq('id', id) } catch { /* ignore */ }
+    if (!isSupabaseConfigured) return
+    try {
+      const { error } = await supabase.from('family_trees').update(patch).eq('id', id)
+      if (error) reportSupabaseFailure('updateTree', error)
+    } catch (err) { reportSupabaseFailure('updateTree', err) }
   },
   fetchTrees: async () => {
     // Trees the current user has access to.  RLS on family_trees
@@ -1247,11 +1302,81 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     }
   },
   deleteTree: async (id) => {
+    // Snapshot everything we touch so a server rejection can be rolled
+    // back cleanly. The old version optimistically removed the tree and
+    // then swallowed the Supabase result — when the DELETE was rejected
+    // (RLS denied, or the FK conflict below) the tree vanished from the
+    // UI and silently reappeared on the next refresh. Now we surface the
+    // failure and restore state.
+    const prevState = {
+      trees: get().trees,
+      activeTreeId: get().activeTreeId,
+      members: get().members,
+      relationships: get().relationships,
+    }
+    const treeToRemove = prevState.trees.find((t) => t.id === id)
+    if (!treeToRemove) return { ok: true } // already gone — nothing to do
+
+    // Members that live in this tree, plus the relationships touching
+    // them — removed together so the local tree state stays consistent.
+    const treeMemberIds = new Set(
+      prevState.members.filter((m) => m.tree_id === id).map((m) => m.id),
+    )
     set((s) => ({
       trees: s.trees.filter((t) => t.id !== id),
       activeTreeId: s.activeTreeId === id ? null : s.activeTreeId,
+      members: s.members.filter((m) => m.tree_id !== id),
+      relationships: s.relationships.filter(
+        (r) => !treeMemberIds.has(r.member_a_id) && !treeMemberIds.has(r.member_b_id),
+      ),
     }))
-    try { await supabase.from('family_trees').delete().eq('id', id) } catch { /* ignore */ }
+
+    if (!isSupabaseConfigured) return { ok: true } // demo mode — local only
+
+    const rollback = () => set(prevState)
+    try {
+      // Delete the tree's members FIRST. `members.tree_id` became
+      // NOT NULL in migration 011, but the FK is still ON DELETE SET
+      // NULL — so deleting a non-empty tree tries to null a NOT-NULL
+      // column and the whole DELETE is rejected. Removing the members
+      // (their relationships cascade away via the members FK) lets the
+      // tree delete cleanly. The UI only exposes tree-deletion to
+      // admins, who bypass RLS on both tables.
+      if (treeMemberIds.size > 0) {
+        const { error: mErr } = await supabase.from('members').delete().eq('tree_id', id)
+        if (mErr) {
+          rollback()
+          console.warn('[deleteTree] member purge failed:', mErr)
+          reportSupabaseRejection('deleteTree')
+          return { ok: false }
+        }
+      }
+      const { data, error } = await supabase
+        .from('family_trees')
+        .delete()
+        .eq('id', id)
+        .select('id')
+      if (error) {
+        rollback()
+        console.warn('[deleteTree] failed:', error)
+        reportSupabaseRejection('deleteTree')
+        return { ok: false }
+      }
+      if (!data || data.length === 0) {
+        // 0 rows + no error = RLS silently denied the delete (caller is
+        // neither owner nor admin). This is the exact case that used to
+        // fail invisibly.
+        rollback()
+        reportSupabaseRejection('deleteTree')
+        return { ok: false }
+      }
+      return { ok: true }
+    } catch (err) {
+      rollback()
+      console.warn('[deleteTree] threw:', err)
+      reportSupabaseRejection('deleteTree')
+      return { ok: false }
+    }
   },
 
   // ── Notes ──────────────────────────────────────────────────────────

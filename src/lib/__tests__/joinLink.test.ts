@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildJoinUrl, parseJoinCode } from '../joinLink'
-import { iconStoragePath } from '../imageResize'
+import { iconStoragePath, photoStoragePath } from '../imageResize'
 
 describe('buildJoinUrl + parseJoinCode round-trip', () => {
   it('builds the hash-router join URL', () => {
@@ -39,5 +39,16 @@ describe('iconStoragePath', () => {
   })
   it('strips a leading dot from the extension', () => {
     expect(iconStoragePath('t', '.jpg', 1)).toBe('t/icon-1.jpg')
+  })
+})
+
+describe('photoStoragePath', () => {
+  it('anchors the tree id as the first path segment (storage RLS contract)', () => {
+    const p = photoStoragePath('t-123', 'webp', 1700000000000, 'ab12cd')
+    expect(p).toBe('t-123/p-ab12cd-1700000000000.webp')
+    expect(p.split('/')[0]).toBe('t-123')
+  })
+  it('strips a leading dot from the extension', () => {
+    expect(photoStoragePath('t', '.jpg', 1, 'r')).toBe('t/p-r-1.jpg')
   })
 })

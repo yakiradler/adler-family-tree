@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import type { Factor } from '@supabase/supabase-js'
 import { supabase, isSupabaseConfigured } from '../../lib/supabase'
 import { useLang, isRTL } from '../../i18n/useT'
+import { confirmDialog } from '../../lib/confirm'
 import { useCloseOnBack } from '../../hooks/useCloseOnBack'
 
 /**
@@ -112,7 +113,7 @@ export default function SecuritySettingsModal({ open, onClose }: { open: boolean
   }
 
   const disable = async (factorId: string) => {
-    if (!window.confirm(t.mfaDisableConfirm)) return
+    if (!(await confirmDialog({ message: t.mfaDisableConfirm, danger: true }))) return
     setLoading(true)
     setError(null)
     try {

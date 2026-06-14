@@ -128,8 +128,9 @@ export default function OnboardingWizard() {
     if (step === 2) return (
       a.firstName.trim().length > 0 &&
       a.lastName.trim().length > 0 &&
-      a.email.trim().length > 0 &&
-      a.birthDate.trim().length > 0
+      a.email.trim().length > 0
+      // birth date is optional — requiring a DOB before the user has seen
+      // any value is a top drop-off trigger; they can add it later.
     )
     if (step === 3) return true   // bio + avatar are optional
     if (step === 4) return a.relationship !== '' && a.purpose !== ''
@@ -467,9 +468,9 @@ export default function OnboardingWizard() {
               <button
                 type="button"
                 onClick={skipOnboarding}
-                className="text-[11px] font-semibold text-[#8E8E93] hover:text-[#1C1C1E] transition-colors"
+                className="text-[13px] font-semibold text-[#007AFF] hover:underline underline-offset-2 transition-colors px-2 py-1"
               >
-                {lang === 'he' ? 'דלג בינתיים' : 'Skip for now'}
+                {lang === 'he' ? 'דלג — כניסה ישר לאפליקציה' : 'Skip — go straight in'}
               </button>
             </div>
           </div>
@@ -567,12 +568,11 @@ export default function OnboardingWizard() {
                 </Field>
                 <Field
                   label={t.onbBirthDate}
-                  required
-                  requiredHint={t.onbRequiredHint}
                 >
                   <input
                     type="date"
                     value={a.birthDate}
+                    max={new Date().toISOString().slice(0, 10)}
                     onChange={(e) => setA((s) => ({ ...s, birthDate: e.target.value }))}
                     className="onb-input"
                   />
@@ -731,11 +731,11 @@ export default function OnboardingWizard() {
                   value={a.purpose}
                   onChange={(v) => setA((s) => ({ ...s, purpose: v as AnswerState['purpose'] }))}
                 />
-                <RoleSelector
-                  current={effectiveRole}
-                  onChange={(r) => setA((s) => ({ ...s, requestedRole: r }))}
-                  t={t}
-                />
+                {/* Role is inferred from the answers above (see suggestedRole)
+                    and reviewed by an admin on approval — end users should
+                    never have to pick "guest/user/master", which is meaningless
+                    jargon to a family member and was a privilege-escalation
+                    surface. The explicit picker has been removed. */}
               </StepShell>
             )}
 
@@ -942,41 +942,3 @@ function QuestionGroup({
   )
 }
 
-function RoleSelector({
-  current, onChange, t,
-}: {
-  current: UserRole
-  onChange: (r: UserRole) => void
-  t: {
-    onbRoleGuest: string; onbRoleGuestDesc: string
-    onbRoleUser: string;  onbRoleUserDesc: string
-    onbRoleMaster: string; onbRoleMasterDesc: string
-  }
-}) {
-  return (
-    <div className="space-y-1.5">
-      {([
-        ['guest', t.onbRoleGuest, t.onbRoleGuestDesc],
-        ['user', t.onbRoleUser, t.onbRoleUserDesc],
-        ['master', t.onbRoleMaster, t.onbRoleMasterDesc],
-      ] as const).map(([role, lbl, desc]) => {
-        const active = current === role
-        return (
-          <button
-            key={role}
-            type="button"
-            onClick={() => onChange(role as UserRole)}
-            className={`w-full p-3 rounded-xl border text-start transition-all ${
-              active
-                ? 'border-[var(--accent,#007AFF)] bg-[var(--accent-soft,rgba(0,122,255,0.08))]'
-                : 'border-black/5 bg-white hover:bg-[#F9F9FB]'
-            }`}
-          >
-            <p className="text-[13px] font-semibold text-[#1C1C1E]">{lbl}</p>
-            <p className="text-[11px] text-[#636366] mt-0.5">{desc}</p>
-          </button>
-        )
-      })}
-    </div>
-  )
-}

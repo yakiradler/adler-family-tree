@@ -5,6 +5,7 @@ import { useLang } from '../i18n/useT'
 import { useCloseOnBack } from '../hooks/useCloseOnBack'
 import type { Gender, Lineage } from '../types'
 import { linkRelative, type RelativeDirection } from '../lib/relatives'
+import { uploadMemberPhoto } from '../lib/photoUpload'
 
 interface Props {
   open: boolean
@@ -21,6 +22,7 @@ export default function AddMemberModal({ open, onClose }: Props) {
   useCloseOnBack(open, onClose)
   const [form, setForm] = useState({ first_name: '', last_name: '', maiden_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '' as Gender | '', birth_order: '', lineage: '' as Lineage | '' })
   const [loading, setLoading] = useState(false)
+  const [photoBusy, setPhotoBusy] = useState(false)
   const photoInputRef = useRef<HTMLInputElement>(null)
 
   // ── Relationship wiring ───────────────────────────────────────────
@@ -225,20 +227,27 @@ export default function AddMemberModal({ open, onClose }: Props) {
                 <div>
                   <label className="text-sf-caption text-[#8E8E93] mb-1 block">{t.photo}</label>
                   <input ref={photoInputRef} type="file" accept="image/*" className="hidden"
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const file = e.target.files?.[0]
+                      e.target.value = ''  // allow re-picking the same file
                       if (!file) return
-                      const reader = new FileReader()
-                      reader.onload = ev => setForm(f => ({ ...f, photo_url: ev.target?.result as string }))
-                      reader.readAsDataURL(file)
+                      // Upload to Storage and keep only the URL — never the
+                      // raw multi-MB base64 we used to persist into the row.
+                      setPhotoBusy(true)
+                      try {
+                        const url = await uploadMemberPhoto(file, activeTreeId)
+                        setForm(f => ({ ...f, photo_url: url }))
+                      } finally {
+                        setPhotoBusy(false)
+                      }
                     }} />
                   <div className="flex gap-2 items-center">
                     {form.photo_url && (
                       <img src={form.photo_url} alt="" className="w-10 h-10 rounded-full object-cover border-2 border-white shadow" />
                     )}
-                    <button type="button" onClick={() => photoInputRef.current?.click()}
-                      className="flex-1 py-2 rounded-xl bg-[#F2F2F7] text-[#636366] text-sf-subhead font-medium hover:bg-[#E5E5EA] transition-colors">
-                      {form.photo_url ? t.changePhoto : t.uploadPhoto}
+                    <button type="button" onClick={() => photoInputRef.current?.click()} disabled={photoBusy}
+                      className="flex-1 py-2 rounded-xl bg-[#F2F2F7] text-[#636366] text-sf-subhead font-medium hover:bg-[#E5E5EA] transition-colors disabled:opacity-50">
+                      {photoBusy ? '…' : form.photo_url ? t.changePhoto : t.uploadPhoto}
                     </button>
                     {form.photo_url && (
                       <button type="button" onClick={() => setForm(f => ({ ...f, photo_url: '' }))}

@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useDragControls } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
 import TreeView from '../components/views/TreeView'
@@ -21,7 +21,6 @@ import { useCloseOnBack } from '../hooks/useCloseOnBack'
 import { useHorizontalSwipe } from '../hooks/useHorizontalSwipe'
 import Tooltip from '../components/Tooltip'
 import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
-import { shouldAutoShowTutorial, recordTutorialShown } from '../lib/tutorialState'
 
 interface Props { demoMode: boolean }
 
@@ -81,6 +80,24 @@ export default function TreePage({ demoMode }: Props) {
   // stays at a roughly constant physical size regardless of zoom.
   const browserZoom = useBrowserZoom()
 
+  // Desktop vs. mobile decides how the member profile is presented:
+  // a pinned side-dock on desktop, a draggable bottom sheet on a phone
+  // (so the tree stays visible above it and a downward flick dismisses
+  // it). Seeded from matchMedia at mount; only updated on the `change`
+  // event so there's no synchronous setState inside the effect body.
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches,
+  )
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)')
+    const onChange = () => setIsDesktop(mq.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  // Drag is started only by the sheet's grab handle (dragListener is
+  // off) so the profile body can still scroll normally under the touch.
+  const sheetDragControls = useDragControls()
+
   // Phone back button: close the member profile panel and stay on the
   // tree instead of navigating away (owner request — back from an open
   // profile used to land on the home page).
@@ -90,20 +107,9 @@ export default function TreePage({ demoMode }: Props) {
   // a guided walkthrough is "even more important" here than on the
   // dashboard because the tree has the most controls.
   //
-  // Auto-launches once on the user's first visit to the tree (separate
-  // localStorage key from the dashboard tour) and is replayable from
-  // the new "?" button next to the search icon.
-  const TREE_TUTORIAL_KEY = 'ft-tree-tutorial-seen'
+  // No auto-launch — the tree tutorial is replayable on demand from the
+  // "?" button next to the search icon, so it never ambushes a new user.
   const [treeTutorialOpen, setTreeTutorialOpen] = useState(false)
-  useEffect(() => {
-    if (viewMode !== 'tree') return
-    if (!shouldAutoShowTutorial(TREE_TUTORIAL_KEY)) return
-    const id = window.setTimeout(() => {
-      setTreeTutorialOpen(true)
-      recordTutorialShown(TREE_TUTORIAL_KEY)
-    }, 700)
-    return () => window.clearTimeout(id)
-  }, [viewMode])
   const closeTreeTutorial = () => setTreeTutorialOpen(false)
   // Tutorial step generator. Some of the new steps require the
   // hamburger to be EXPANDED (so the filter / focus / density chips
@@ -445,7 +451,7 @@ export default function TreePage({ demoMode }: Props) {
               className="overflow-y-auto"
               style={{ paddingTop: 72, paddingBottom: 120, minHeight: '100vh', touchAction: 'pan-y' }}
             >
-              <TimelineView />
+              <TimelineView filters={filters} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -458,47 +464,72 @@ export default function TreePage({ demoMode }: Props) {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setSelectedMemberId(null)}
-              className="fixed inset-0 bg-black/15 backdrop-blur-[2px] z-40 md:bg-transparent md:backdrop-blur-0 no-print"
+              // z-[55] clears the bottom nav island (z-50) so the sheet
+              // reads as a focused layer. Transparent on desktop where
+              // the panel is a side dock, not a modal.
+              className="fixed inset-0 bg-black/25 backdrop-blur-[2px] z-[55] md:bg-transparent md:backdrop-blur-0 no-print"
             />
           )}
           {selectedMemberId && !treeFullscreen && (
             <motion.div
               key="panel"
-              initial={{ opacity: 0, x: isRTL(lang) ? -40 : 40 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: isRTL(lang) ? -40 : 40 }}
-              transition={{ type: 'spring', stiffness: 350, damping: 32 }}
-              // Mobile: full-width sheet anchored above the nav island
-              // so the LAST action button is always reachable (the
-              // previous bottom-4 + 560 px tall stack hid behind the
-              // navigation, making the delete row unreachable on a
-              // 700 px phone).
-              //
-              // Desktop: same width as mobile (≈ 380 px) and pinned
-              // to the side. The user explicitly asked for the
-              // desktop panel to match mobile dimensions so the tree
-              // alongside it remains legible.
-              //
-              // `transform: scale(1/zoom)` still counters browser
-              // zoom so a Ctrl++ user doesn't get a panel that eats
-              // the viewport.
-              className={`fixed z-50 w-[calc(100vw-24px)] max-w-[380px] bottom-[128px] md:bottom-auto md:top-20 no-print ${
-                isRTL(lang) ? 'left-3 md:left-4' : 'right-3 md:right-4'
-              }`}
-              style={{
-                // Explicit `height` (not just max-height) so the inner
-                // panel has a defined box to size against. Without it
-                // the inner `flex-1 overflow-y-auto` body never had a
-                // concrete height and a tall profile got stuck with no
-                // scrolling. min() with the viewport keeps it from
-                // ever spilling off the screen on a small phone.
-                height: 'min(640px, calc(100vh - 220px))',
-                maxHeight: 'min(640px, calc(100vh - 220px))',
-                transform: browserZoom > 1 ? `scale(${1 / browserZoom})` : undefined,
-                transformOrigin: isRTL(lang) ? 'top left' : 'top right',
+              // Desktop: slides in from the side as a pinned dock.
+              // Mobile: rises from the bottom as a draggable sheet.
+              initial={isDesktop ? { opacity: 0, x: isRTL(lang) ? -40 : 40 } : { y: '100%' }}
+              animate={isDesktop ? { opacity: 1, x: 0 } : { y: 0 }}
+              exit={isDesktop ? { opacity: 0, x: isRTL(lang) ? -40 : 40 } : { y: '100%' }}
+              transition={{ type: 'spring', stiffness: 350, damping: 34 }}
+              // Mobile drag-to-dismiss: only the grab handle starts the
+              // drag (dragListener off) so the profile body still
+              // scrolls. A downward flick past the threshold closes it.
+              drag={isDesktop ? false : 'y'}
+              dragListener={false}
+              dragControls={sheetDragControls}
+              dragConstraints={{ top: 0, bottom: 0 }}
+              dragElastic={{ top: 0, bottom: 0.6 }}
+              onDragEnd={(_, info) => {
+                if (!isDesktop && (info.offset.y > 120 || info.velocity.y > 600)) {
+                  setSelectedMemberId(null)
+                }
               }}
+              className={
+                isDesktop
+                  // Desktop: ~380 px side dock so the tree alongside it
+                  // stays legible (the user asked for this width).
+                  ? `fixed z-[60] flex flex-col w-[380px] top-20 no-print ${isRTL(lang) ? 'left-4' : 'right-4'}`
+                  // Mobile: full-width bottom sheet at 85vh, leaving the
+                  // top of the tree visible above it. bg + rounded-top +
+                  // overflow-hidden unify it with the MemberPanel inside.
+                  : 'fixed z-[60] inset-x-0 bottom-0 no-print flex flex-col bg-white rounded-t-[24px] shadow-glass-lg overflow-hidden'
+              }
+              style={
+                isDesktop
+                  ? {
+                      // Explicit height so the inner overflow-y-auto body
+                      // has a concrete box to scroll within.
+                      height: 'min(640px, calc(100vh - 120px))',
+                      maxHeight: 'min(640px, calc(100vh - 120px))',
+                      transform: browserZoom > 1 ? `scale(${1 / browserZoom})` : undefined,
+                      transformOrigin: isRTL(lang) ? 'top left' : 'top right',
+                    }
+                  : { height: '85vh', maxHeight: '85vh' }
+              }
             >
-              <MemberPanel onClose={() => setSelectedMemberId(null)} />
+              {!isDesktop && (
+                // Grab handle — the only drag-initiating surface. Tall
+                // touch zone around a small visible pill for an easy
+                // thumb target.
+                <div
+                  onPointerDown={(e) => sheetDragControls.start(e)}
+                  className="flex-shrink-0 flex justify-center items-center h-7 cursor-grab active:cursor-grabbing touch-none"
+                  aria-hidden
+                >
+                  <div className="w-10 h-1.5 rounded-full bg-[#D1D1D6]" />
+                </div>
+              )}
+              <div className="flex-1 min-h-0">
+                <MemberPanel onClose={() => setSelectedMemberId(null)} />
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

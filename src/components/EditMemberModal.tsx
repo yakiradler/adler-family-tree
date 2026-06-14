@@ -2,10 +2,13 @@ import { useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
+import { alertDialog } from '../lib/confirm'
 import { useCloseOnBack } from '../hooks/useCloseOnBack'
 import { PersonAvatarIcon } from './MemberNode'
 import { getRingGradient, getFallbackGradient } from './memberVisuals'
 import type { Member, Gender, Lineage } from '../types'
+import { uploadMemberPhoto } from '../lib/photoUpload'
+import { isSupabaseConfigured } from '../lib/supabase'
 
 interface Props {
   open: boolean
@@ -36,6 +39,10 @@ interface FormState {
   photos: string[]
   hidden: boolean
   connector_parent_id: string | ''
+  phone: string
+  email: string
+  facebook: string
+  instagram: string
 }
 
 function fromMember(m: Member): FormState {
@@ -56,16 +63,11 @@ function fromMember(m: Member): FormState {
     photos: m.photos ? [...m.photos] : [],
     hidden: !!m.hidden,
     connector_parent_id: m.connector_parent_id ?? '',
+    phone: m.contact?.phone ?? '',
+    email: m.contact?.email ?? '',
+    facebook: m.contact?.facebook ?? '',
+    instagram: m.contact?.instagram ?? '',
   }
-}
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
 }
 
 export default function EditMemberModal({ open, onClose, member, suggestMode = false }: Props) {
@@ -87,6 +89,7 @@ export default function EditMemberModal({ open, onClose, member, suggestMode = f
   useCloseOnBack(open, onClose)
   const [form, setForm] = useState<FormState>(() => fromMember(member))
   const [saving, setSaving] = useState(false)
+  const [photoBusy, setPhotoBusy] = useState(false)
   const profileInputRef = useRef<HTMLInputElement>(null)
   const galleryInputRef = useRef<HTMLInputElement>(null)
 
@@ -102,20 +105,31 @@ export default function EditMemberModal({ open, onClose, member, suggestMode = f
   const patch = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm(f => ({ ...f, [key]: value }))
 
+  // Photos upload to Supabase Storage and we persist only the URL —
+  // never the raw base64 we used to keep (multi-MB rows, lost on reload).
   const onProfilePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file) return
-    const dataUrl = await readFileAsDataUrl(file)
-    patch('photo_url', dataUrl)
     e.target.value = ''
+    if (!file) return
+    setPhotoBusy(true)
+    try {
+      patch('photo_url', await uploadMemberPhoto(file, member.tree_id))
+    } finally {
+      setPhotoBusy(false)
+    }
   }
 
   const onGalleryAdd = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? [])
-    if (files.length === 0) return
-    const dataUrls = await Promise.all(files.map(readFileAsDataUrl))
-    setForm(f => ({ ...f, photos: [...f.photos, ...dataUrls] }))
     e.target.value = ''
+    if (files.length === 0) return
+    setPhotoBusy(true)
+    try {
+      const urls = await Promise.all(files.map((f) => uploadMemberPhoto(f, member.tree_id)))
+      setForm(f => ({ ...f, photos: [...f.photos, ...urls] }))
+    } finally {
+      setPhotoBusy(false)
+    }
   }
 
   const removeGalleryPhoto = (idx: number) => {
@@ -152,13 +166,23 @@ export default function EditMemberModal({ open, onClose, member, suggestMode = f
       photos: form.photos.length ? form.photos : undefined,
       hidden: form.hidden,
       connector_parent_id: form.connector_parent_id || null,
+      contact: (() => {
+        const c = {
+          phone: form.phone.trim() || undefined,
+          email: form.email.trim() || undefined,
+          facebook: form.facebook.trim() || undefined,
+          instagram: form.instagram.trim() || undefined,
+        }
+        // null (not undefined) so clearing every field actually persists.
+        return Object.values(c).some(Boolean) ? c : null
+      })(),
     }
     if (suggestMode) {
       // No edit rights on this member — the change lands in the admin's
       // requests tab instead of being written directly.
       const sent = await submitEditRequest(member.id, changes)
       setSaving(false)
-      if (sent) window.alert(t.editSuggestSent)
+      if (sent) await alertDialog({ message: t.editSuggestSent })
       onClose()
       return
     }
@@ -259,9 +283,10 @@ export default function EditMemberModal({ open, onClose, member, suggestMode = f
                   <button
                     type="button"
                     onClick={() => profileInputRef.current?.click()}
-                    className="text-[#007AFF] text-sf-footnote font-semibold"
+                    disabled={photoBusy}
+                    className="text-[#007AFF] text-sf-footnote font-semibold disabled:opacity-50"
                   >
-                    {form.photo_url ? t.editChangeProfilePhoto : t.editSetProfilePhoto}
+                    {photoBusy ? '…' : form.photo_url ? t.editChangeProfilePhoto : t.editSetProfilePhoto}
                   </button>
                   {form.photo_url && (
                     <>
@@ -277,11 +302,11 @@ export default function EditMemberModal({ open, onClose, member, suggestMode = f
                   )}
                 </div>
                 {/* Warning when any photo on this member is still a base64
-                    data: URI — localStorage strips those on reload (the
-                    quota would explode in seconds otherwise), and we
-                    don't yet upload to Supabase Storage. Tell the user
-                    so they don't think their photo vanished. */}
-                {(
+                    data: URI. In configured mode photos upload to Supabase
+                    Storage and persist as URLs; this warning only applies
+                    in demo/offline mode, where inline images can't survive
+                    a reload. Tell the user so they don't think it vanished. */}
+                {!isSupabaseConfigured && (
                   (form.photo_url && form.photo_url.startsWith('data:')) ||
                   form.photos.some((p) => p.startsWith('data:'))
                 ) && (
@@ -390,6 +415,61 @@ export default function EditMemberModal({ open, onClose, member, suggestMode = f
                   />
                 </Field>
 
+                {/* ── Contact + social links ── */}
+                <div className="pt-1">
+                  <p className="text-[11px] font-bold text-[#8E8E93] mb-1.5 uppercase tracking-wide">
+                    {t.editContactSection}
+                  </p>
+                  <div className="space-y-2">
+                    <Field label={t.editPhone}>
+                      <input
+                        type="tel"
+                        inputMode="tel"
+                        dir="ltr"
+                        value={form.phone}
+                        onChange={(e) => patch('phone', e.target.value)}
+                        placeholder={t.editPhonePlaceholder}
+                        className="w-full bg-[#F2F2F7] border border-transparent rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] placeholder:text-[#8E8E93] focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40 focus:bg-white focus:border-[#007AFF]/30 transition"
+                      />
+                    </Field>
+                    <Field label={t.editEmail}>
+                      <input
+                        type="email"
+                        inputMode="email"
+                        dir="ltr"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        value={form.email}
+                        onChange={(e) => patch('email', e.target.value)}
+                        placeholder={t.editEmailPlaceholder}
+                        className="w-full bg-[#F2F2F7] border border-transparent rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] placeholder:text-[#8E8E93] focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40 focus:bg-white focus:border-[#007AFF]/30 transition"
+                      />
+                    </Field>
+                    <Field label={t.editFacebook}>
+                      <input
+                        type="text"
+                        dir="ltr"
+                        autoCapitalize="none"
+                        value={form.facebook}
+                        onChange={(e) => patch('facebook', e.target.value)}
+                        placeholder={t.editSocialPlaceholder}
+                        className="w-full bg-[#F2F2F7] border border-transparent rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] placeholder:text-[#8E8E93] focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40 focus:bg-white focus:border-[#007AFF]/30 transition"
+                      />
+                    </Field>
+                    <Field label={t.editInstagram}>
+                      <input
+                        type="text"
+                        dir="ltr"
+                        autoCapitalize="none"
+                        value={form.instagram}
+                        onChange={(e) => patch('instagram', e.target.value)}
+                        placeholder={t.editSocialPlaceholder}
+                        className="w-full bg-[#F2F2F7] border border-transparent rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] placeholder:text-[#8E8E93] focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40 focus:bg-white focus:border-[#007AFF]/30 transition"
+                      />
+                    </Field>
+                  </div>
+                </div>
+
                 {/* Connector-parent picker — only meaningful when both
                     parents are known. Renders the parent's gender icon
                     so the user can tell mother from father at a glance. */}
@@ -494,10 +574,11 @@ export default function EditMemberModal({ open, onClose, member, suggestMode = f
                   <button
                     type="button"
                     onClick={() => galleryInputRef.current?.click()}
-                    className="text-[#007AFF] text-sf-footnote font-semibold flex items-center gap-1"
+                    disabled={photoBusy}
+                    className="text-[#007AFF] text-sf-footnote font-semibold flex items-center gap-1 disabled:opacity-50"
                   >
                     <span className="text-base leading-none">＋</span>
-                    {t.editAddPhoto}
+                    {photoBusy ? '…' : t.editAddPhoto}
                   </button>
                 }
               >

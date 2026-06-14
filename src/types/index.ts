@@ -84,6 +84,19 @@ export interface AccessRequest {
   created_at: string
 }
 
+/**
+ * Contact + social links shown under the profile's "Contact" section.
+ * Stored as a single jsonb column so new networks (TikTok, X, LinkedIn…)
+ * can be added later without another migration. All fields optional;
+ * handles or full URLs are both accepted (normalized in lib/contactLinks).
+ */
+export interface MemberContact {
+  phone?: string
+  email?: string
+  facebook?: string
+  instagram?: string
+}
+
 export interface Member {
   id: string
   first_name: string
@@ -99,6 +112,8 @@ export interface Member {
   bio?: string
   photo_url?: string
   photos?: string[]
+  /** Contact + social links (phone/email/facebook/instagram). null clears. */
+  contact?: MemberContact | null
   gender?: Gender
   /** Sibling order; `null` clears it explicitly (DB column is nullable). */
   birth_order?: number | null

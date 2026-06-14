@@ -208,7 +208,9 @@ export default function FocusedCentricView({
     <div
       className="w-full relative flex flex-col select-none"
       style={{
-        height: 'calc(100vh - 80px)',
+        // dvh tracks the visible viewport as the mobile browser chrome
+        // collapses/expands and respects the notch (see TreeView).
+        height: 'calc(100dvh - 80px)',
         background:
           'radial-gradient(at 15% 10%, rgba(120,170,255,0.2) 0px, transparent 50%),' +
           'radial-gradient(at 85% 85%, rgba(255,140,200,0.16) 0px, transparent 55%),' +

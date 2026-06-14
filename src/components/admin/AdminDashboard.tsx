@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../lib/supabase'
 import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang, isRTL, type Translations } from '../../i18n/useT'
+import { confirmDialog, alertDialog } from '../../lib/confirm'
 import EditMemberModal from '../EditMemberModal'
 import InviteCodeManager from './InviteCodeManager'
 import { PersonAvatarIcon } from '../MemberNode'
@@ -109,11 +110,11 @@ export default function AdminDashboard() {
   // surfaced as a "did not persist — likely RLS" error so the user
   // doesn't refresh and find their action undone.
   const reportRlsBlock = (verb: 'update' | 'delete') => {
-    alert(
-      lang === 'he'
+    void alertDialog({
+      message: lang === 'he'
         ? `הפעולה לא נשמרה בשרת — ייתכן שאין לך הרשאת admin ב-Supabase.\nרוץ ב-SQL Editor:\nupdate public.profiles set role='admin' where email='<your-email>';`
         : `Action did not persist — you likely lack admin rights in Supabase.\nRun in SQL Editor:\nupdate public.profiles set role='admin' where email='<your-email>';`,
-    )
+    })
     void verb
   }
 
@@ -156,7 +157,7 @@ export default function AdminDashboard() {
     const confirmMsg = lang === 'he'
       ? `${t.adminConfirmRemoveUser}\n\nהמשתמש יושעה למשך 30 יום. תוכל לשחזר אותו בכל רגע על ידי לחיצה על "שחזר".`
       : `${t.adminConfirmRemoveUser}\n\nThe user will be suspended for 30 days. You can restore them at any time using the "Restore" button.`
-    if (!window.confirm(confirmMsg)) return
+    if (!(await confirmDialog({ message: confirmMsg, danger: true }))) return
     const nowIso = new Date().toISOString()
     // Optimistic local update so the row updates immediately.
     const prev = users
@@ -177,11 +178,11 @@ export default function AdminDashboard() {
       .select()
     if (error) {
       setUsers(prev)
-      alert(
-        lang === 'he'
+      void alertDialog({
+        message: lang === 'he'
           ? `לא ניתן להשעות את המשתמש: ${error.message}`
           : `Couldn't suspend user: ${error.message}`,
-      )
+      })
       return
     }
     if (!data || data.length === 0) {
@@ -253,10 +254,10 @@ export default function AdminDashboard() {
         : (lang === 'he'
             ? `המשתמש נוסף למערכת. שלח לו את הקישור באופן ידני: ${window.location.origin}/`
             : `User added. Share this link with them: ${window.location.origin}/`)
-      alert(msg)
+      void alertDialog({ message: msg })
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown error'
-      alert(lang === 'he' ? `שגיאה בשליחת ההזמנה: ${msg}` : `Invite failed: ${msg}`)
+      void alertDialog({ message: lang === 'he' ? `שגיאה בשליחת ההזמנה: ${msg}` : `Invite failed: ${msg}` })
     } finally {
       setInviting(false)
     }
@@ -814,7 +815,7 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
                     t={t}
                     onEdit={() => setEditTarget(m)}
                     onDelete={async () => {
-                      if (window.confirm(t.adminConfirmDelete)) await deleteMember(m.id)
+                      if (await confirmDialog({ message: t.adminConfirmDelete, danger: true })) await deleteMember(m.id)
                     }}
                   />
                 ))}
@@ -927,8 +928,8 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
                         </button>
                         <button
                           type="button"
-                          onClick={() => {
-                            if (window.confirm(t.feedbackDeleteConfirm)) deleteFeedback(f.id)
+                          onClick={async () => {
+                            if (await confirmDialog({ message: t.feedbackDeleteConfirm, danger: true })) deleteFeedback(f.id)
                           }}
                           className="px-3 py-1.5 rounded-xl text-[11.5px] font-bold text-[#FF3B30] hover:bg-[#FF3B30]/8 transition"
                         >
@@ -1083,12 +1084,12 @@ function UserRow({
   const perms = user.master_permissions ?? {}
 
   const handleReset = async () => {
-    if (demo) { alert(t.adminDemoAlert); return }
+    if (demo) { void alertDialog({ message: t.adminDemoAlert }); return }
     if (!user.email) return
     await supabase.auth.resetPasswordForEmail(user.email, {
       redirectTo: `${window.location.origin}/`,
     })
-    alert(`${t.adminSendReset} ✓`)
+    await alertDialog({ message: `${t.adminSendReset} ✓` })
   }
 
   return (
@@ -1358,7 +1359,7 @@ function EmptyBlock({ icon, text }: { icon: string; text: string }) {
 /**
  * Special-controls panel — maintenance actions surfaced only to admins.
  * Kept simple on purpose: refresh store, clear cache, show build/env info.
- * Anything destructive prompts via window.confirm before executing.
+ * Anything destructive asks via the in-app confirm dialog before executing.
  */
 function SpecialAdminControls({
   t, membersCount, onRefresh,
@@ -1380,7 +1381,7 @@ function SpecialAdminControls({
   }
 
   const clearCache = async () => {
-    if (!window.confirm(t.adminClearCacheConfirm)) return
+    if (!(await confirmDialog({ message: t.adminClearCacheConfirm, danger: true }))) return
     try {
       // Best-effort: remove our app's localStorage keys, sign out of Supabase,
       // then hard-reload so the app re-initialises clean.
@@ -1547,7 +1548,13 @@ interface AccessRequestCardProps {
 }
 
 function AccessRequestCard({ request, index, t, onApprove, onReject }: AccessRequestCardProps) {
-  const [grantRole, setGrantRole] = useState<UserRole>(request.requested_role)
+  // Default to the baseline family-member role — NEVER to the role the
+  // requester asked for. Pre-seeding `requested_role` turned the green
+  // "Approve" button into a one-tap privilege-escalation funnel: a
+  // requester could pick `master`/`admin` in onboarding and a busy admin
+  // would grant it by reflex. The requested role is still shown above as
+  // a label, and the admin can deliberately raise the grant below.
+  const [grantRole, setGrantRole] = useState<UserRole>('user')
   const answers = request.answers ?? {}
   const a = answers as Record<string, unknown>
   const relAnswer = a.relationship as string | undefined

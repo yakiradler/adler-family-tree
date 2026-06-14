@@ -143,7 +143,10 @@ create table if not exists public.members (
   lineage               text check (lineage in ('kohen', 'levi', 'israel')),
   hidden                boolean not null default false,
   connector_parent_id   uuid,
-  tree_id               uuid references public.family_trees(id) on delete set null,
+  -- on delete cascade: members are required to belong to a tree (made
+  -- NOT NULL in migration 011), so deleting a tree removes its members
+  -- atomically rather than trying to NULL a NOT NULL column (see 016).
+  tree_id               uuid references public.family_trees(id) on delete cascade,
   created_by            uuid references auth.users(id) on delete set null,
   created_at            timestamptz not null default now(),
   updated_at            timestamptz not null default now()
@@ -161,7 +164,7 @@ alter table public.members
   add column if not exists lineage             text,
   add column if not exists hidden              boolean not null default false,
   add column if not exists connector_parent_id uuid,
-  add column if not exists tree_id             uuid references public.family_trees(id) on delete set null;
+  add column if not exists tree_id             uuid references public.family_trees(id) on delete cascade;
 
 -- ============================================================
 -- RELATIONSHIPS
@@ -457,13 +460,19 @@ create policy "ar_update_admin" on public.access_requests for update using (publ
 
 -- ─── TREE INVITES ─────────────────────────────────────────
 alter table public.tree_invites enable row level security;
-drop policy if exists "inv_select_auth"  on public.tree_invites;
+drop policy if exists "inv_select_auth"   on public.tree_invites;
+drop policy if exists "inv_select_scoped" on public.tree_invites;
 drop policy if exists "inv_insert_admin" on public.tree_invites;
 drop policy if exists "inv_update_admin" on public.tree_invites;
 drop policy if exists "inv_delete_admin" on public.tree_invites;
--- Any signed-in user can look up a code (so the onboarding wizard
--- can validate the code they typed). Only admins can mint/delete.
-create policy "inv_select_auth"  on public.tree_invites for select using (auth.role() = 'authenticated');
+-- A user reads only codes minted FOR them or BY them; admins read all
+-- (migration 015). Redeeming a typed code goes through the
+-- redeem_invite() RPC below, which needs no table-wide SELECT.
+create policy "inv_select_scoped" on public.tree_invites for select using (
+  public.is_admin(auth.uid())
+  or created_for = auth.uid()
+  or created_by = auth.uid()
+);
 -- Admins mint codes for any tree; tree OWNERS mint codes for their
 -- own trees (migration 014 — owner long-press "create share code").
 create policy "inv_insert_admin" on public.tree_invites for insert with check (
@@ -480,6 +489,58 @@ create policy "inv_insert_admin" on public.tree_invites for insert with check (
 );
 create policy "inv_update_admin" on public.tree_invites for update using (public.is_admin(auth.uid()));
 create policy "inv_delete_admin" on public.tree_invites for delete using (public.is_admin(auth.uid()));
+
+-- Server-side redeem (migration 015): validate + burn a use + grant
+-- tree_access, so a redeemer needs no SELECT/UPDATE on tree_invites.
+-- Returns one row (redeemed_tree_id) on success, zero rows when the
+-- code is missing / expired / exhausted.
+create or replace function public.redeem_invite(p_code text)
+returns table (redeemed_tree_id uuid)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_invite public.tree_invites%rowtype;
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then
+    raise exception 'redeem_invite: not authenticated';
+  end if;
+
+  select * into v_invite
+    from public.tree_invites
+   where code = btrim(p_code)
+   limit 1;
+
+  if v_invite.id is null then
+    return;
+  end if;
+  if v_invite.expires_at is not null and v_invite.expires_at <= now() then
+    return;
+  end if;
+  if v_invite.uses_left is not null and v_invite.uses_left <= 0 then
+    return;
+  end if;
+
+  if v_invite.uses_left is not null then
+    update public.tree_invites
+       set uses_left = greatest(0, v_invite.uses_left - 1)
+     where id = v_invite.id;
+  end if;
+
+  if v_invite.tree_id is not null then
+    insert into public.tree_access (user_id, tree_id, role, granted_by)
+    values (v_uid, v_invite.tree_id, 'member', v_invite.created_by)
+    on conflict (user_id, tree_id) do nothing;
+  end if;
+
+  redeemed_tree_id := v_invite.tree_id;
+  return next;
+end;
+$$;
+
+grant execute on function public.redeem_invite(text) to authenticated;
 
 -- ─── MEMBER NOTES ─────────────────────────────────────────
 alter table public.member_notes enable row level security;

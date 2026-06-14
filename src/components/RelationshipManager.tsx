@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
+import { confirmDialog } from '../lib/confirm'
 import { useCloseOnBack } from '../hooks/useCloseOnBack'
 import { PersonAvatarIcon } from './MemberNode'
 import { getRingGradient, getFallbackGradient } from './memberVisuals'
@@ -198,7 +199,7 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
   }
 
   const removeRel = async (relId: string) => {
-    if (!window.confirm(t.relConfirmRemove)) return
+    if (!(await confirmDialog({ message: t.relConfirmRemove, danger: true }))) return
     await deleteRelationship(relId)
     flashSaved()
   }

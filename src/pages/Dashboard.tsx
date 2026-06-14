@@ -12,7 +12,6 @@ import NotificationBell from '../components/notifications/NotificationBell'
 import { PersonAvatarIcon } from '../components/MemberNode'
 import { getRingGradient, getFallbackGradient } from '../components/memberVisuals'
 import AIScanModal from '../components/ai/AIScanModal'
-import ComingSoonModal from '../components/ComingSoonModal'
 import BuildFromTextModal from '../components/BuildFromTextModal'
 import BrandMark from '../components/BrandMark'
 import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
@@ -20,8 +19,8 @@ import JoinTreeModal from '../components/JoinTreeModal'
 import SecuritySettingsModal from '../components/security/SecuritySettingsModal'
 import PlanCard from '../components/plan/PlanCard'
 import { LEAF_COSTS } from '../lib/plans'
+import { confirmDialog, alertDialog } from '../lib/confirm'
 import TreeCardActionMenu from '../components/TreeCardActionMenu'
-import { shouldAutoShowTutorial, recordTutorialShown } from '../lib/tutorialState'
 import type { Member, Relationship } from '../types'
 
 interface Props { demoMode: boolean }
@@ -128,7 +127,6 @@ export default function Dashboard({ demoMode }: Props) {
   // the UI now so the affordance exists; the modal explains what's
   // coming and when. Wired to actual backends in a follow-up.
   const [aiTreeFromTextOpen, setAiTreeFromTextOpen] = useState(false)
-  const [aiPhotoEnhanceOpen, setAiPhotoEnhanceOpen] = useState(false)
   // Long-press / right-click → tree-card context menu. `null` when
   // closed; otherwise carries the tree summary the user invoked on
   // so we can show its name in the sheet title.
@@ -147,7 +145,6 @@ export default function Dashboard({ demoMode }: Props) {
   // manual "Tutorial" tile in the Apps grid below. Skipping or
   // finishing the tour writes the flag so the auto-launch never
   // pops up again.
-  const TUTORIAL_KEY = 'ft-tutorial-seen'
   const [tutorialOpen, setTutorialOpen] = useState(false)
   // Join-tree-by-code modal — reachable from both the QuickAccessMenu
   // and the new "🔑" tile in the Apps grid below.
@@ -166,22 +163,16 @@ export default function Dashboard({ demoMode }: Props) {
       open()
       return
     }
-    if (!window.confirm(t.aiCostConfirm.replace('{n}', String(cost)))) return
+    if (!(await confirmDialog({ message: t.aiCostConfirm.replace('{n}', String(cost)) }))) return
     if (await spendLeaves(cost, kind === 'scan' ? 'ai-scan' : 'ai-tree-from-text')) {
       open()
     } else {
-      window.alert(t.aiNoLeaves.replace('{n}', String(cost)))
+      await alertDialog({ message: t.aiNoLeaves.replace('{n}', String(cost)) })
     }
   }
-  useEffect(() => {
-    if (!shouldAutoShowTutorial(TUTORIAL_KEY)) return
-    // small delay so the page paints first
-    const id = window.setTimeout(() => {
-      setTutorialOpen(true)
-      recordTutorialShown(TUTORIAL_KEY)
-    }, 800)
-    return () => window.clearTimeout(id)
-  }, [])
+  // The tutorial no longer auto-launches on first paint — it stacked on top
+  // of the install prompt + version modal and overwhelmed new users. It stays
+  // one tap away via the "🎓" tile and the help menu.
   const closeTutorial = () => setTutorialOpen(false)
 
   // Tour steps — described in Hebrew first (user's primary locale)
@@ -611,6 +602,10 @@ export default function Dashboard({ demoMode }: Props) {
                     }
                     treeCardPressTimerRef.current = window.setTimeout(() => {
                       treeCardPressFiredRef.current = true
+                      // Light haptic tick so the long-press registers as
+                      // a deliberate action (no-op where unsupported,
+                      // e.g. iOS Safari).
+                      try { navigator.vibrate?.(10) } catch { /* unsupported */ }
                       setTreeCardMenuTarget(tree)
                     }, 600)
                   }}
@@ -687,6 +682,44 @@ export default function Dashboard({ demoMode }: Props) {
                         aria-hidden
                       />
                     )}
+                    {/* Visible "⋯" affordance so the action menu is
+                        discoverable without knowing the long-press
+                        shortcut. role=button (not a real <button>)
+                        because the whole card is already a button and
+                        nesting one is invalid HTML. stopPropagation on
+                        pointerdown also cancels the card's long-press
+                        timer and its tap-to-open-tree. */}
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      aria-label={lang === 'he' ? 'אפשרויות עץ' : 'Tree options'}
+                      onPointerDown={(e) => {
+                        e.stopPropagation()
+                        if (treeCardPressTimerRef.current != null) {
+                          window.clearTimeout(treeCardPressTimerRef.current)
+                          treeCardPressTimerRef.current = null
+                        }
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        try { navigator.vibrate?.(10) } catch { /* unsupported */ }
+                        setTreeCardMenuTarget(tree)
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setTreeCardMenuTarget(tree)
+                        }
+                      }}
+                      className="absolute -top-1.5 -end-1.5 w-6 h-6 rounded-full bg-white shadow-md flex items-center justify-center text-[#636366] active:scale-90 transition cursor-pointer"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden>
+                        <circle cx="3" cy="7" r="1.3" />
+                        <circle cx="7" cy="7" r="1.3" />
+                        <circle cx="11" cy="7" r="1.3" />
+                      </svg>
+                    </span>
                   </div>
                   <p
                     className="text-[10.5px] font-semibold text-[#1C1C1E] text-center leading-tight w-full"
@@ -798,15 +831,6 @@ export default function Dashboard({ demoMode }: Props) {
               onClick={() => openAiAction('treeFromText')}
               tooltip={t.btfSubtitle}
             />
-            <AppTile
-              index={4}
-              icon="🖼"
-              label={t.aiPhotoEnhanceLabel}
-              gradient="from-[#34C759] to-[#30B454]"
-              onClick={() => setAiPhotoEnhanceOpen(true)}
-              comingSoon
-              tooltip={t.aiComingSoonTip}
-            />
             <div data-tour="dash-tutorial-tile">
               <AppTile
                 index={5}
@@ -855,8 +879,7 @@ export default function Dashboard({ demoMode }: Props) {
         open={aiScanOpen}
         onClose={() => setAiScanOpen(false)}
         onAdded={(count) => {
-          // Tiny toast-style alert keeps this dependency-free.
-          setTimeout(() => alert(`${count} ${t.aiScanAddedCount} ✓`), 50)
+          void alertDialog({ message: `${count} ${t.aiScanAddedCount} ✓` })
         }}
       />
 
@@ -869,18 +892,9 @@ export default function Dashboard({ demoMode }: Props) {
         onClose={() => setAiTreeFromTextOpen(false)}
         onAdded={(count) => {
           if (count > 0) {
-            setTimeout(() => alert(`${count} ${lang === 'he' ? 'אנשים נוספו לעץ ✓' : 'people added to the tree ✓'}`), 50)
+            void alertDialog({ message: `${count} ${lang === 'he' ? 'אנשים נוספו לעץ ✓' : 'people added to the tree ✓'}` })
           }
         }}
-      />
-      <ComingSoonModal
-        open={aiPhotoEnhanceOpen}
-        onClose={() => setAiPhotoEnhanceOpen(false)}
-        icon="🖼"
-        title={t.aiPhotoEnhanceLabel}
-        description={t.aiPhotoEnhanceDesc}
-        bullets={[t.aiPhotoEnhanceBullet1, t.aiPhotoEnhanceBullet2, t.aiPhotoEnhanceBullet3]}
-        gradient="from-[#34C759] to-[#30B454]"
       />
 
       {/* Interactive tutorial. Launches automatically on first visit
