@@ -8,7 +8,7 @@ import { shareInviteDraft, pickReusableShareInvite, generateCode } from '../lib/
 import type {
   Member, Relationship, EditRequest, ViewMode, Profile,
   AccessRequest, UserRole, FamilyTree, MemberNote, FeedbackItem, UserPlan,
-  NotificationItem, TreeInvite,
+  NotificationItem, TreeInvite, TreeRole, MemberReaction,
 } from '../types'
 
 // Surface Supabase failures to the UI. The "נשמר מקומית — סנכרון
@@ -167,6 +167,8 @@ interface FamilyState {
   ) => Promise<boolean>
   /** Tree ids the current user holds a tree_access row for. */
   myTreeAccessIds: string[]
+  /** Per-tree role for the current user (owner/editor/viewer), by tree id. */
+  myTreeRoles: Record<string, TreeRole>
   fetchMyTreeAccess: () => Promise<void>
 
   // ── Notifications (migration 014) ───────────────────────────────────
@@ -191,7 +193,7 @@ interface FamilyState {
   joinTreeWithCode: (code: string) => Promise<{ ok: true; treeId: string | null } | { ok: false }>
   decideAccessRequest: (
     id: string, decision: 'approved' | 'rejected',
-    grantedRole?: UserRole,
+    grantedRole?: TreeRole,
   ) => Promise<void>
   completeOnboarding: (patch: Partial<Profile>) => Promise<void>
   updateProfileById: (id: string, patch: Partial<Profile>) => Promise<void>
@@ -268,6 +270,23 @@ interface FamilyState {
   addNote: (note: Omit<MemberNote, 'id' | 'created_at'>) => Promise<MemberNote | null>
   updateNote: (id: string, patch: Partial<MemberNote>) => Promise<void>
   deleteNote: (id: string) => Promise<void>
+
+  // ── Social reactions (migration 023) ────────────────────────────────
+  reactions: MemberReaction[]
+  fetchReactions: () => Promise<void>
+  /** Add or remove the caller's reaction (emoji) on a member. Optimistic;
+   *  silently no-ops if the member_reactions table isn't present yet. */
+  toggleReaction: (memberId: string, emoji: string) => Promise<void>
+
+  // ── Per-tree owner management (migrations 020/021/023) ──────────────
+  /** Parent/owner approves a pending (minor-authored) note → public. */
+  approveNote: (noteId: string) => Promise<void>
+  /** Owner sets a member's tree role (owner/editor/viewer). */
+  setTreeMemberRole: (userId: string, treeId: string, role: TreeRole) => Promise<void>
+  /** Owner removes a person's access to a tree. */
+  revokeTreeMember: (userId: string, treeId: string) => Promise<void>
+  /** Parent flags/unflags a user as a minor (gates their social content). */
+  setMinor: (userId: string, isMinor: boolean, guardianId?: string | null) => Promise<void>
 
   // ── Subscription plan + leaves (Phase A — see lib/plans.ts) ────────
   myPlan: UserPlan | null
@@ -888,6 +907,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   // "everything in the system", which must NOT leak into their
   // personal rail.
   myTreeAccessIds: [],
+  myTreeRoles: {},
   fetchMyTreeAccess: async () => {
     if (!isSupabaseConfigured) return
     const me = get().profile
@@ -895,13 +915,16 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     try {
       const { data, error } = await supabase
         .from('tree_access')
-        .select('tree_id')
+        .select('tree_id, role')
         .eq('user_id', me.id)
       if (error) {
         reportSupabaseFailure('fetchMyTreeAccess', error, 'read')
         return
       }
-      set({ myTreeAccessIds: (data ?? []).map((r: { tree_id: string }) => r.tree_id) })
+      const rows = (data ?? []) as { tree_id: string; role?: TreeRole }[]
+      const roles: Record<string, TreeRole> = {}
+      for (const r of rows) if (r.role) roles[r.tree_id] = r.role
+      set({ myTreeAccessIds: rows.map((r) => r.tree_id), myTreeRoles: roles })
     } catch (err) {
       reportSupabaseFailure('fetchMyTreeAccess', err, 'read')
     }
@@ -1045,11 +1068,15 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   },
 
   decideAccessRequest: async (id, decision, grantedRole) => {
-    // App-level admin gate. RLS still authoritative server-side; this
-    // mirrors that policy locally so the action is rejected before any
-    // optimistic state change in demo mode.
-    if (!isAdmin(get().profile)) return
+    // App-level gate mirroring RLS: platform admin OR the OWNER of the
+    // tree this request targets may decide it (owners self-manage their
+    // tree now). RLS is still authoritative server-side.
     const req = get().accessRequests.find(r => r.id === id)
+    const reqTree = req ? resolveRequestTreeId(req, get().trees) : null
+    const meProfile = get().profile
+    const allowed = isAdmin(meProfile)
+      || (!!reqTree && get().myTreeRoles[reqTree] === 'owner')
+    if (!allowed) return
     const decidedAt = new Date().toISOString()
     // ── Resolve which tree the requester asked for ──────────────────
     // Approving used to flip the request row + role and stop there: no
@@ -1124,7 +1151,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
         const { error: gErr } = await supabase
           .from('tree_access')
           .upsert(
-            { user_id: req.requester_id, tree_id: grantTreeId, role: 'member' },
+            { user_id: req.requester_id, tree_id: grantTreeId, role: grantedRole ?? 'editor' },
             { onConflict: 'user_id,tree_id', ignoreDuplicates: true },
           )
         if (gErr) reportSupabaseFailure('decideAccessRequest:grant', gErr)
@@ -1132,34 +1159,9 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
         reportSupabaseFailure('decideAccessRequest:grant', err)
       }
     }
-    if (decision === 'approved' && req) {
-      // Defence-in-depth: if the caller didn't pass an explicit role, fall
-      // back to the baseline `user` role — NEVER to the requester's own
-      // `requested_role`, which would let a requester self-select an
-      // elevated role and have it auto-applied (see AccessRequestCard).
-      const role = grantedRole ?? 'user'
-      try {
-        const { error: pErr } = await supabase
-          .from('profiles')
-          .update({ role })
-          .eq('id', req.requester_id)
-        if (pErr) {
-          reportSupabaseFailure('decideAccessRequest:profile', pErr)
-        } else {
-          // If the admin just approved their OWN request (e.g. they
-          // self-promoted from `user` to `master` for testing) the
-          // local profile slice has to reflect the new role too,
-          // otherwise the UI keeps gating them out of master-only
-          // features until next reload.
-          const me = get().profile
-          if (me?.id === req.requester_id) {
-            set({ profile: { ...me, role } })
-          }
-        }
-      } catch (err) {
-        reportSupabaseFailure('decideAccessRequest:profile', err)
-      }
-    }
+    // NOTE: we intentionally NO LONGER touch profiles.role here. In the
+    // two-axis model, joining a tree grants a per-tree role (tree_access,
+    // above) — it must never change the requester's global/platform role.
   },
 
   completeOnboarding: async (patch) => {
@@ -1403,6 +1405,8 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       created_at: new Date().toISOString(),
     }
     set((s) => ({ notes: [...s.notes, optimistic] }))
+    if (!isSupabaseConfigured) return optimistic
+    const rollback = () => set((s) => ({ notes: s.notes.filter((n) => n.id !== localId) }))
     try {
       const { data, error } = await supabase
         .from('member_notes')
@@ -1416,14 +1420,22 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
         })
         .select()
         .single()
-      if (error) reportSupabaseFailure('addNote', error)
+      if (error) {
+        // RLS denial (e.g. not a member of the tree) → drop the ghost note
+        // so it doesn't look saved then vanish on the next fetch.
+        if (isPermissionError(error)) { rollback(); reportSupabaseRejection('addNote'); return null }
+        reportSupabaseFailure('addNote', error)
+      }
       if (data) {
         set((s) => ({
           notes: s.notes.map((n) => (n.id === localId ? (data as MemberNote) : n)),
         }))
         return data as MemberNote
       }
-    } catch (err) { reportSupabaseFailure('addNote', err) }
+    } catch (err) {
+      if (isPermissionError(err)) { rollback(); reportSupabaseRejection('addNote'); return null }
+      reportSupabaseFailure('addNote', err)
+    }
     return optimistic
   },
   updateNote: async (id, patch) => {
@@ -1439,6 +1451,96 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     try { await supabase.from('member_notes').delete().eq('id', id) } catch (err) {
       reportSupabaseFailure('deleteNote', err)
     }
+  },
+
+  // ── Social reactions (migration 023) ────────────────────────────────
+  // Defensive: every path is try/catch'd so a missing member_reactions
+  // table (migration not yet applied) degrades to a silent no-op rather
+  // than crashing the app.
+  reactions: [],
+  fetchReactions: async () => {
+    if (!isSupabaseConfigured) return
+    try {
+      const { data, error } = await supabase.from('member_reactions').select('*')
+      if (error) { reportSupabaseFailure('fetchReactions', error, 'read'); return }
+      set({ reactions: (data ?? []) as MemberReaction[] })
+    } catch (err) { reportSupabaseFailure('fetchReactions', err, 'read') }
+  },
+  toggleReaction: async (memberId, emoji) => {
+    const me = get().profile
+    if (!me) return
+    const existing = get().reactions.find(
+      (r) => r.member_id === memberId && r.user_id === me.id && r.emoji === emoji,
+    )
+    if (existing) {
+      set((s) => ({ reactions: s.reactions.filter((r) => r.id !== existing.id) }))
+      if (!isSupabaseConfigured) return
+      try {
+        await supabase.from('member_reactions').delete()
+          .eq('member_id', memberId).eq('user_id', me.id).eq('emoji', emoji)
+      } catch (err) { reportSupabaseFailure('toggleReaction:remove', err) }
+      return
+    }
+    const localId = `rx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    const optimistic: MemberReaction = {
+      id: localId, member_id: memberId, user_id: me.id, emoji,
+      created_at: new Date().toISOString(),
+    }
+    set((s) => ({ reactions: [...s.reactions, optimistic] }))
+    if (!isSupabaseConfigured) return
+    try {
+      const { data, error } = await supabase.from('member_reactions')
+        .insert({ member_id: memberId, user_id: me.id, emoji }).select().single()
+      if (error) {
+        set((s) => ({ reactions: s.reactions.filter((r) => r.id !== localId) }))
+        reportSupabaseFailure('toggleReaction:add', error)
+        return
+      }
+      if (data) {
+        set((s) => ({ reactions: s.reactions.map((r) => (r.id === localId ? (data as MemberReaction) : r)) }))
+      }
+    } catch (err) {
+      set((s) => ({ reactions: s.reactions.filter((r) => r.id !== localId) }))
+      reportSupabaseFailure('toggleReaction:add', err)
+    }
+  },
+
+  // ── Per-tree owner management (migrations 020/021/023) ──────────────
+  approveNote: async (noteId) => {
+    const me = get().profile
+    set((s) => ({ notes: s.notes.map((n) => (n.id === noteId ? { ...n, status: 'public', approved_by: me?.id ?? null } : n)) }))
+    if (!isSupabaseConfigured) return
+    try {
+      const { error } = await supabase.from('member_notes')
+        .update({ status: 'public', approved_by: me?.id ?? null }).eq('id', noteId)
+      if (error) reportSupabaseFailure('approveNote', error)
+    } catch (err) { reportSupabaseFailure('approveNote', err) }
+  },
+  setTreeMemberRole: async (userId, treeId, role) => {
+    if (!isSupabaseConfigured) return
+    try {
+      const { error } = await supabase.from('tree_access').update({ role })
+        .eq('user_id', userId).eq('tree_id', treeId)
+      if (error) reportSupabaseFailure('setTreeMemberRole', error)
+      else if (userId === get().profile?.id) set((s) => ({ myTreeRoles: { ...s.myTreeRoles, [treeId]: role } }))
+    } catch (err) { reportSupabaseFailure('setTreeMemberRole', err) }
+  },
+  revokeTreeMember: async (userId, treeId) => {
+    if (!isSupabaseConfigured) return
+    try {
+      const { error } = await supabase.from('tree_access').delete()
+        .eq('user_id', userId).eq('tree_id', treeId)
+      if (error) reportSupabaseFailure('revokeTreeMember', error)
+    } catch (err) { reportSupabaseFailure('revokeTreeMember', err) }
+  },
+  setMinor: async (userId, isMinor, guardianId) => {
+    if (!isSupabaseConfigured) return
+    try {
+      const patch: Record<string, unknown> = { is_minor: isMinor }
+      if (guardianId !== undefined) patch.guardian_id = guardianId
+      const { error } = await supabase.from('profiles').update(patch).eq('id', userId)
+      if (error) reportSupabaseFailure('setMinor', error)
+    } catch (err) { reportSupabaseFailure('setMinor', err) }
   },
 
   // ── Subscription plan + leaves ──────────────────────────────────────

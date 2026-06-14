@@ -63,6 +63,11 @@ export interface Profile {
    *  apply via `nuclearFamilyIds`, the user just can't self-edit
    *  until they're linked. */
   linked_member_id?: string | null
+  /** Parent-managed flag: a minor's social content is held for approval
+   *  before it becomes public (migration 023). */
+  is_minor?: boolean
+  /** The guardian (parent) account responsible for approving this minor. */
+  guardian_id?: string | null
 }
 
 /**
@@ -286,6 +291,15 @@ export interface FeedbackItem {
  */
 export type MemberNoteKind = 'comment' | 'memory'
 
+/** A like / emoji reaction by a user on a member (migration 023). */
+export interface MemberReaction {
+  id: string
+  member_id: string
+  user_id: string
+  emoji: string
+  created_at: string
+}
+
 export interface MemberNote {
   id: string
   member_id: string
@@ -296,6 +310,11 @@ export interface MemberNote {
   /** Plain-text body — no HTML. Newlines are preserved. */
   body: string
   kind: MemberNoteKind
+  /** Moderation state (migration 023). Minor-authored notes are 'pending'
+   *  (visible only to the author) until a parent/owner approves them. */
+  status?: 'public' | 'pending'
+  /** Owner/parent who approved a pending note. */
+  approved_by?: string | null
   /** ISO timestamp. Used both for sorting and the displayed date. */
   created_at: string
   /**

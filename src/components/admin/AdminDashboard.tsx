@@ -9,7 +9,7 @@ import EditMemberModal from '../EditMemberModal'
 import InviteCodeManager from './InviteCodeManager'
 import { PersonAvatarIcon } from '../MemberNode'
 import { getRingGradient, getFallbackGradient } from '../memberVisuals'
-import type { EditRequest, Member, Profile, UserRole, MasterPermissions, AccessRequest, UserPlan, PlanId } from '../../types'
+import type { EditRequest, Member, Profile, UserRole, TreeRole, MasterPermissions, AccessRequest, UserPlan, PlanId } from '../../types'
 import type { PermissionKey } from '../../lib/permissions'
 import { adminInboxCounts } from '../../lib/notifications'
 
@@ -1543,18 +1543,21 @@ interface AccessRequestCardProps {
   request: AccessRequest
   index: number
   t: Translations
-  onApprove: (role: UserRole) => void
+  onApprove: (role: TreeRole) => void
   onReject: () => void
 }
 
+// Per-tree roles the approver can grant (two-axis model). Default editor.
+const TREE_ROLE_OPTIONS: { key: TreeRole; labelKey: 'treeRoleViewer' | 'treeRoleEditor' | 'treeRoleOwner' }[] = [
+  { key: 'viewer', labelKey: 'treeRoleViewer' },
+  { key: 'editor', labelKey: 'treeRoleEditor' },
+  { key: 'owner', labelKey: 'treeRoleOwner' },
+]
+
 function AccessRequestCard({ request, index, t, onApprove, onReject }: AccessRequestCardProps) {
-  // Default to the baseline family-member role — NEVER to the role the
-  // requester asked for. Pre-seeding `requested_role` turned the green
-  // "Approve" button into a one-tap privilege-escalation funnel: a
-  // requester could pick `master`/`admin` in onboarding and a busy admin
-  // would grant it by reflex. The requested role is still shown above as
-  // a label, and the admin can deliberately raise the grant below.
-  const [grantRole, setGrantRole] = useState<UserRole>('user')
+  // Grant a per-tree role on approval (default editor — a normal
+  // contributing family member). Owners/admins can pick viewer/owner.
+  const [grantRole, setGrantRole] = useState<TreeRole>('editor')
   const answers = request.answers ?? {}
   const a = answers as Record<string, unknown>
   const relAnswer = a.relationship as string | undefined
@@ -1677,21 +1680,20 @@ function AccessRequestCard({ request, index, t, onApprove, onReject }: AccessReq
         <div className="mb-3">
           <p className="text-[10px] text-[#8E8E93] mb-1.5 font-semibold">{t.adminAccessApproveAs}</p>
           <div className="bg-[#F2F2F7] rounded-xl p-1 flex gap-1">
-            {ROLE_OPTIONS.map(r => (
+            {TREE_ROLE_OPTIONS.map(r => (
               <button
                 key={r.key}
                 type="button"
                 onClick={() => setGrantRole(r.key)}
                 aria-pressed={grantRole === r.key}
                 aria-label={t[r.labelKey]}
-                className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition flex flex-col items-center gap-0.5 ${
+                className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition ${
                   grantRole === r.key
                     ? 'bg-white text-[#1C1C1E] shadow-sm'
                     : 'text-[#636366]'
                 }`}
               >
-                <span className="text-[14px] leading-none">{r.icon}</span>
-                <span className="text-[9.5px] font-bold whitespace-nowrap">{t[r.labelKey]}</span>
+                {t[r.labelKey]}
               </button>
             ))}
           </div>
