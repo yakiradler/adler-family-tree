@@ -1547,7 +1547,13 @@ interface AccessRequestCardProps {
 }
 
 function AccessRequestCard({ request, index, t, onApprove, onReject }: AccessRequestCardProps) {
-  const [grantRole, setGrantRole] = useState<UserRole>(request.requested_role)
+  // Default to the baseline family-member role — NEVER to the role the
+  // requester asked for. Pre-seeding `requested_role` turned the green
+  // "Approve" button into a one-tap privilege-escalation funnel: a
+  // requester could pick `master`/`admin` in onboarding and a busy admin
+  // would grant it by reflex. The requested role is still shown above as
+  // a label, and the admin can deliberately raise the grant below.
+  const [grantRole, setGrantRole] = useState<UserRole>('user')
   const answers = request.answers ?? {}
   const a = answers as Record<string, unknown>
   const relAnswer = a.relationship as string | undefined

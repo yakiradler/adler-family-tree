@@ -6,6 +6,8 @@ import { useCloseOnBack } from '../hooks/useCloseOnBack'
 import { PersonAvatarIcon } from './MemberNode'
 import { getRingGradient, getFallbackGradient } from './memberVisuals'
 import type { Member, Gender, Lineage } from '../types'
+import { uploadMemberPhoto } from '../lib/photoUpload'
+import { isSupabaseConfigured } from '../lib/supabase'
 
 interface Props {
   open: boolean
@@ -59,15 +61,6 @@ function fromMember(m: Member): FormState {
   }
 }
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
-}
-
 export default function EditMemberModal({ open, onClose, member, suggestMode = false }: Props) {
   const { updateMember, submitEditRequest, members, relationships } = useFamilyStore()
   // Parents of this member — used by the "connector parent" picker so
@@ -87,6 +80,7 @@ export default function EditMemberModal({ open, onClose, member, suggestMode = f
   useCloseOnBack(open, onClose)
   const [form, setForm] = useState<FormState>(() => fromMember(member))
   const [saving, setSaving] = useState(false)
+  const [photoBusy, setPhotoBusy] = useState(false)
   const profileInputRef = useRef<HTMLInputElement>(null)
   const galleryInputRef = useRef<HTMLInputElement>(null)
 
@@ -102,20 +96,31 @@ export default function EditMemberModal({ open, onClose, member, suggestMode = f
   const patch = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm(f => ({ ...f, [key]: value }))
 
+  // Photos upload to Supabase Storage and we persist only the URL —
+  // never the raw base64 we used to keep (multi-MB rows, lost on reload).
   const onProfilePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file) return
-    const dataUrl = await readFileAsDataUrl(file)
-    patch('photo_url', dataUrl)
     e.target.value = ''
+    if (!file) return
+    setPhotoBusy(true)
+    try {
+      patch('photo_url', await uploadMemberPhoto(file, member.tree_id))
+    } finally {
+      setPhotoBusy(false)
+    }
   }
 
   const onGalleryAdd = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? [])
-    if (files.length === 0) return
-    const dataUrls = await Promise.all(files.map(readFileAsDataUrl))
-    setForm(f => ({ ...f, photos: [...f.photos, ...dataUrls] }))
     e.target.value = ''
+    if (files.length === 0) return
+    setPhotoBusy(true)
+    try {
+      const urls = await Promise.all(files.map((f) => uploadMemberPhoto(f, member.tree_id)))
+      setForm(f => ({ ...f, photos: [...f.photos, ...urls] }))
+    } finally {
+      setPhotoBusy(false)
+    }
   }
 
   const removeGalleryPhoto = (idx: number) => {
@@ -259,9 +264,10 @@ export default function EditMemberModal({ open, onClose, member, suggestMode = f
                   <button
                     type="button"
                     onClick={() => profileInputRef.current?.click()}
-                    className="text-[#007AFF] text-sf-footnote font-semibold"
+                    disabled={photoBusy}
+                    className="text-[#007AFF] text-sf-footnote font-semibold disabled:opacity-50"
                   >
-                    {form.photo_url ? t.editChangeProfilePhoto : t.editSetProfilePhoto}
+                    {photoBusy ? '…' : form.photo_url ? t.editChangeProfilePhoto : t.editSetProfilePhoto}
                   </button>
                   {form.photo_url && (
                     <>
@@ -277,11 +283,11 @@ export default function EditMemberModal({ open, onClose, member, suggestMode = f
                   )}
                 </div>
                 {/* Warning when any photo on this member is still a base64
-                    data: URI — localStorage strips those on reload (the
-                    quota would explode in seconds otherwise), and we
-                    don't yet upload to Supabase Storage. Tell the user
-                    so they don't think their photo vanished. */}
-                {(
+                    data: URI. In configured mode photos upload to Supabase
+                    Storage and persist as URLs; this warning only applies
+                    in demo/offline mode, where inline images can't survive
+                    a reload. Tell the user so they don't think it vanished. */}
+                {!isSupabaseConfigured && (
                   (form.photo_url && form.photo_url.startsWith('data:')) ||
                   form.photos.some((p) => p.startsWith('data:'))
                 ) && (
@@ -494,10 +500,11 @@ export default function EditMemberModal({ open, onClose, member, suggestMode = f
                   <button
                     type="button"
                     onClick={() => galleryInputRef.current?.click()}
-                    className="text-[#007AFF] text-sf-footnote font-semibold flex items-center gap-1"
+                    disabled={photoBusy}
+                    className="text-[#007AFF] text-sf-footnote font-semibold flex items-center gap-1 disabled:opacity-50"
                   >
                     <span className="text-base leading-none">＋</span>
-                    {t.editAddPhoto}
+                    {photoBusy ? '…' : t.editAddPhoto}
                   </button>
                 }
               >

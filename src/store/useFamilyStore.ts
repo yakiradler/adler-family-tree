@@ -1123,7 +1123,11 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       }
     }
     if (decision === 'approved' && req) {
-      const role = grantedRole ?? req.requested_role
+      // Defence-in-depth: if the caller didn't pass an explicit role, fall
+      // back to the baseline `user` role — NEVER to the requester's own
+      // `requested_role`, which would let a requester self-select an
+      // elevated role and have it auto-applied (see AccessRequestCard).
+      const role = grantedRole ?? 'user'
       try {
         const { error: pErr } = await supabase
           .from('profiles')

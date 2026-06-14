@@ -13,6 +13,7 @@ import ComingSoonModal from './ComingSoonModal'
 import BuildFromTextModal from './BuildFromTextModal'
 import { canEditMember, canManageRelationships, computeNuclearFamilyIds } from '../lib/permissions'
 import { getParentMap, resolveLineage } from '../lib/lineage'
+import { uploadMemberPhoto } from '../lib/photoUpload'
 import type { Member, SpouseStatus } from '../types'
 
 interface Props {
@@ -508,22 +509,15 @@ export default function MemberPanel({ onClose }: Props) {
                   className="hidden"
                   onChange={(e) => {
                     const files = Array.from(e.target.files ?? [])
-                    if (files.length === 0) return
-                    Promise.all(
-                      files.map(
-                        (f) =>
-                          new Promise<string>((resolve, reject) => {
-                            const r = new FileReader()
-                            r.onerror = reject
-                            r.onload = () => resolve(r.result as string)
-                            r.readAsDataURL(f)
-                          }),
-                      ),
-                    ).then((urls) => {
-                      const next = [...(member.photos ?? []), ...urls]
-                      updateMember(member.id, { photos: next })
-                    }).catch(() => { /* read failures are rare */ })
                     e.target.value = ''
+                    if (files.length === 0) return
+                    // Upload to Storage; persist URLs, not raw base64.
+                    Promise.all(files.map((f) => uploadMemberPhoto(f, member.tree_id)))
+                      .then((urls) => {
+                        const next = [...(member.photos ?? []), ...urls]
+                        updateMember(member.id, { photos: next })
+                      })
+                      .catch(() => { /* upload failures fall back inline in helper */ })
                   }}
                 />
                 {photos.length === 0 ? (

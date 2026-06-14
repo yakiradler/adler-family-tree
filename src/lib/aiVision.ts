@@ -5,13 +5,22 @@
  *   1. ENV-configured live endpoint   — POST to `VITE_AI_VISION_URL` with
  *                                        files as base64 in JSON. Expected
  *                                        response: `{ candidates: [...] }`.
- *   2. Supabase Edge function fallback — if `VITE_AI_VISION_URL` isn't set
- *                                        but Supabase is, try calling
- *                                        `parse-family-document` via
- *                                        `supabase.functions.invoke`.
+ *   2. Supabase Edge function         — when `VITE_AI_VISION_EDGE === 'true'`
+ *                                        (i.e. the `parse-family-document`
+ *                                        function is actually deployed), call
+ *                                        it via `supabase.functions.invoke`.
  *   3. Demo / no-config               — returns a small synthetic candidate
- *                                        list so the UI is fully demonstrable
+ *                                        list so the UI is demonstrable
  *                                        without any backend.
+ *
+ * CRITICAL — honesty contract: demo data is ONLY returned when no real
+ * backend is configured (mode 3). When a live backend *is* configured
+ * (mode 1 or 2) and the call fails, we THROW so the UI shows an error
+ * state. We must never silently fabricate "scanned" people on top of a
+ * real backend failure — a user could otherwise add invented ancestors to
+ * a real family tree believing the AI read their photo. The "demo mode"
+ * notice in AIScanModal is driven by `isLiveAIScanConfigured()`, which is
+ * false in mode 3, so synthetic data is always clearly labelled.
  *
  * The backend contract is intentionally simple — keep schema work to a
  * minimum on the model side. All fields except `first_name` are optional
@@ -36,8 +45,14 @@ export interface AIScanCandidate {
 }
 
 const VISION_URL = import.meta.env.VITE_AI_VISION_URL as string | undefined
-const SUPABASE_CONFIGURED =
-  !!import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_URL !== ''
+/**
+ * Whether the `parse-family-document` Supabase Edge Function is actually
+ * deployed. Must be opted into explicitly — the mere presence of a Supabase
+ * project does NOT imply the vision function exists (it currently does not),
+ * and assuming so is exactly what caused live-looking demo data with the
+ * "demo" notice hidden in production.
+ */
+const EDGE_ENABLED = import.meta.env.VITE_AI_VISION_EDGE === 'true'
 
 /**
  * Run vision parsing on a list of user-supplied files. Returns the
@@ -68,23 +83,24 @@ export async function scanFiles(files: File[]): Promise<AIScanCandidate[]> {
     return normalize(json.candidates ?? [])
   }
 
-  // ── Mode 2: Supabase edge function ────────────────────────────────────
-  if (SUPABASE_CONFIGURED) {
-    try {
-      const formData = new FormData()
-      files.forEach((f, i) => formData.append(`file_${i}`, f, f.name))
-      const { data, error } = await supabase.functions.invoke<{
-        candidates?: unknown[]
-      }>('parse-family-document', {
-        body: formData,
-      })
-      if (!error && data?.candidates) return normalize(data.candidates)
-    } catch {
-      // fall through to demo
-    }
+  // ── Mode 2: Supabase edge function (only when explicitly deployed) ────
+  if (EDGE_ENABLED) {
+    const formData = new FormData()
+    files.forEach((f, i) => formData.append(`file_${i}`, f, f.name))
+    const { data, error } = await supabase.functions.invoke<{
+      candidates?: unknown[]
+    }>('parse-family-document', {
+      body: formData,
+    })
+    // A configured backend that errors must surface as an error — never
+    // fall through to fabricated demo data (see honesty contract above).
+    if (error) throw new Error(error.message || 'AI vision edge function failed')
+    return normalize(data?.candidates ?? [])
   }
 
   // ── Mode 3: demo / no config — synthesize candidates ─────────────────
+  // Reached only when no real backend is configured; the UI shows the
+  // "demo mode" notice in this case (isLiveAIScanConfigured() === false).
   return demoCandidates(files)
 }
 
@@ -149,7 +165,7 @@ function demoCandidates(files: File[]): AIScanCandidate[] {
   return seeds.slice(0, count).map((s, i) => ({ ...s, id: `demo-${i}-${Date.now()}` }))
 }
 
-/** True when the live API is wired, so the UI can hide the "demo" notice. */
+/** True when a real backend is wired, so the UI can hide the "demo" notice. */
 export function isLiveAIScanConfigured(): boolean {
-  return !!VISION_URL || SUPABASE_CONFIGURED
+  return !!VISION_URL || EDGE_ENABLED
 }
