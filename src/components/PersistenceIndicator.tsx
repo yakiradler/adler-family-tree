@@ -90,22 +90,30 @@ export default function PersistenceIndicator() {
   // from a denied profile edit.
   const rejectedOp = state.kind === 'rejected' ? state.op : ''
   const isTreeDelete = rejectedOp === 'deleteTree'
+  // Adds/edits scoped to a tree the user can't write to (a viewer or a
+  // test account on someone else's tree). This is the friendly form of
+  // what used to surface as the scary orange "server sync failed".
+  const isTreeEdit = ['addMember', 'addRelationship', 'addTree', 'updateTree'].includes(rejectedOp)
   const heText = (kind: 'saved' | 'quota' | 'unknown' | 'remote' | 'rejected'): string => {
     if (kind === 'saved') return 'נשמר'
     if (kind === 'quota') return 'אין מקום בזיכרון — תמונות הוסרו'
     if (kind === 'remote') return 'נשמר מקומית — סנכרון לשרת נכשל'
-    if (kind === 'rejected') return isTreeDelete
-      ? 'מחיקת העץ נכשלה — ייתכן שאין לך הרשאה'
-      : 'השמירה נדחתה — אין לך הרשאה לערוך פרופיל זה'
+    if (kind === 'rejected') {
+      if (isTreeDelete) return 'מחיקת העץ נכשלה — ייתכן שאין לך הרשאה'
+      if (isTreeEdit) return 'אין לך הרשאה לערוך את העץ הזה'
+      return 'השמירה נדחתה — אין לך הרשאה לערוך פרופיל זה'
+    }
     return 'שגיאת שמירה'
   }
   const enText = (kind: 'saved' | 'quota' | 'unknown' | 'remote' | 'rejected'): string => {
     if (kind === 'saved') return 'Saved'
     if (kind === 'quota') return 'Storage full — photos dropped'
     if (kind === 'remote') return 'Saved locally — server sync failed'
-    if (kind === 'rejected') return isTreeDelete
-      ? "Couldn't delete the tree — you may lack permission"
-      : 'Save refused — you lack permission to edit this profile'
+    if (kind === 'rejected') {
+      if (isTreeDelete) return "Couldn't delete the tree — you may lack permission"
+      if (isTreeEdit) return "You don't have permission to edit this tree"
+      return 'Save refused — you lack permission to edit this profile'
+    }
     return 'Save failed'
   }
   const text = (kind: 'saved' | 'quota' | 'unknown' | 'remote' | 'rejected') => (lang === 'he' ? heText(kind) : enText(kind))

@@ -31,6 +31,24 @@ import type {
 const REMOTE_FAIL_THROTTLE_MS = 20_000
 let lastRemoteFailureAt = 0
 
+// True when an error is an RLS / permission rejection rather than a
+// transient/network failure. On INSERT, Postgres surfaces a denied
+// write as a hard error (code 42501 / "row-level security policy"),
+// unlike UPDATE/DELETE which silently match 0 rows. Retrying never
+// fixes it, and it isn't an offline state — the user simply can't
+// write here (e.g. a viewer editing someone else's tree).
+function isPermissionError(err: unknown): boolean {
+  const code =
+    typeof err === 'object' && err && 'code' in err
+      ? String((err as { code: unknown }).code)
+      : ''
+  const message =
+    err instanceof Error ? err.message
+    : typeof err === 'object' && err && 'message' in err ? String((err as { message: unknown }).message)
+    : ''
+  return code === '42501' || /row-level security|violates row-level security|permission denied/i.test(message)
+}
+
 function reportSupabaseFailure(op: string, err: unknown, kind: 'read' | 'write' = 'write') {
   if (typeof window === 'undefined') return
   const message =
@@ -41,6 +59,14 @@ function reportSupabaseFailure(op: string, err: unknown, kind: 'read' | 'write' 
 
   if (kind === 'read') return                   // read failure — log only
   if (!isSupabaseConfigured) return             // demo mode — local-only is expected
+
+  // A permission rejection is not "saved locally, will sync later" — the
+  // write can never land. Route it to the friendly "no permission" toast
+  // instead of the scary orange "server sync failed".
+  if (isPermissionError(err)) {
+    reportSupabaseRejection(op)
+    return
+  }
 
   const now = Date.now()
   if (now - lastRemoteFailureAt < REMOTE_FAIL_THROTTLE_MS) return
@@ -75,7 +101,9 @@ async function insertWithRetry<T>(
 ): Promise<{ data: T | null; error: unknown }> {
   let res = await attempt()
   let i = 0
-  while (res.error && i < delays.length) {
+  // Don't retry a deterministic permission rejection — it will never
+  // succeed and would just stall the UI for the full backoff window.
+  while (res.error && !isPermissionError(res.error) && i < delays.length) {
     await new Promise((r) => setTimeout(r, delays[i++]))
     res = await attempt()
   }
@@ -478,14 +506,34 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     // are added back-to-back the visibility-check helper can race the
     // previous tuple's commit and reject. Retry with growing backoff.
     const tryInsert = () => supabase.from('members').insert(payload).select().single()
+    const rollback = () => set((s) => ({ members: s.members.filter((m) => m.id !== localId) }))
     try {
       const { data, error } = await insertWithRetry(tryInsert)
-      if (error) reportSupabaseFailure('addMember', error)
+      if (error) {
+        // Permission denied → roll back the optimistic card. Leaving it
+        // would show a "saved" member that the server refused and that
+        // vanishes on the next refresh — the exact "looks saved, then
+        // gone" confusion behind the sync-failed reports. A transient
+        // failure keeps the row (it may still sync) per the offline model.
+        if (isPermissionError(error)) {
+          rollback()
+          reportSupabaseRejection('addMember')
+          return null
+        }
+        reportSupabaseFailure('addMember', error)
+      }
       if (data) {
         set((s) => ({ members: s.members.map((m) => (m.id === localId ? (data as Member) : m)) }))
         return data as Member
       }
-    } catch (err) { reportSupabaseFailure('addMember', err) }
+    } catch (err) {
+      if (isPermissionError(err)) {
+        rollback()
+        reportSupabaseRejection('addMember')
+        return null
+      }
+      reportSupabaseFailure('addMember', err)
+    }
     return optimistic
   },
 

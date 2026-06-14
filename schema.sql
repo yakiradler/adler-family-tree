@@ -143,7 +143,10 @@ create table if not exists public.members (
   lineage               text check (lineage in ('kohen', 'levi', 'israel')),
   hidden                boolean not null default false,
   connector_parent_id   uuid,
-  tree_id               uuid references public.family_trees(id) on delete set null,
+  -- on delete cascade: members are required to belong to a tree (made
+  -- NOT NULL in migration 011), so deleting a tree removes its members
+  -- atomically rather than trying to NULL a NOT NULL column (see 016).
+  tree_id               uuid references public.family_trees(id) on delete cascade,
   created_by            uuid references auth.users(id) on delete set null,
   created_at            timestamptz not null default now(),
   updated_at            timestamptz not null default now()
@@ -161,7 +164,7 @@ alter table public.members
   add column if not exists lineage             text,
   add column if not exists hidden              boolean not null default false,
   add column if not exists connector_parent_id uuid,
-  add column if not exists tree_id             uuid references public.family_trees(id) on delete set null;
+  add column if not exists tree_id             uuid references public.family_trees(id) on delete cascade;
 
 -- ============================================================
 -- RELATIONSHIPS
