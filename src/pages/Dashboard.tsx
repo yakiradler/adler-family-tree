@@ -20,7 +20,6 @@ import SecuritySettingsModal from '../components/security/SecuritySettingsModal'
 import PlanCard from '../components/plan/PlanCard'
 import { LEAF_COSTS } from '../lib/plans'
 import TreeCardActionMenu from '../components/TreeCardActionMenu'
-import { shouldAutoShowTutorial, recordTutorialShown } from '../lib/tutorialState'
 import type { Member, Relationship } from '../types'
 
 interface Props { demoMode: boolean }
@@ -145,7 +144,6 @@ export default function Dashboard({ demoMode }: Props) {
   // manual "Tutorial" tile in the Apps grid below. Skipping or
   // finishing the tour writes the flag so the auto-launch never
   // pops up again.
-  const TUTORIAL_KEY = 'ft-tutorial-seen'
   const [tutorialOpen, setTutorialOpen] = useState(false)
   // Join-tree-by-code modal — reachable from both the QuickAccessMenu
   // and the new "🔑" tile in the Apps grid below.
@@ -171,15 +169,9 @@ export default function Dashboard({ demoMode }: Props) {
       window.alert(t.aiNoLeaves.replace('{n}', String(cost)))
     }
   }
-  useEffect(() => {
-    if (!shouldAutoShowTutorial(TUTORIAL_KEY)) return
-    // small delay so the page paints first
-    const id = window.setTimeout(() => {
-      setTutorialOpen(true)
-      recordTutorialShown(TUTORIAL_KEY)
-    }, 800)
-    return () => window.clearTimeout(id)
-  }, [])
+  // The tutorial no longer auto-launches on first paint — it stacked on top
+  // of the install prompt + version modal and overwhelmed new users. It stays
+  // one tap away via the "🎓" tile and the help menu.
   const closeTutorial = () => setTutorialOpen(false)
 
   // Tour steps — described in Hebrew first (user's primary locale)

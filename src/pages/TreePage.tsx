@@ -21,7 +21,6 @@ import { useCloseOnBack } from '../hooks/useCloseOnBack'
 import { useHorizontalSwipe } from '../hooks/useHorizontalSwipe'
 import Tooltip from '../components/Tooltip'
 import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
-import { shouldAutoShowTutorial, recordTutorialShown } from '../lib/tutorialState'
 
 interface Props { demoMode: boolean }
 
@@ -108,20 +107,9 @@ export default function TreePage({ demoMode }: Props) {
   // a guided walkthrough is "even more important" here than on the
   // dashboard because the tree has the most controls.
   //
-  // Auto-launches once on the user's first visit to the tree (separate
-  // localStorage key from the dashboard tour) and is replayable from
-  // the new "?" button next to the search icon.
-  const TREE_TUTORIAL_KEY = 'ft-tree-tutorial-seen'
+  // No auto-launch — the tree tutorial is replayable on demand from the
+  // "?" button next to the search icon, so it never ambushes a new user.
   const [treeTutorialOpen, setTreeTutorialOpen] = useState(false)
-  useEffect(() => {
-    if (viewMode !== 'tree') return
-    if (!shouldAutoShowTutorial(TREE_TUTORIAL_KEY)) return
-    const id = window.setTimeout(() => {
-      setTreeTutorialOpen(true)
-      recordTutorialShown(TREE_TUTORIAL_KEY)
-    }, 700)
-    return () => window.clearTimeout(id)
-  }, [viewMode])
   const closeTreeTutorial = () => setTreeTutorialOpen(false)
   // Tutorial step generator. Some of the new steps require the
   // hamburger to be EXPANDED (so the filter / focus / density chips
