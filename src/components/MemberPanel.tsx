@@ -473,7 +473,7 @@ export default function MemberPanel({ onClose }: Props) {
                           </a>
                           <a href={whatsappHref(contact.phone) ?? '#'} target="_blank" rel="noopener noreferrer"
                             aria-label="WhatsApp" className="contact-link contact-link--wa">
-                            <span aria-hidden>💬</span>
+                            <WhatsAppIcon size={20} />
                           </a>
                         </div>
                       )}
@@ -973,6 +973,21 @@ export default function MemberPanel({ onClose }: Props) {
 }
 
 /** Brand logos for the Contact section. */
+function WhatsAppIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className="flex-shrink-0">
+      <path
+        fill="#25D366"
+        d="M.057 24l1.687-6.163a11.867 11.867 0 0 1-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.82 11.82 0 0 1 8.413 3.488 11.82 11.82 0 0 1 3.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 0 1-5.688-1.448L.057 24z"
+      />
+      <path
+        fill="#fff"
+        d="M9.05 7.1c-.2-.45-.41-.46-.6-.47l-.51-.006a.98.98 0 0 0-.71.33c-.24.27-.93.91-.93 2.22s.96 2.58 1.09 2.76c.13.18 1.87 2.99 4.61 4.07 2.28.9 2.74.72 3.24.67.5-.04 1.6-.65 1.83-1.29.23-.63.23-1.17.16-1.29-.07-.11-.25-.18-.52-.31s-1.6-.79-1.85-.88c-.25-.09-.43-.13-.61.14-.18.27-.7.88-.86 1.06-.16.18-.32.2-.59.07s-1.13-.42-2.16-1.33c-.8-.71-1.34-1.59-1.5-1.86-.16-.27-.02-.42.12-.55.12-.12.27-.32.4-.48.13-.16.18-.27.27-.45.09-.18.04-.34-.02-.48s-.6-1.45-.82-1.98z"
+      />
+    </svg>
+  )
+}
+
 function FacebookIcon({ size = 18 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className="flex-shrink-0">

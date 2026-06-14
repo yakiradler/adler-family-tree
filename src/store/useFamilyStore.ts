@@ -538,11 +538,21 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   },
 
   updateMember: async (id, updates) => {
+    // ROOT FIX for "cleared fields revert on refresh" (e.g. removing a
+    // death_date to drop the ז״ל badge): a full-form save sends `undefined`
+    // for emptied fields, but supabase-js OMITS undefined keys from the
+    // payload — so the column never clears and the stale value returns on
+    // the next fetch. Convert every explicit `undefined` → `null` so the
+    // clear actually persists. Partial-update callers pass concrete values,
+    // so only intentionally-emptied fields are affected.
+    const normalized = Object.fromEntries(
+      Object.entries(updates).map(([k, v]) => [k, v === undefined ? null : v]),
+    ) as Partial<Member>
     // Optimistic local update FIRST so the UI reflects the change even
     // if Supabase isn't reachable (demo mode, transient network blip).
     const prev = get().members.find((m) => m.id === id)
     set((s) => ({
-      members: s.members.map((m) => (m.id === id ? { ...m, ...updates } : m)),
+      members: s.members.map((m) => (m.id === id ? { ...m, ...normalized } : m)),
     }))
     if (!isSupabaseConfigured) return
     // `.select('id')` turns an RLS-swallowed write (error=null, 0 rows)
@@ -556,7 +566,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     }
     try {
       const { data, error } = await supabase
-        .from('members').update(updates).eq('id', id).select('id')
+        .from('members').update(normalized).eq('id', id).select('id')
       if (error) {
         rollback()
         reportSupabaseFailure('updateMember', error)
