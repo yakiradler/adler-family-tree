@@ -28,7 +28,7 @@
 // Bumped to v2 when we started bypassing /version.json caching so
 // the in-app update prompt sees fresh data. Old clients will pick
 // up the new SW and drop the v1 cache on activate.
-const CACHE_VERSION = 'v4'
+const CACHE_VERSION = 'v5'
 const CACHE_NAME = `adler-tree-${CACHE_VERSION}`
 
 // Pre-cache the SPA entry so an offline cold-start still boots the

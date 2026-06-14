@@ -17,7 +17,7 @@ import BrandMark from '../components/BrandMark'
 import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
 import JoinTreeModal from '../components/JoinTreeModal'
 import SecuritySettingsModal from '../components/security/SecuritySettingsModal'
-import PlanCard from '../components/plan/PlanCard'
+import PlanCard, { LeafIcon } from '../components/plan/PlanCard'
 import { LEAF_COSTS } from '../lib/plans'
 import { confirmDialog, alertDialog } from '../lib/confirm'
 import TreeCardActionMenu from '../components/TreeCardActionMenu'
@@ -156,6 +156,7 @@ export default function Dashboard({ demoMode }: Props) {
   // confirm the price → atomic charge → open the tool. A failed charge
   // means an empty balance, surfaced inline.
   const spendLeaves = useFamilyStore((s) => s.spendLeaves)
+  const myPlan = useFamilyStore((s) => s.myPlan)
   const openAiAction = async (kind: 'scan' | 'treeFromText') => {
     const cost = kind === 'scan' ? LEAF_COSTS.aiScan : LEAF_COSTS.aiTreeFromText
     const open = () => (kind === 'scan' ? setAiScanOpen(true) : setAiTreeFromTextOpen(true))
@@ -384,6 +385,19 @@ export default function Dashboard({ demoMode }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-1.5">
+            {/* Leaf balance — always visible at the top so the user knows
+                their token bank at a glance; taps through to plans/top-up. */}
+            {!demoMode && (
+              <button
+                onClick={() => navigate('/pricing')}
+                title={t.planLeaves}
+                aria-label={`${myPlan?.leaves ?? 0} ${t.planLeaves}`}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#34C759]/12 border border-[#34C759]/25 text-[#1F7A3A] text-[12px] font-extrabold shadow-sm hover:bg-[#34C759]/20 transition"
+              >
+                <LeafIcon size={13} />
+                <span>{myPlan?.leaves ?? 0}</span>
+              </button>
+            )}
             <button
               onClick={toggleLang}
               className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-[#636366] bg-white/70 backdrop-blur border border-white/50 shadow-sm hover:bg-white/90 transition min-w-[34px]"

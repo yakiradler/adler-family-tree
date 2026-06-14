@@ -46,6 +46,7 @@ export default function TreeView({
     openTreePopover, setOpenTreePopover,
     isFocusedMode, setIsFocusedMode,
     isEditMode,
+    profile,
   } = useFamilyStore()
 
   const [quickAdd, setQuickAdd] = useState<{
@@ -327,7 +328,15 @@ export default function TreeView({
                 if (isFocusedMode) {
                   setIsFocusedMode(false)
                 } else if (selectedMemberId) {
+                  // A specific person is selected → focus on them.
                   enterFocusMode(selectedMemberId)
+                } else if (
+                  profile?.linked_member_id &&
+                  members.some((m) => m.id === profile.linked_member_id)
+                ) {
+                  // Default: focus on the logged-in user's OWN profile, so
+                  // tapping "focus" always centers you (not a stranger).
+                  enterFocusMode(profile.linked_member_id)
                 } else {
                   setShowFocusPicker(s => !s)
                 }
