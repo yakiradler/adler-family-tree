@@ -142,7 +142,11 @@ export default function TreeView({
       onTouchCancel={viewport.handlers.onTouchEnd}
       className="w-full relative overflow-hidden cursor-grab active:cursor-grabbing select-none"
       style={{
-        height: 'calc(100vh - 80px)',
+        // `dvh` (dynamic viewport height) tracks the visible area as the
+        // mobile browser's address bar shows/hides and respects the
+        // notch — `vh` froze at the largest size and squeezed the canvas
+        // under the OS bars on phones.
+        height: 'calc(100dvh - 80px)',
         touchAction: 'none',
         WebkitUserSelect: 'none',
         WebkitTapHighlightColor: 'transparent',

@@ -611,6 +611,10 @@ export default function Dashboard({ demoMode }: Props) {
                     }
                     treeCardPressTimerRef.current = window.setTimeout(() => {
                       treeCardPressFiredRef.current = true
+                      // Light haptic tick so the long-press registers as
+                      // a deliberate action (no-op where unsupported,
+                      // e.g. iOS Safari).
+                      try { navigator.vibrate?.(10) } catch { /* unsupported */ }
                       setTreeCardMenuTarget(tree)
                     }, 600)
                   }}
@@ -687,6 +691,44 @@ export default function Dashboard({ demoMode }: Props) {
                         aria-hidden
                       />
                     )}
+                    {/* Visible "⋯" affordance so the action menu is
+                        discoverable without knowing the long-press
+                        shortcut. role=button (not a real <button>)
+                        because the whole card is already a button and
+                        nesting one is invalid HTML. stopPropagation on
+                        pointerdown also cancels the card's long-press
+                        timer and its tap-to-open-tree. */}
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      aria-label={lang === 'he' ? 'אפשרויות עץ' : 'Tree options'}
+                      onPointerDown={(e) => {
+                        e.stopPropagation()
+                        if (treeCardPressTimerRef.current != null) {
+                          window.clearTimeout(treeCardPressTimerRef.current)
+                          treeCardPressTimerRef.current = null
+                        }
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        try { navigator.vibrate?.(10) } catch { /* unsupported */ }
+                        setTreeCardMenuTarget(tree)
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setTreeCardMenuTarget(tree)
+                        }
+                      }}
+                      className="absolute -top-1.5 -end-1.5 w-6 h-6 rounded-full bg-white shadow-md flex items-center justify-center text-[#636366] active:scale-90 transition cursor-pointer"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden>
+                        <circle cx="3" cy="7" r="1.3" />
+                        <circle cx="7" cy="7" r="1.3" />
+                        <circle cx="11" cy="7" r="1.3" />
+                      </svg>
+                    </span>
                   </div>
                   <p
                     className="text-[10.5px] font-semibold text-[#1C1C1E] text-center leading-tight w-full"
