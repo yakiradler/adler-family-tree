@@ -288,9 +288,12 @@ export default function TreeView({
         </Tooltip>
       </div>
 
-      {/* Bird's-eye minimap — bottom-left. */}
+      {/* Bird's-eye minimap — bottom-left. Desktop/tablet only: on a phone
+          the 88px map showed a handful of 2px dots (no navigation value)
+          while competing with the OS back-swipe edge — pinch-to-zoom-out is
+          the natural overview gesture there. */}
       {result.nodes.length >= 4 && !treeFullscreen && (
-        <div className="no-print">
+        <div className="no-print hidden sm:block">
           <TreeMiniMap
             nodes={result.nodes}
             canvasW={result.bounds.width}
