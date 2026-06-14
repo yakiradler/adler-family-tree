@@ -38,6 +38,10 @@ interface FormState {
   photos: string[]
   hidden: boolean
   connector_parent_id: string | ''
+  phone: string
+  email: string
+  facebook: string
+  instagram: string
 }
 
 function fromMember(m: Member): FormState {
@@ -58,6 +62,10 @@ function fromMember(m: Member): FormState {
     photos: m.photos ? [...m.photos] : [],
     hidden: !!m.hidden,
     connector_parent_id: m.connector_parent_id ?? '',
+    phone: m.contact?.phone ?? '',
+    email: m.contact?.email ?? '',
+    facebook: m.contact?.facebook ?? '',
+    instagram: m.contact?.instagram ?? '',
   }
 }
 
@@ -157,6 +165,16 @@ export default function EditMemberModal({ open, onClose, member, suggestMode = f
       photos: form.photos.length ? form.photos : undefined,
       hidden: form.hidden,
       connector_parent_id: form.connector_parent_id || null,
+      contact: (() => {
+        const c = {
+          phone: form.phone.trim() || undefined,
+          email: form.email.trim() || undefined,
+          facebook: form.facebook.trim() || undefined,
+          instagram: form.instagram.trim() || undefined,
+        }
+        // null (not undefined) so clearing every field actually persists.
+        return Object.values(c).some(Boolean) ? c : null
+      })(),
     }
     if (suggestMode) {
       // No edit rights on this member — the change lands in the admin's
@@ -395,6 +413,61 @@ export default function EditMemberModal({ open, onClose, member, suggestMode = f
                     onChange={e => patch('bio', e.target.value)}
                   />
                 </Field>
+
+                {/* ── Contact + social links ── */}
+                <div className="pt-1">
+                  <p className="text-[11px] font-bold text-[#8E8E93] mb-1.5 uppercase tracking-wide">
+                    {t.editContactSection}
+                  </p>
+                  <div className="space-y-2">
+                    <Field label={t.editPhone}>
+                      <input
+                        type="tel"
+                        inputMode="tel"
+                        dir="ltr"
+                        value={form.phone}
+                        onChange={(e) => patch('phone', e.target.value)}
+                        placeholder={t.editPhonePlaceholder}
+                        className="w-full bg-[#F2F2F7] border border-transparent rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] placeholder:text-[#8E8E93] focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40 focus:bg-white focus:border-[#007AFF]/30 transition"
+                      />
+                    </Field>
+                    <Field label={t.editEmail}>
+                      <input
+                        type="email"
+                        inputMode="email"
+                        dir="ltr"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        value={form.email}
+                        onChange={(e) => patch('email', e.target.value)}
+                        placeholder={t.editEmailPlaceholder}
+                        className="w-full bg-[#F2F2F7] border border-transparent rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] placeholder:text-[#8E8E93] focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40 focus:bg-white focus:border-[#007AFF]/30 transition"
+                      />
+                    </Field>
+                    <Field label={t.editFacebook}>
+                      <input
+                        type="text"
+                        dir="ltr"
+                        autoCapitalize="none"
+                        value={form.facebook}
+                        onChange={(e) => patch('facebook', e.target.value)}
+                        placeholder={t.editSocialPlaceholder}
+                        className="w-full bg-[#F2F2F7] border border-transparent rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] placeholder:text-[#8E8E93] focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40 focus:bg-white focus:border-[#007AFF]/30 transition"
+                      />
+                    </Field>
+                    <Field label={t.editInstagram}>
+                      <input
+                        type="text"
+                        dir="ltr"
+                        autoCapitalize="none"
+                        value={form.instagram}
+                        onChange={(e) => patch('instagram', e.target.value)}
+                        placeholder={t.editSocialPlaceholder}
+                        className="w-full bg-[#F2F2F7] border border-transparent rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] placeholder:text-[#8E8E93] focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40 focus:bg-white focus:border-[#007AFF]/30 transition"
+                      />
+                    </Field>
+                  </div>
+                </div>
 
                 {/* Connector-parent picker — only meaningful when both
                     parents are known. Renders the parent's gender icon

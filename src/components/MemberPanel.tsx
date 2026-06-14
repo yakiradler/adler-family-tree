@@ -10,6 +10,7 @@ import RelationshipManager from './RelationshipManager'
 import QuickAddRelativeModal from './QuickAddRelativeModal'
 import type { RelativeDirection } from '../lib/relatives'
 import LineageBadge from './LineageBadge'
+import { telHref, whatsappHref, mailtoHref, facebookHref, instagramHref } from '../lib/contactLinks'
 import MemberNotesSection from './MemberNotesSection'
 import BuildFromTextModal from './BuildFromTextModal'
 import { canEditMember, canManageRelationships, computeNuclearFamilyIds } from '../lib/permissions'
@@ -217,6 +218,10 @@ export default function MemberPanel({ onClose }: Props) {
   const photos = member.photos && member.photos.length > 0
     ? member.photos
     : (member.photo_url ? [member.photo_url] : [])
+
+  // Contact / social links shown under the "Contact" section.
+  const contact = member.contact ?? null
+  const hasContact = !!(contact && (contact.phone || contact.email || contact.facebook || contact.instagram))
 
   const relationCount = spouses.length + parents.length + children.length + siblings.length
 
@@ -455,7 +460,55 @@ export default function MemberPanel({ onClose }: Props) {
                 {member.maiden_name && (
                   <InfoRow icon="🌸" label={t.maidenNameLabel} value={member.maiden_name} />
                 )}
-                {!member.birth_date && !member.death_date && !member.bio && !member.maiden_name && !lineageInfo?.showBadge && !lineageInfo?.daughterOf && (
+                {/* ── Contact + social links — one tap to call / WhatsApp /
+                    email / open a family member's social profile. ── */}
+                {hasContact && contact && (
+                  <div className="bg-[#F2F2F7] rounded-2xl p-3">
+                    <p className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wide mb-2">{t.contactSection}</p>
+                    <div className="space-y-1.5">
+                      {contact.phone && (
+                        <div className="flex items-center gap-1.5">
+                          <a href={telHref(contact.phone) ?? '#'} className="contact-link flex-1">
+                            <span aria-hidden>📞</span><span className="flex-1 truncate" dir="ltr">{contact.phone}</span>
+                          </a>
+                          <a href={whatsappHref(contact.phone) ?? '#'} target="_blank" rel="noopener noreferrer"
+                            aria-label="WhatsApp" className="contact-link contact-link--wa">
+                            <span aria-hidden>💬</span>
+                          </a>
+                        </div>
+                      )}
+                      {contact.email && (
+                        <a href={mailtoHref(contact.email) ?? '#'} className="contact-link">
+                          <span aria-hidden>✉️</span><span className="flex-1 truncate" dir="ltr">{contact.email}</span>
+                        </a>
+                      )}
+                      {contact.facebook && (
+                        <a href={facebookHref(contact.facebook) ?? '#'} target="_blank" rel="noopener noreferrer" className="contact-link">
+                          <span aria-hidden>📘</span><span className="flex-1 truncate">{t.contactFacebook}</span>
+                          <span className="text-[#8E8E93]" aria-hidden>↗</span>
+                        </a>
+                      )}
+                      {contact.instagram && (
+                        <a href={instagramHref(contact.instagram) ?? '#'} target="_blank" rel="noopener noreferrer" className="contact-link">
+                          <span aria-hidden>📷</span><span className="flex-1 truncate">{t.contactInstagram}</span>
+                          <span className="text-[#8E8E93]" aria-hidden>↗</span>
+                        </a>
+                      )}
+                    </div>
+                    <style>{`
+                      .contact-link {
+                        display: flex; align-items: center; gap: 0.6rem;
+                        padding: 0.6rem 0.75rem; border-radius: 0.75rem;
+                        background: #FFFFFF; border: 1px solid rgba(0,0,0,0.05);
+                        font-size: 13px; font-weight: 600; color: #1C1C1E;
+                        transition: transform 0.1s ease, background 0.15s ease;
+                      }
+                      .contact-link:active { transform: scale(0.98); }
+                      .contact-link--wa { flex: 0 0 auto; color: #25D366; }
+                    `}</style>
+                  </div>
+                )}
+                {!member.birth_date && !member.death_date && !member.bio && !member.maiden_name && !lineageInfo?.showBadge && !lineageInfo?.daughterOf && !hasContact && (
                   <EmptyTab icon="📝" text={t.panelNoInfo} />
                 )}
               </motion.div>
