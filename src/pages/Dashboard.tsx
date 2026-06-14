@@ -21,6 +21,7 @@ import PlanCard, { LeafIcon } from '../components/plan/PlanCard'
 import { LEAF_COSTS } from '../lib/plans'
 import { confirmDialog, alertDialog } from '../lib/confirm'
 import TreeCardActionMenu from '../components/TreeCardActionMenu'
+import TreeManagePanel from '../components/tree/TreeManagePanel'
 import type { Member, Relationship } from '../types'
 
 interface Props { demoMode: boolean }
@@ -131,6 +132,7 @@ export default function Dashboard({ demoMode }: Props) {
   // closed; otherwise carries the tree summary the user invoked on
   // so we can show its name in the sheet title.
   const [treeCardMenuTarget, setTreeCardMenuTarget] = useState<{ id: string | null; name: string } | null>(null)
+  const [manageTree, setManageTree] = useState<{ id: string; name: string } | null>(null)
   // Touch long-press timer for the tree cards.  iOS Safari doesn't
   // reliably fire `contextmenu` on long-press (it shows its own
   // text-selection callout), so we add an explicit 600ms pointer
@@ -934,7 +936,16 @@ export default function Dashboard({ demoMode }: Props) {
         open={treeCardMenuTarget !== null}
         onClose={() => setTreeCardMenuTarget(null)}
         target={treeCardMenuTarget}
+        onManage={(id, name) => setManageTree({ id, name })}
       />
+      {manageTree && (
+        <TreeManagePanel
+          open
+          onClose={() => setManageTree(null)}
+          treeId={manageTree.id}
+          treeName={manageTree.name}
+        />
+      )}
     </div>
   )
 }
