@@ -12,7 +12,6 @@ import NotificationBell from '../components/notifications/NotificationBell'
 import { PersonAvatarIcon } from '../components/MemberNode'
 import { getRingGradient, getFallbackGradient } from '../components/memberVisuals'
 import AIScanModal from '../components/ai/AIScanModal'
-import ComingSoonModal from '../components/ComingSoonModal'
 import BuildFromTextModal from '../components/BuildFromTextModal'
 import BrandMark from '../components/BrandMark'
 import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
@@ -128,7 +127,6 @@ export default function Dashboard({ demoMode }: Props) {
   // the UI now so the affordance exists; the modal explains what's
   // coming and when. Wired to actual backends in a follow-up.
   const [aiTreeFromTextOpen, setAiTreeFromTextOpen] = useState(false)
-  const [aiPhotoEnhanceOpen, setAiPhotoEnhanceOpen] = useState(false)
   // Long-press / right-click → tree-card context menu. `null` when
   // closed; otherwise carries the tree summary the user invoked on
   // so we can show its name in the sheet title.
@@ -840,15 +838,6 @@ export default function Dashboard({ demoMode }: Props) {
               onClick={() => openAiAction('treeFromText')}
               tooltip={t.btfSubtitle}
             />
-            <AppTile
-              index={4}
-              icon="🖼"
-              label={t.aiPhotoEnhanceLabel}
-              gradient="from-[#34C759] to-[#30B454]"
-              onClick={() => setAiPhotoEnhanceOpen(true)}
-              comingSoon
-              tooltip={t.aiComingSoonTip}
-            />
             <div data-tour="dash-tutorial-tile">
               <AppTile
                 index={5}
@@ -914,15 +903,6 @@ export default function Dashboard({ demoMode }: Props) {
             setTimeout(() => alert(`${count} ${lang === 'he' ? 'אנשים נוספו לעץ ✓' : 'people added to the tree ✓'}`), 50)
           }
         }}
-      />
-      <ComingSoonModal
-        open={aiPhotoEnhanceOpen}
-        onClose={() => setAiPhotoEnhanceOpen(false)}
-        icon="🖼"
-        title={t.aiPhotoEnhanceLabel}
-        description={t.aiPhotoEnhanceDesc}
-        bullets={[t.aiPhotoEnhanceBullet1, t.aiPhotoEnhanceBullet2, t.aiPhotoEnhanceBullet3]}
-        gradient="from-[#34C759] to-[#30B454]"
       />
 
       {/* Interactive tutorial. Launches automatically on first visit

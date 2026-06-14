@@ -7,6 +7,7 @@ import { isAdmin } from '../lib/permissions'
 import { pickPersonalShareInvite } from '../lib/invites'
 import { unseenShareCodeIds } from '../lib/notifications'
 import { buildJoinUrl } from '../lib/joinLink'
+import { shareOrCopy } from '../lib/share'
 import { fileToIconBlob, fileToDownscaledDataURL, iconStoragePath } from '../lib/imageResize'
 import type { TreeInvite } from '../types'
 
@@ -137,13 +138,20 @@ export default function TreeCardActionMenu({ open, onClose, target }: Props) {
       const invite = await mintShareCode(target.id)
       if (!invite) throw new Error('mint failed')
       const url = buildJoinUrl(window.location.origin, invite.code)
-      try {
-        await navigator.clipboard.writeText(url)
-      } catch {
+      // Native share sheet on phones → one tap into WhatsApp/Messages.
+      // Falls back to clipboard on desktop / unsupported browsers.
+      const res = await shareOrCopy({
+        url,
+        title: t.shareTreeTitle,
+        text: `${t.shareTreeText} ${target.name}`,
+      })
+      if (res === 'failed') {
         window.prompt(t.treeMenuShareLink, url)
+      } else if (res === 'copied') {
+        setLinkCopied(true)
+        window.setTimeout(() => setLinkCopied(false), 2500)
       }
-      setLinkCopied(true)
-      window.setTimeout(() => setLinkCopied(false), 2500)
+      // 'shared' → the OS sheet gave its own confirmation; no toast needed.
     } catch {
       setError(lang === 'he' ? 'יצירת הקישור נכשלה — נסו שוב' : 'Creating the link failed — try again')
     } finally {
@@ -330,28 +338,7 @@ export default function TreeCardActionMenu({ open, onClose, target }: Props) {
                         busy={linkBusy}
                       />
                     </>
-                  ) : (
-                    <>
-                      <ActionRow
-                        icon="🖼️"
-                        label={t.treeMenuChangeIcon}
-                        hint={t.treeMenuChangeIconHint}
-                        comingSoon
-                      />
-                      <ActionRow
-                        icon="🔗"
-                        label={t.treeMenuShareLink}
-                        hint={t.treeMenuShareLinkHint}
-                        comingSoon
-                      />
-                    </>
-                  )}
-                  <ActionRow
-                    icon="🌲"
-                    label={t.treeMenuDepthLimit}
-                    hint={t.treeMenuDepthLimitHint}
-                    comingSoon
-                  />
+                  ) : null}
                 </div>
               )}
 

@@ -9,7 +9,6 @@ import JumpToFamilyTreeButton from './JumpToFamilyTreeButton'
 import RelationshipManager from './RelationshipManager'
 import LineageBadge from './LineageBadge'
 import MemberNotesSection from './MemberNotesSection'
-import ComingSoonModal from './ComingSoonModal'
 import BuildFromTextModal from './BuildFromTextModal'
 import { canEditMember, canManageRelationships, computeNuclearFamilyIds } from '../lib/permissions'
 import { getParentMap, resolveLineage } from '../lib/lineage'
@@ -56,7 +55,6 @@ export default function MemberPanel({ onClose }: Props) {
   // "Coming soon" feature placeholders — wired to a friendly modal
   // that explains what each will do once the backend lands.
   const [aiTreeFromTextOpen, setAiTreeFromTextOpen] = useState(false)
-  const [aiPhotoEnhanceOpen, setAiPhotoEnhanceOpen] = useState(false)
 
   const member = useMemo(
     () => members.find(m => m.id === selectedMemberId) ?? null,
@@ -658,21 +656,6 @@ export default function MemberPanel({ onClose }: Props) {
               <span>{t.aiTreeFromTextLabel}</span>
             </button>
 
-            {/* ── AI: enhance photo (coming soon) ── */}
-            <button
-              type="button"
-              onClick={() => setAiPhotoEnhanceOpen(true)}
-              aria-label={t.aiPhotoEnhanceLabel}
-              title={t.aiComingSoonTip}
-              className="w-full py-2.5 rounded-2xl border border-[#34C759]/40 text-[#1F7A3A] text-sf-subhead font-semibold active:scale-[0.98] transition flex items-center justify-center gap-2 hover:bg-[#34C759]/5 relative"
-            >
-              <span className="absolute top-1 end-2 text-[8.5px] font-bold text-[#34C759] bg-[#34C759]/12 rounded-full px-1.5 py-0.5">
-                🚀
-              </span>
-              <span>🖼</span>
-              <span>{t.aiPhotoEnhanceLabel}</span>
-            </button>
-
             {/* ── Copy to another tree ── */}
             {editAllowed && (
             <button
@@ -724,15 +707,6 @@ export default function MemberPanel({ onClose }: Props) {
         open={aiTreeFromTextOpen}
         onClose={() => setAiTreeFromTextOpen(false)}
         anchorMember={member}
-      />
-      <ComingSoonModal
-        open={aiPhotoEnhanceOpen}
-        onClose={() => setAiPhotoEnhanceOpen(false)}
-        icon="🖼"
-        title={t.aiPhotoEnhanceLabel}
-        description={t.aiPhotoEnhanceDesc}
-        bullets={[t.aiPhotoEnhanceBullet1, t.aiPhotoEnhanceBullet2, t.aiPhotoEnhanceBullet3]}
-        gradient="from-[#34C759] to-[#30B454]"
       />
 
       {/* ── Copy to tree dialog ── */}
