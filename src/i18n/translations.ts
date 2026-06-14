@@ -335,6 +335,7 @@ export const translations = {
     panelNoPhotos: 'אין תמונות עדיין',
     panelParents: 'הורים',
     panelEdit: 'ערוך פרופיל',
+    panelAddRelative: 'הוסף קרוב משפחה',
 
     // Edit-mode toggle + per-card quick-add
     editMode: 'מצב עריכה',
@@ -1186,6 +1187,7 @@ export const translations = {
     panelNoPhotos: 'No photos yet',
     panelParents: 'Parents',
     panelEdit: 'Edit Profile',
+    panelAddRelative: 'Add Relative',
 
     // Edit-mode toggle + per-card quick-add
     editMode: 'Edit Mode',

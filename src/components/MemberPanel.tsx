@@ -7,6 +7,8 @@ import { getRingGradient, getFallbackGradient } from './memberVisuals'
 import EditMemberModal from './EditMemberModal'
 import JumpToFamilyTreeButton from './JumpToFamilyTreeButton'
 import RelationshipManager from './RelationshipManager'
+import QuickAddRelativeModal from './QuickAddRelativeModal'
+import type { RelativeDirection } from '../lib/relatives'
 import LineageBadge from './LineageBadge'
 import MemberNotesSection from './MemberNotesSection'
 import BuildFromTextModal from './BuildFromTextModal'
@@ -39,6 +41,11 @@ export default function MemberPanel({ onClose }: Props) {
   const [tab, setTab] = useState<'about' | 'family' | 'photos'>('about')
   const [editOpen, setEditOpen] = useState(false)
   const [relOpen, setRelOpen] = useState(false)
+  // "Add relative" — the most-wanted action, surfaced right on the card.
+  // `addRelExpanded` toggles the 4 direction choices; `quickAddDir` opens
+  // the compact QuickAddRelativeModal anchored to this member.
+  const [addRelExpanded, setAddRelExpanded] = useState(false)
+  const [quickAddDir, setQuickAddDir] = useState<RelativeDirection | null>(null)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [copyToTreeOpen, setCopyToTreeOpen] = useState(false)
@@ -591,6 +598,50 @@ export default function MemberPanel({ onClose }: Props) {
                 the component). Lets families navigate between linked
                 trees without leaving the profile card. */}
             <JumpToFamilyTreeButton member={member} />
+            {/* ── Add relative — the #1 thing a family member wants, made
+                obvious right here instead of hidden behind tree edit-mode.
+                Gated by relAllowed; opens the compact quick-add modal. ── */}
+            {relAllowed && (
+              <div className="space-y-1.5">
+                <button
+                  type="button"
+                  onClick={() => setAddRelExpanded((v) => !v)}
+                  aria-expanded={addRelExpanded}
+                  aria-label={t.panelAddRelative}
+                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#34C759] to-[#30D158] text-white text-sf-subhead font-bold active:scale-[0.98] transition flex items-center justify-center gap-2 shadow-md"
+                >
+                  <span className="text-lg leading-none" aria-hidden>＋</span>
+                  <span>{t.panelAddRelative}</span>
+                </button>
+                <AnimatePresence>
+                  {addRelExpanded && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="grid grid-cols-2 gap-1.5 overflow-hidden"
+                    >
+                      {([
+                        ['parent', t.addParent, '🧓'],
+                        ['child', t.addChild, '👶'],
+                        ['spouse', t.addSpouse, '💍'],
+                        ['sibling', t.addSibling, '🧑‍🤝‍🧑'],
+                      ] as const).map(([dir, label, icon]) => (
+                        <button
+                          key={dir}
+                          type="button"
+                          onClick={() => { setQuickAddDir(dir); setAddRelExpanded(false) }}
+                          className="py-2.5 rounded-xl border border-[#34C759]/40 text-[#1F7A3A] text-sf-footnote font-semibold active:scale-95 transition flex items-center justify-center gap-1.5 hover:bg-[#34C759]/5"
+                        >
+                          <span aria-hidden>{icon}</span>
+                          <span>{label}</span>
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
             {editAllowed && (
             <button
               type="button"
@@ -698,6 +749,12 @@ export default function MemberPanel({ onClose }: Props) {
         suggestMode={!editAllowed}
       />
       <RelationshipManager open={relOpen} onClose={() => setRelOpen(false)} member={member} />
+      <QuickAddRelativeModal
+        open={quickAddDir !== null}
+        onClose={() => setQuickAddDir(null)}
+        anchor={member}
+        direction={quickAddDir ?? 'child'}
+      />
 
       {/* Build-from-text → real local parser. The modal frames itself
           around the currently-selected member as the anchor so any
