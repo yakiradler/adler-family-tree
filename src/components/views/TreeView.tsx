@@ -46,6 +46,7 @@ export default function TreeView({
     openTreePopover, setOpenTreePopover,
     isFocusedMode, setIsFocusedMode,
     isEditMode,
+    profile,
   } = useFamilyStore()
 
   const [quickAdd, setQuickAdd] = useState<{
@@ -288,9 +289,12 @@ export default function TreeView({
         </Tooltip>
       </div>
 
-      {/* Bird's-eye minimap — bottom-left. */}
+      {/* Bird's-eye minimap — bottom-left. Desktop/tablet only: on a phone
+          the 88px map showed a handful of 2px dots (no navigation value)
+          while competing with the OS back-swipe edge — pinch-to-zoom-out is
+          the natural overview gesture there. */}
       {result.nodes.length >= 4 && !treeFullscreen && (
-        <div className="no-print">
+        <div className="no-print hidden sm:block">
           <TreeMiniMap
             nodes={result.nodes}
             canvasW={result.bounds.width}
@@ -324,7 +328,15 @@ export default function TreeView({
                 if (isFocusedMode) {
                   setIsFocusedMode(false)
                 } else if (selectedMemberId) {
+                  // A specific person is selected → focus on them.
                   enterFocusMode(selectedMemberId)
+                } else if (
+                  profile?.linked_member_id &&
+                  members.some((m) => m.id === profile.linked_member_id)
+                ) {
+                  // Default: focus on the logged-in user's OWN profile, so
+                  // tapping "focus" always centers you (not a stranger).
+                  enterFocusMode(profile.linked_member_id)
                 } else {
                   setShowFocusPicker(s => !s)
                 }

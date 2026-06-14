@@ -107,13 +107,23 @@ export default function VersionUpdateModal() {
 
   const refresh = () => {
     setRefreshing(true)
-    // Small delay so the user actually sees the spinner state — pure
-    // UX nicety, also lets the SW finish any in-flight cache writes.
-    setTimeout(() => {
-      // Hard reload so the new index.html is fetched fresh (SW
-      // navigations are network-first anyway, but belt-and-braces).
+    // Bulletproof update: drop every cache and pull the newest service
+    // worker BEFORE reloading, so a stubborn cached bundle (the "I don't
+    // see my update" class of bug) can't survive. Falls through to a plain
+    // reload if any step is unavailable/fails.
+    void (async () => {
+      try {
+        if ('caches' in window) {
+          const keys = await caches.keys()
+          await Promise.all(keys.map((k) => caches.delete(k)))
+        }
+        if ('serviceWorker' in navigator) {
+          const reg = await navigator.serviceWorker.getRegistration()
+          await reg?.update().catch(() => {})
+        }
+      } catch { /* best-effort — reload regardless */ }
       window.location.reload()
-    }, 300)
+    })()
   }
 
   return (

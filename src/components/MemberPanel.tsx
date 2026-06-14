@@ -484,13 +484,13 @@ export default function MemberPanel({ onClose }: Props) {
                       )}
                       {contact.facebook && (
                         <a href={facebookHref(contact.facebook) ?? '#'} target="_blank" rel="noopener noreferrer" className="contact-link">
-                          <span aria-hidden>📘</span><span className="flex-1 truncate">{t.contactFacebook}</span>
+                          <FacebookIcon size={18} /><span className="flex-1 truncate">{t.contactFacebook}</span>
                           <span className="text-[#8E8E93]" aria-hidden>↗</span>
                         </a>
                       )}
                       {contact.instagram && (
                         <a href={instagramHref(contact.instagram) ?? '#'} target="_blank" rel="noopener noreferrer" className="contact-link">
-                          <span aria-hidden>📷</span><span className="flex-1 truncate">{t.contactInstagram}</span>
+                          <InstagramIcon size={18} /><span className="flex-1 truncate">{t.contactInstagram}</span>
                           <span className="text-[#8E8E93]" aria-hidden>↗</span>
                         </a>
                       )}
@@ -969,6 +969,37 @@ export default function MemberPanel({ onClose }: Props) {
         )}
       </AnimatePresence>
     </div>
+  )
+}
+
+/** Brand logos for the Contact section. */
+function FacebookIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className="flex-shrink-0">
+      <path
+        fill="#1877F2"
+        d="M24 12a12 12 0 1 0-13.875 11.854v-8.385H7.078V12h3.047V9.356c0-3.007 1.792-4.668 4.533-4.668 1.313 0 2.686.234 2.686.234v2.953H15.83c-1.49 0-1.955.926-1.955 1.874V12h3.328l-.532 3.469h-2.796v8.385A12.002 12.002 0 0 0 24 12Z"
+      />
+    </svg>
+  )
+}
+
+function InstagramIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className="flex-shrink-0">
+      <defs>
+        <linearGradient id="ig-grad" x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0" stopColor="#FEDA75" />
+          <stop offset="0.35" stopColor="#FA7E1E" />
+          <stop offset="0.7" stopColor="#D62976" />
+          <stop offset="1" stopColor="#962FBF" />
+        </linearGradient>
+      </defs>
+      <rect x="2" y="2" width="20" height="20" rx="6" fill="url(#ig-grad)" />
+      <rect x="6" y="6" width="12" height="12" rx="4" fill="none" stroke="#fff" strokeWidth="1.7" />
+      <circle cx="12" cy="12" r="3" fill="none" stroke="#fff" strokeWidth="1.7" />
+      <circle cx="16.4" cy="7.6" r="1.1" fill="#fff" />
+    </svg>
   )
 }
 
