@@ -11,6 +11,14 @@ export type EditRequestStatus = 'pending' | 'approved' | 'rejected'
  *  - admin:  full access (root) on the entire system.
  */
 export type UserRole = 'guest' | 'user' | 'master' | 'admin'
+/**
+ * Per-tree role (the real authorization axis, stored in tree_access.role).
+ *  - owner:   manages the tree — members, roles, invites, requests, delete.
+ *  - editor:  can add/edit members + relationships (the old 'member').
+ *  - viewer:  read-only on tree structure; may still engage socially
+ *             (comments, reactions, photos-in-comments) + suggest edits.
+ */
+export type TreeRole = 'owner' | 'editor' | 'viewer'
 export type AccessRequestStatus = 'pending' | 'approved' | 'rejected'
 export type Gender = 'male' | 'female'
 export type Lineage = 'kohen' | 'levi' | 'israel'
