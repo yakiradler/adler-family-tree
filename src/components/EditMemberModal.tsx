@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
+import { alertDialog } from '../lib/confirm'
 import { useCloseOnBack } from '../hooks/useCloseOnBack'
 import { PersonAvatarIcon } from './MemberNode'
 import { getRingGradient, getFallbackGradient } from './memberVisuals'
@@ -181,7 +182,7 @@ export default function EditMemberModal({ open, onClose, member, suggestMode = f
       // requests tab instead of being written directly.
       const sent = await submitEditRequest(member.id, changes)
       setSaving(false)
-      if (sent) window.alert(t.editSuggestSent)
+      if (sent) await alertDialog({ message: t.editSuggestSent })
       onClose()
       return
     }

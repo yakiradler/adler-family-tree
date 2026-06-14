@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../lib/supabase'
 import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang, type Translations } from '../../i18n/useT'
+import { confirmDialog, alertDialog } from '../../lib/confirm'
 import { generateCode, expiryToIso, type ExpiryChoice } from '../../lib/invites'
 import type { TreeInvite } from '../../types'
 
@@ -122,7 +123,7 @@ export default function InviteCodeManager() {
   }
 
   const revoke = async (id: string) => {
-    if (!window.confirm(t.adminInvitesRevokeConfirm)) return
+    if (!(await confirmDialog({ message: t.adminInvitesRevokeConfirm, danger: true }))) return
     setInvites((rows) => rows.filter((r) => r.id !== id))
     if (SUPABASE_CONFIGURED) {
       await supabase.from('tree_invites').delete().eq('id', id)
@@ -137,7 +138,7 @@ export default function InviteCodeManager() {
     } catch {
       // Clipboard might be blocked in some sandboxed contexts; fall back
       // to a tiny prompt so the admin can still grab the code manually.
-      window.prompt(t.adminInvitesCopyCode, inv.code)
+      void alertDialog({ title: t.adminInvitesCopyCode, message: inv.code })
     }
   }
 

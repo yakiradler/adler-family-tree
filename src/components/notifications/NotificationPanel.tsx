@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang, type Translations } from '../../i18n/useT'
+import { alertDialog } from '../../lib/confirm'
 import { isAdmin } from '../../lib/permissions'
 import { notificationDisplay, unreadCount } from '../../lib/notifications'
 import { useCloseOnBack } from '../../hooks/useCloseOnBack'
@@ -49,7 +50,7 @@ export default function NotificationPanel({ open, onClose }: Props) {
       setCopiedId(n.id)
       window.setTimeout(() => setCopiedId(null), 1600)
     } catch {
-      window.prompt(t.notifCopyCode, code)
+      void alertDialog({ title: t.notifCopyCode, message: code })
     }
   }
 

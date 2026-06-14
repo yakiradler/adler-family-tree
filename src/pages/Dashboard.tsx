@@ -19,6 +19,7 @@ import JoinTreeModal from '../components/JoinTreeModal'
 import SecuritySettingsModal from '../components/security/SecuritySettingsModal'
 import PlanCard from '../components/plan/PlanCard'
 import { LEAF_COSTS } from '../lib/plans'
+import { confirmDialog, alertDialog } from '../lib/confirm'
 import TreeCardActionMenu from '../components/TreeCardActionMenu'
 import type { Member, Relationship } from '../types'
 
@@ -162,11 +163,11 @@ export default function Dashboard({ demoMode }: Props) {
       open()
       return
     }
-    if (!window.confirm(t.aiCostConfirm.replace('{n}', String(cost)))) return
+    if (!(await confirmDialog({ message: t.aiCostConfirm.replace('{n}', String(cost)) }))) return
     if (await spendLeaves(cost, kind === 'scan' ? 'ai-scan' : 'ai-tree-from-text')) {
       open()
     } else {
-      window.alert(t.aiNoLeaves.replace('{n}', String(cost)))
+      await alertDialog({ message: t.aiNoLeaves.replace('{n}', String(cost)) })
     }
   }
   // The tutorial no longer auto-launches on first paint — it stacked on top
@@ -878,8 +879,7 @@ export default function Dashboard({ demoMode }: Props) {
         open={aiScanOpen}
         onClose={() => setAiScanOpen(false)}
         onAdded={(count) => {
-          // Tiny toast-style alert keeps this dependency-free.
-          setTimeout(() => alert(`${count} ${t.aiScanAddedCount} ✓`), 50)
+          void alertDialog({ message: `${count} ${t.aiScanAddedCount} ✓` })
         }}
       />
 
@@ -892,7 +892,7 @@ export default function Dashboard({ demoMode }: Props) {
         onClose={() => setAiTreeFromTextOpen(false)}
         onAdded={(count) => {
           if (count > 0) {
-            setTimeout(() => alert(`${count} ${lang === 'he' ? 'אנשים נוספו לעץ ✓' : 'people added to the tree ✓'}`), 50)
+            void alertDialog({ message: `${count} ${lang === 'he' ? 'אנשים נוספו לעץ ✓' : 'people added to the tree ✓'}` })
           }
         }}
       />

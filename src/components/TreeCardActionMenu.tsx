@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang } from '../i18n/useT'
+import { alertDialog } from '../lib/confirm'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { isAdmin } from '../lib/permissions'
 import { pickPersonalShareInvite } from '../lib/invites'
@@ -146,7 +147,7 @@ export default function TreeCardActionMenu({ open, onClose, target }: Props) {
         text: `${t.shareTreeText} ${target.name}`,
       })
       if (res === 'failed') {
-        window.prompt(t.treeMenuShareLink, url)
+        void alertDialog({ title: t.treeMenuShareLink, message: url })
       } else if (res === 'copied') {
         setLinkCopied(true)
         window.setTimeout(() => setLinkCopied(false), 2500)
@@ -211,7 +212,7 @@ export default function TreeCardActionMenu({ open, onClose, target }: Props) {
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1600)
     } catch {
-      window.prompt(t.notifCopyCode, code)
+      void alertDialog({ title: t.notifCopyCode, message: code })
     }
   }
 

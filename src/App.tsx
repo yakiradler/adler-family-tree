@@ -13,6 +13,8 @@ import ThemeShell from './components/ThemeShell'
 import PersistenceIndicator from './components/PersistenceIndicator'
 import InstallPrompt from './components/InstallPrompt'
 import VersionUpdateModal from './components/VersionUpdateModal'
+import DialogHost from './components/ui/DialogHost'
+import { alertDialog } from './lib/confirm'
 import DevEnvBanner from './components/DevEnvBanner'
 import MfaChallengeGate from './components/security/MfaChallengeGate'
 import NewPasswordScreen from './components/security/NewPasswordScreen'
@@ -398,10 +400,11 @@ export default function App() {
         const ageMs = Date.now() - new Date(deletedAt).getTime()
         if (ageMs < thirtyDaysMs) {
           try { await supabase.auth.signOut() } catch { /* ignore */ }
-          window.alert(
-            'החשבון שלך הושעה על ידי המנהל. אם זו טעות, פנה למנהל לשחזור.\n\n' +
-            'Your account has been suspended by an admin. Contact them to restore it.',
-          )
+          await alertDialog({
+            message:
+              'החשבון שלך הושעה על ידי המנהל. אם זו טעות, פנה למנהל לשחזור.\n\n' +
+              'Your account has been suspended by an admin. Contact them to restore it.',
+          })
           return
         }
       }
@@ -562,6 +565,8 @@ export default function App() {
           /version.json in the background and pops once per fresh
           deploy — see useVersionCheck for the cadence. */}
       <VersionUpdateModal />
+      {/* In-app confirm/alert dialogs (replaces window.confirm/alert). */}
+      <DialogHost />
       <HashRouter>
         <ThemeShell>
           {/* Plan-limit upsell toast — fed by ft-plan-gate events from
