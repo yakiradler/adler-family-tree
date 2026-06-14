@@ -73,7 +73,13 @@ export default function PersistenceIndicator() {
       const id = window.setTimeout(() => setState({ kind: 'idle' }), 1400)
       return () => window.clearTimeout(id)
     }
-    if (state.kind === 'remote-failed' || state.kind === 'rejected') {
+    if (state.kind === 'remote-failed') {
+      // Longer dwell — this one now carries a diagnostic detail line the
+      // user may want to read or screenshot.
+      const id = window.setTimeout(() => setState({ kind: 'idle' }), 9000)
+      return () => window.clearTimeout(id)
+    }
+    if (state.kind === 'rejected') {
       const id = window.setTimeout(() => setState({ kind: 'idle' }), 4500)
       return () => window.clearTimeout(id)
     }
@@ -133,13 +139,24 @@ export default function PersistenceIndicator() {
               <path d="M2 2l8 8M10 2l-8 8" stroke="white" strokeWidth="1.7" strokeLinecap="round" />
             )}
           </svg>
-          {state.kind === 'saved'
+          {state.kind === 'remote-failed' ? (
+            // Self-diagnosing: the headline stays human-friendly, but we
+            // also surface the raw server error + which write failed, so
+            // a sync problem can be pinpointed (e.g. a missing column /
+            // policy on the live DB) instead of guessed at.
+            <span className="flex flex-col items-start leading-tight">
+              <span>{text('remote')}</span>
+              {state.message && state.message !== 'unknown' && (
+                <span className="font-normal opacity-90 text-[10px] mt-0.5 max-w-[78vw] break-words">
+                  {state.op}: {state.message}
+                </span>
+              )}
+            </span>
+          ) : state.kind === 'saved'
             ? text('saved')
-            : state.kind === 'remote-failed'
-              ? text('remote')
-              : state.kind === 'rejected'
-                ? text('rejected')
-                : text(state.reason === 'quota' ? 'quota' : 'unknown')}
+            : state.kind === 'rejected'
+              ? text('rejected')
+              : text(state.reason === 'quota' ? 'quota' : 'unknown')}
         </motion.div>
       )}
     </AnimatePresence>

@@ -1188,22 +1188,46 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     const localId = `tree-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     const optimistic: FamilyTree = { ...tree, id: localId }
     set((s) => ({ trees: [...s.trees, optimistic] }))
+    // Demo mode (no backend): the optimistic row IS the tree.
+    if (!isSupabaseConfigured) return optimistic
+
+    const rollback = () => set((s) => ({ trees: s.trees.filter((t) => t.id !== localId) }))
     try {
       const { data, error } = await supabase
         .from('family_trees')
         .insert(tree)
         .select('*')
         .single()
-      if (!error && data) {
-        set((s) => ({ trees: s.trees.map((t) => (t.id === localId ? (data as FamilyTree) : t)) }))
-        return data as FamilyTree
+      if (error) {
+        // CRITICAL: never keep a server-rejected tree as a local-only
+        // "ghost". The old code fell through to `return optimistic`, so
+        // a failed insert left a tree with a fake `tree-…` id in the UI —
+        // and every member later added to it carried that non-existent
+        // tree_id, so its insert failed the FK and surfaced the
+        // "saved locally, sync failed" toast on every add. Roll back and
+        // report so the user knows the tree wasn't actually created.
+        rollback()
+        reportSupabaseFailure('addTree', error)
+        return null
       }
-    } catch { /* offline / no table — keep optimistic row */ }
-    return optimistic
+      set((s) => ({ trees: s.trees.map((t) => (t.id === localId ? (data as FamilyTree) : t)) }))
+      return data as FamilyTree
+    } catch (err) {
+      rollback()
+      reportSupabaseFailure('addTree', err)
+      return null
+    }
   },
   updateTree: async (id, patch) => {
+    // Optimistic local update kept even on server failure (a rename
+    // shouldn't snap back), but we now surface a sync failure instead of
+    // swallowing it silently.
     set((s) => ({ trees: s.trees.map((t) => (t.id === id ? { ...t, ...patch } : t)) }))
-    try { await supabase.from('family_trees').update(patch).eq('id', id) } catch { /* ignore */ }
+    if (!isSupabaseConfigured) return
+    try {
+      const { error } = await supabase.from('family_trees').update(patch).eq('id', id)
+      if (error) reportSupabaseFailure('updateTree', error)
+    } catch (err) { reportSupabaseFailure('updateTree', err) }
   },
   fetchTrees: async () => {
     // Trees the current user has access to.  RLS on family_trees
