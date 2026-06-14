@@ -1,5 +1,15 @@
 import { supabase } from './supabase'
-import type { Relationship, Profile, UserRole, MasterPermissions } from '../types'
+import type { Relationship, Profile, UserRole, TreeRole, MasterPermissions } from '../types'
+
+/**
+ * Per-tree write gate (two-axis model). Owner + editor may change tree
+ * structure; viewer is read-only (but may still engage socially). An
+ * undefined role (e.g. platform admin, or an orphan tree) is permissive
+ * here — the DB RLS (has_tree_write) remains authoritative either way.
+ */
+export function canWriteTree(role: TreeRole | undefined | null): boolean {
+  return role !== 'viewer'
+}
 
 // ─── 4-tier RBAC helpers (Phase C/D) ────────────────────────────────────
 // Centralised checks. UI gates should call these rather than inspecting

@@ -12,8 +12,9 @@ import type { RelativeDirection } from '../lib/relatives'
 import LineageBadge from './LineageBadge'
 import { telHref, whatsappHref, mailtoHref, facebookHref, instagramHref } from '../lib/contactLinks'
 import MemberNotesSection from './MemberNotesSection'
+import MemberReactionsBar from './MemberReactionsBar'
 import BuildFromTextModal from './BuildFromTextModal'
-import { canEditMember, canManageRelationships, computeNuclearFamilyIds } from '../lib/permissions'
+import { canEditMember, canManageRelationships, computeNuclearFamilyIds, canWriteTree } from '../lib/permissions'
 import { getParentMap, resolveLineage } from '../lib/lineage'
 import { uploadMemberPhoto } from '../lib/photoUpload'
 import type { Member, SpouseStatus } from '../types'
@@ -37,7 +38,7 @@ function formatDate(iso: string | undefined, lang: 'he' | 'en') {
 }
 
 export default function MemberPanel({ onClose }: Props) {
-  const { members, relationships, selectedMemberId, setSelectedMemberId, profile, deleteMember, deleteRelationship, updateMember, addMember, trees } = useFamilyStore()
+  const { members, relationships, selectedMemberId, setSelectedMemberId, profile, deleteMember, deleteRelationship, updateMember, addMember, trees, myTreeRoles } = useFamilyStore()
   const { t, lang } = useLang()
   const [tab, setTab] = useState<'about' | 'family' | 'photos'>('about')
   const [editOpen, setEditOpen] = useState(false)
@@ -168,14 +169,19 @@ export default function MemberPanel({ onClose }: Props) {
   // member's relations, which made the gate vacuously false.
   const ownMemberId = profile?.linked_member_id ?? undefined
   const nuclearFamilyIds = computeNuclearFamilyIds(ownMemberId, relationships)
-  const editAllowed = canEditMember(profile, {
+  // Two-axis gate: a 'viewer' on this member's tree is read-only on
+  // structure (they can still engage socially below). Layered ON TOP of
+  // the legacy nuclear-family/role checks; DB RLS (has_tree_write) is the
+  // real boundary. Admins/owners/editors pass (undefined role → permissive).
+  const treeWritable = canWriteTree(myTreeRoles[member.tree_id ?? ''])
+  const editAllowed = treeWritable && canEditMember(profile, {
     targetMemberId: member.id,
     nuclearFamilyIds,
     ownMemberId,
   })
   // User-role can only restructure their own nuclear family; admins +
   // masters with the toggle pass unconditionally.
-  const relAllowed = canManageRelationships(profile, {
+  const relAllowed = treeWritable && canManageRelationships(profile, {
     targetMemberId: member.id,
     nuclearFamilyIds,
     ownMemberId,
@@ -641,6 +647,9 @@ export default function MemberPanel({ onClose }: Props) {
             clicking memories"). A faint top divider keeps it
             visually distinct from the tab content above. */}
         <div className="mx-4 mt-1 border-t border-black/5" />
+        <div className="px-4 pt-3">
+          <MemberReactionsBar memberId={member.id} />
+        </div>
         <MemberNotesSection memberId={member.id} />
 
         {/* Action buttons: full-width stacked rows so labels are always readable */}
