@@ -3,6 +3,9 @@ import { motion } from 'framer-motion'
 import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang } from '../../i18n/useT'
 import { Avatar } from '../MemberCard'
+import { getParentMap, resolveLineage } from '../../lib/lineage'
+import { applyTreeFilters } from './applyTreeFilters'
+import type { FilterState } from './AdvancedFilter'
 import type { Member } from '../../types'
 
 interface TimelineEvent {
@@ -15,13 +18,32 @@ interface TimelineEvent {
   description: string
 }
 
-export default function TimelineView() {
-  const { members, setSelectedMemberId } = useFamilyStore()
+export default function TimelineView({ filters }: { filters?: FilterState }) {
+  const { members: allMembers, relationships, setSelectedMemberId, activeTreeId } = useFamilyStore()
   const { t, lang } = useLang()
+
+  // Per-tree isolation — the timeline used to blend births/deaths from
+  // ALL trees onto one axis, ignoring the filter chip shown above it.
+  const members = useMemo(
+    () =>
+      activeTreeId == null
+        ? allMembers.filter((m) => !m.tree_id)
+        : allMembers.filter((m) => m.tree_id === activeTreeId),
+    [allMembers, activeTreeId],
+  )
+
+  // Same filter pipeline as the tree + schematic views.
+  const visible = useMemo(() => {
+    if (!filters) return members
+    const parentMap = getParentMap(members, relationships)
+    const lineageById = new Map<string, ReturnType<typeof resolveLineage>>()
+    for (const m of members) lineageById.set(m.id, resolveLineage(m, parentMap))
+    return applyTreeFilters(members, relationships, filters, lineageById).members
+  }, [members, relationships, filters])
 
   const events = useMemo<TimelineEvent[]>(() => {
     const evts: TimelineEvent[] = []
-    members.forEach((m) => {
+    visible.forEach((m) => {
       if (m.birth_date) {
         const d = new Date(m.birth_date)
         evts.push({ year: d.getFullYear(), month: d.getMonth(), day: d.getDate(), type: 'birth', member: m, label: `${m.first_name} ${m.last_name} ${t.eventBorn}`, description: m.bio ?? '' })
@@ -32,7 +54,7 @@ export default function TimelineView() {
       }
     })
     return evts.sort((a, b) => a.year - b.year || (a.month ?? 0) - (b.month ?? 0))
-  }, [members, t])
+  }, [visible, t])
 
   if (events.length === 0) {
     return <div className="flex items-center justify-center h-full pt-20 text-[#8E8E93] text-sf-subhead px-6 text-center">{t.timelineEmpty}</div>

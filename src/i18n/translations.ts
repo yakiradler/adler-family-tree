@@ -82,6 +82,11 @@ export const translations = {
     statAlive: 'חיים',
     statDeceased: 'ז״ל',
     genericError: 'שגיאה',
+    authErrInvalidCredentials: 'אימייל או סיסמה שגויים. בדקו ונסו שוב.',
+    authErrEmailNotConfirmed: 'החשבון עדיין לא אומת. בדקו את תיבת הדואר (כולל ספאם) ולחצו על קישור האישור.',
+    authErrRateLimit: 'נשלחו יותר מדי בקשות. המתינו רגע ונסו שוב.',
+    authErrWeakPassword: 'הסיסמה חלשה מדי — בחרו לפחות 8 תווים.',
+    authErrInvalidEmail: 'כתובת האימייל אינה תקינה.',
 
     // Member Modal
     about: 'אודות',
@@ -938,6 +943,11 @@ export const translations = {
     statAlive: 'Living',
     statDeceased: 'Deceased',
     genericError: 'Error',
+    authErrInvalidCredentials: 'Wrong email or password. Please check and try again.',
+    authErrEmailNotConfirmed: 'Your account isn’t confirmed yet. Check your inbox (and spam) and tap the confirmation link.',
+    authErrRateLimit: 'Too many attempts. Please wait a moment and try again.',
+    authErrWeakPassword: 'That password is too weak — use at least 8 characters.',
+    authErrInvalidEmail: 'That email address looks invalid.',
 
     about: 'About',
     family: 'Family',

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../../lib/supabase'
+import { mapAuthError } from '../../lib/authErrors'
 import { useLang, isRTL } from '../../i18n/useT'
 
 /**
@@ -34,7 +35,7 @@ export default function NewPasswordScreen({ onDone }: { onDone: () => void }) {
       if (error) throw error
       setDone(true)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'error')
+      setError(mapAuthError(err, t))
     } finally {
       setBusy(false)
     }

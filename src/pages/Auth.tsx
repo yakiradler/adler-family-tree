@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { markPendingOnboarding } from '../lib/pendingOnboarding'
+import { mapAuthError } from '../lib/authErrors'
 import { useLang } from '../i18n/useT'
 import BrandMark from '../components/BrandMark'
 
@@ -53,7 +54,7 @@ export default function Auth({ demoMode = false, onDemoEnter }: Props) {
       if (error) throw error
       setSuccess(t.authResetSent)
     } catch (err) {
-      setError(err instanceof Error ? err.message : t.genericError)
+      setError(mapAuthError(err, t))
     }
   }
 
@@ -71,7 +72,7 @@ export default function Auth({ demoMode = false, onDemoEnter }: Props) {
       })
       if (error) throw error
     } catch (err) {
-      setError(err instanceof Error ? err.message : t.genericError)
+      setError(mapAuthError(err, t))
     }
   }
 
@@ -175,7 +176,7 @@ export default function Auth({ demoMode = false, onDemoEnter }: Props) {
         if (error) throw error
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t.genericError)
+      setError(mapAuthError(err, t))
     } finally {
       setLoading(false)
     }
