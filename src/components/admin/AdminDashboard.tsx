@@ -7,13 +7,14 @@ import { useLang, isRTL, type Translations } from '../../i18n/useT'
 import { confirmDialog, alertDialog } from '../../lib/confirm'
 import EditMemberModal from '../EditMemberModal'
 import InviteCodeManager from './InviteCodeManager'
+import TreeManagePanel from '../tree/TreeManagePanel'
 import { PersonAvatarIcon } from '../MemberNode'
 import { getRingGradient, getFallbackGradient } from '../memberVisuals'
-import type { EditRequest, Member, Profile, UserRole, MasterPermissions, AccessRequest, UserPlan, PlanId } from '../../types'
+import type { EditRequest, Member, Profile, UserRole, TreeRole, MasterPermissions, AccessRequest, UserPlan, PlanId } from '../../types'
 import type { PermissionKey } from '../../lib/permissions'
 import { adminInboxCounts } from '../../lib/notifications'
 
-type Tab = 'overview' | 'users' | 'members' | 'requests' | 'access' | 'reports' | 'invites' | 'system'
+type Tab = 'overview' | 'users' | 'members' | 'trees' | 'requests' | 'access' | 'reports' | 'invites' | 'system'
 
 const ROLE_OPTIONS: { key: UserRole; icon: string; labelKey: 'adminRoleGuest' | 'adminRoleUser' | 'adminRoleMaster' | 'adminRoleAdmin' }[] = [
   { key: 'guest',  icon: '👤', labelKey: 'adminRoleGuest' },
@@ -59,7 +60,7 @@ const SUPABASE_CONFIGURED =
 export default function AdminDashboard() {
   const {
     editRequests, fetchEditRequests, approveEditRequest, rejectEditRequest,
-    members, deleteMember, profile,
+    members, deleteMember, profile, trees,
     accessRequests, fetchAccessRequests, decideAccessRequest, updateProfileById,
     feedback, fetchFeedback, updateFeedback, deleteFeedback,
   } = useFamilyStore()
@@ -68,6 +69,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate()
 
   const [tab, setTab] = useState<Tab>('overview')
+  const [manageTree, setManageTree] = useState<{ id: string; name: string } | null>(null)
   const [users, setUsers] = useState<AdminUser[]>([])
   const [usersLoading, setUsersLoading] = useState(false)
   // Lightweight backend health surface — if any of the admin queries
@@ -551,8 +553,8 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
         <div className="glass-strong rounded-2xl p-1 flex gap-1 shadow-glass-sm overflow-x-auto">
           {([
             ['overview', t.adminTabOverview, '📊'],
+            ['trees', t.adminTabTrees, '🌲'],
             ['users', t.adminTabUsers, '👥'],
-            ['members', t.adminTabMembers, '🌳'],
             ['requests', t.adminTabRequests, '🔔'],
             ['access', t.adminTabAccess, '🚪'],
             ['reports', t.adminTabReports, '🐞'],
@@ -775,6 +777,39 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
                     </div>
                   ))}
                 </div>
+              )}
+            </motion.div>
+          )}
+
+          {tab === 'trees' && (
+            <motion.div
+              key="trees"
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="space-y-2"
+            >
+              {trees.length === 0 ? (
+                <p className="text-center text-sf-subhead text-[#8E8E93] py-8">—</p>
+              ) : (
+                trees.map((tr) => {
+                  const count = members.filter((m) => m.tree_id === tr.id).length
+                  return (
+                    <div key={tr.id} className="flex items-center gap-3 bg-[#F2F2F7] rounded-2xl p-3">
+                      <span className="text-xl" aria-hidden>🌳</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sf-subhead font-semibold text-[#1C1C1E] truncate">{tr.name}</p>
+                        <p className="text-[11px] text-[#8E8E93]">{count} {t.adminTreesMembers}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setManageTree({ id: tr.id, name: tr.name })}
+                        className="px-3 py-1.5 rounded-xl bg-[#007AFF] text-white text-[12px] font-bold"
+                      >
+                        {t.adminTreesManage}
+                      </button>
+                    </div>
+                  )
+                })
               )}
             </motion.div>
           )}
@@ -1008,6 +1043,14 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
           open={!!editTarget}
           onClose={() => setEditTarget(null)}
           member={editTarget}
+        />
+      )}
+      {manageTree && (
+        <TreeManagePanel
+          open
+          onClose={() => setManageTree(null)}
+          treeId={manageTree.id}
+          treeName={manageTree.name}
         />
       )}
     </div>
@@ -1543,18 +1586,21 @@ interface AccessRequestCardProps {
   request: AccessRequest
   index: number
   t: Translations
-  onApprove: (role: UserRole) => void
+  onApprove: (role: TreeRole) => void
   onReject: () => void
 }
 
+// Per-tree roles the approver can grant (two-axis model). Default editor.
+const TREE_ROLE_OPTIONS: { key: TreeRole; labelKey: 'treeRoleViewer' | 'treeRoleEditor' | 'treeRoleOwner' }[] = [
+  { key: 'viewer', labelKey: 'treeRoleViewer' },
+  { key: 'editor', labelKey: 'treeRoleEditor' },
+  { key: 'owner', labelKey: 'treeRoleOwner' },
+]
+
 function AccessRequestCard({ request, index, t, onApprove, onReject }: AccessRequestCardProps) {
-  // Default to the baseline family-member role — NEVER to the role the
-  // requester asked for. Pre-seeding `requested_role` turned the green
-  // "Approve" button into a one-tap privilege-escalation funnel: a
-  // requester could pick `master`/`admin` in onboarding and a busy admin
-  // would grant it by reflex. The requested role is still shown above as
-  // a label, and the admin can deliberately raise the grant below.
-  const [grantRole, setGrantRole] = useState<UserRole>('user')
+  // Grant a per-tree role on approval (default editor — a normal
+  // contributing family member). Owners/admins can pick viewer/owner.
+  const [grantRole, setGrantRole] = useState<TreeRole>('editor')
   const answers = request.answers ?? {}
   const a = answers as Record<string, unknown>
   const relAnswer = a.relationship as string | undefined
@@ -1677,21 +1723,20 @@ function AccessRequestCard({ request, index, t, onApprove, onReject }: AccessReq
         <div className="mb-3">
           <p className="text-[10px] text-[#8E8E93] mb-1.5 font-semibold">{t.adminAccessApproveAs}</p>
           <div className="bg-[#F2F2F7] rounded-xl p-1 flex gap-1">
-            {ROLE_OPTIONS.map(r => (
+            {TREE_ROLE_OPTIONS.map(r => (
               <button
                 key={r.key}
                 type="button"
                 onClick={() => setGrantRole(r.key)}
                 aria-pressed={grantRole === r.key}
                 aria-label={t[r.labelKey]}
-                className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition flex flex-col items-center gap-0.5 ${
+                className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition ${
                   grantRole === r.key
                     ? 'bg-white text-[#1C1C1E] shadow-sm'
                     : 'text-[#636366]'
                 }`}
               >
-                <span className="text-[14px] leading-none">{r.icon}</span>
-                <span className="text-[9.5px] font-bold whitespace-nowrap">{t[r.labelKey]}</span>
+                {t[r.labelKey]}
               </button>
             ))}
           </div>

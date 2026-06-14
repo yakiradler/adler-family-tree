@@ -655,6 +655,10 @@ export default function App() {
               element={
                 !isAuth ? <Navigate to="/" replace />
                 : needsOnboarding ? <Navigate to="/onboarding" replace />
+                // Platform super-admin only. Previously ANY authenticated
+                // user could render the dashboard (RLS blocked mutations but
+                // the UI leaked) — close that gap here.
+                : profile?.role !== 'admin' ? <Navigate to="/home" replace />
                 : <AdminDashboard />
               }
             />

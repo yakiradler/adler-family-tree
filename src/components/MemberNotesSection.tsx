@@ -202,7 +202,7 @@ function NoteComposer({
   const { profile, addNote } = useFamilyStore()
   const { t } = useLang()
   const [body, setBody] = useState('')
-  const [kind, setKind] = useState<MemberNoteKind>('memory')
+  const [kind, setKind] = useState<MemberNoteKind>('comment')
   const [posting, setPosting] = useState(false)
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null)
   const [imageBusy, setImageBusy] = useState(false)
@@ -249,7 +249,7 @@ function NoteComposer({
       {/* Kind toggle — same visual language as the panel's tab bar
           so it reads as part of the same UI family. */}
       <div className="flex items-center gap-1 bg-white rounded-xl p-0.5">
-        {(['memory', 'comment'] as MemberNoteKind[]).map((k) => (
+        {(['comment', 'memory'] as MemberNoteKind[]).map((k) => (
           <button
             key={k}
             type="button"
@@ -351,7 +351,7 @@ function NoteRow({
 }: {
   note: MemberNote
   lang: 'he' | 'en'
-  t: { notesKindMemory: string; notesKindComment: string; notesAuthorAnonymous: string; notesDelete: string }
+  t: { notesKindMemory: string; notesKindComment: string; notesAuthorAnonymous: string; notesDelete: string; notesPendingApproval: string }
   canDelete: boolean
   onAskDelete: () => void
 }) {
@@ -375,6 +375,11 @@ function NoteRow({
           >
             {note.kind === 'memory' ? t.notesKindMemory : t.notesKindComment}
           </span>
+          {note.status === 'pending' && (
+            <span className="flex-shrink-0 text-[9px] font-bold rounded-full px-1.5 py-0.5 bg-[#FF9F0A]/15 text-[#B25F00]">
+              {t.notesPendingApproval}
+            </span>
+          )}
           <span className="text-[11px] font-bold text-[#1C1C1E] truncate">
             {note.author_name || t.notesAuthorAnonymous}
           </span>

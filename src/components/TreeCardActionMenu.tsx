@@ -30,9 +30,11 @@ interface Props {
   open: boolean
   onClose: () => void
   target: { id: string | null; name: string } | null
+  /** Owner/admin: open the per-tree management space for this tree. */
+  onManage?: (treeId: string, treeName: string) => void
 }
 
-export default function TreeCardActionMenu({ open, onClose, target }: Props) {
+export default function TreeCardActionMenu({ open, onClose, target, onManage }: Props) {
   const { t, lang } = useLang()
   const { profile, submitAccessRequest, trees, mintShareCode, updateTree } = useFamilyStore()
   const notifications = useFamilyStore((s) => s.notifications)
@@ -338,6 +340,14 @@ export default function TreeCardActionMenu({ open, onClose, target }: Props) {
                         onClick={copyShareLink}
                         busy={linkBusy}
                       />
+                      {onManage && target?.id && (
+                        <ActionRow
+                          icon="👥"
+                          label={t.treeManageOpen}
+                          hint={t.treeManageMembers}
+                          onClick={() => { const id = target.id!; const name = target.name; close(); onManage(id, name) }}
+                        />
+                      )}
                     </>
                   ) : null}
                 </div>
