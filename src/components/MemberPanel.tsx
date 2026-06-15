@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, type TouchEvent as ReactTouchEvent } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
@@ -48,6 +48,27 @@ export default function MemberPanel({ onClose }: Props) {
     const order = ['about', 'family', 'photos']
     setTabDir(order.indexOf(next) >= order.indexOf(tab) ? 1 : -1)
     setTab(next)
+  }
+  // Finger-swipe to move between tabs (mobile). A horizontal drag past
+  // the threshold flips to the neighbouring tab; the existing slide
+  // animation then plays in the swipe direction. Vertical drags are
+  // left alone so the sheet's drag-to-dismiss still works.
+  const swipeStart = useRef<{ x: number; y: number } | null>(null)
+  const onSwipeStart = (e: ReactTouchEvent) => {
+    swipeStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+  }
+  const onSwipeEnd = (e: ReactTouchEvent) => {
+    const start = swipeStart.current
+    swipeStart.current = null
+    if (!start) return
+    const dx = e.changedTouches[0].clientX - start.x
+    const dy = e.changedTouches[0].clientY - start.y
+    // Ignore mostly-vertical drags and small movements.
+    if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy)) return
+    const order = ['about', 'family', 'photos'] as const
+    const idx = order.indexOf(tab)
+    if (dx < 0 && idx < order.length - 1) selectTab(order[idx + 1])
+    else if (dx > 0 && idx > 0) selectTab(order[idx - 1])
   }
   const [editOpen, setEditOpen] = useState(false)
   const [relOpen, setRelOpen] = useState(false)
@@ -426,8 +447,8 @@ export default function MemberPanel({ onClose }: Props) {
           </div>
         </div>
 
-        {/* Tab content */}
-        <div className="px-4 py-3 pb-2">
+        {/* Tab content — swipe left/right to move between tabs. */}
+        <div className="px-4 py-3 pb-2" onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd}>
           <AnimatePresence mode="wait">
             {tab === 'about' && (
               <motion.div
