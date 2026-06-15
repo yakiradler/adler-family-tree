@@ -46,7 +46,12 @@ export default function MemberPanel({ onClose }: Props) {
   const [tabDir, setTabDir] = useState(0)
   const selectTab = (next: 'about' | 'family' | 'photos') => {
     const order = ['about', 'family', 'photos']
-    setTabDir(order.indexOf(next) >= order.indexOf(tab) ? 1 : -1)
+    // The new tab always slides in following the visual direction of
+    // travel. In RTL the tab strip is mirrored, so invert the sign so
+    // the slide never feels backwards.
+    let dir = order.indexOf(next) >= order.indexOf(tab) ? 1 : -1
+    if (isRTL(lang)) dir = -dir
+    setTabDir(dir)
     setTab(next)
   }
   // Finger-swipe to move between tabs (mobile). A horizontal drag past
@@ -67,8 +72,14 @@ export default function MemberPanel({ onClose }: Props) {
     if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy)) return
     const order = ['about', 'family', 'photos'] as const
     const idx = order.indexOf(tab)
-    if (dx < 0 && idx < order.length - 1) selectTab(order[idx + 1])
-    else if (dx > 0 && idx > 0) selectTab(order[idx - 1])
+    // Finger direction → which neighbouring tab. In RTL the strip is
+    // mirrored, so a left swipe moves the opposite way. selectTab then
+    // animates the slide to follow the finger consistently.
+    let delta = dx < 0 ? 1 : -1
+    if (isRTL(lang)) delta = -delta
+    const target = idx + delta
+    if (target < 0 || target >= order.length) return
+    selectTab(order[target])
   }
   const [editOpen, setEditOpen] = useState(false)
   const [relOpen, setRelOpen] = useState(false)
