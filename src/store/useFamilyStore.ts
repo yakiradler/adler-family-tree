@@ -283,6 +283,14 @@ interface FamilyState {
   approveNote: (noteId: string) => Promise<void>
   /** Owner sets a member's tree role (owner/editor/viewer). */
   setTreeMemberRole: (userId: string, treeId: string, role: TreeRole) => Promise<void>
+  /**
+   * Super-admin grants OR changes a user's role on ANY tree (even one the
+   * admin doesn't personally own). There is no `ta_update_admin` RLS
+   * policy — only owners can UPDATE tree_access — but admins DO have
+   * insert + delete, so we delete any existing grant and re-insert with
+   * the new role. Returns ok so the caller can roll back optimistic UI.
+   */
+  adminSetTreeRole: (userId: string, treeId: string, role: TreeRole) => Promise<{ ok: boolean }>
   /** Owner removes a person's access to a tree. */
   revokeTreeMember: (userId: string, treeId: string) => Promise<void>
   /** Parent flags/unflags a user as a minor (gates their social content). */
@@ -1524,6 +1532,20 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       if (error) reportSupabaseFailure('setTreeMemberRole', error)
       else if (userId === get().profile?.id) set((s) => ({ myTreeRoles: { ...s.myTreeRoles, [treeId]: role } }))
     } catch (err) { reportSupabaseFailure('setTreeMemberRole', err) }
+  },
+  adminSetTreeRole: async (userId, treeId, role) => {
+    if (!isSupabaseConfigured) return { ok: true }
+    try {
+      // No ta_update_admin policy exists — only owners can UPDATE
+      // tree_access. Admins have delete + insert, so replace the row:
+      // delete the old grant (no-op if absent), then insert the new one.
+      await supabase.from('tree_access').delete().eq('user_id', userId).eq('tree_id', treeId)
+      const { error } = await supabase.from('tree_access')
+        .insert({ user_id: userId, tree_id: treeId, role, granted_by: get().profile?.id })
+      if (error) { reportSupabaseFailure('adminSetTreeRole', error); return { ok: false } }
+      if (userId === get().profile?.id) set((s) => ({ myTreeRoles: { ...s.myTreeRoles, [treeId]: role } }))
+      return { ok: true }
+    } catch (err) { reportSupabaseFailure('adminSetTreeRole', err); return { ok: false } }
   },
   revokeTreeMember: async (userId, treeId) => {
     if (!isSupabaseConfigured) return

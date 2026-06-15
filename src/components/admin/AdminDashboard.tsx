@@ -30,6 +30,7 @@ export default function AdminDashboard() {
     members, deleteMember, profile, trees,
     accessRequests, fetchAccessRequests, decideAccessRequest,
     feedback, fetchFeedback, updateFeedback, deleteFeedback,
+    adminSetTreeRole, revokeTreeMember,
   } = useFamilyStore()
   const { t, lang } = useLang()
   const rtl = isRTL(lang)
@@ -65,6 +66,11 @@ export default function AdminDashboard() {
   // because there's no payment provider yet — the admin IS the
   // billing system.
   const [userPlans, setUserPlans] = useState<Record<string, UserPlan>>({})
+  // Per-tree roles for every user, grouped by user_id. Lets the
+  // super-admin see at a glance which trees each person belongs to and
+  // their role in each (viewer/editor/owner) — and change or revoke it
+  // from here. Loaded via the admin tree_access SELECT policy.
+  const [treeAccessByUser, setTreeAccessByUser] = useState<Record<string, { tree_id: string; role: TreeRole }[]>>({})
 
   // ─── CRM actions (work in demo via local state; in live via Supabase) ──
   //
@@ -251,8 +257,40 @@ export default function AdminDashboard() {
           setUserPlans(map)
         }
       })()
+      // Every user's per-tree roles (admin tree_access SELECT policy).
+      ;(async () => {
+        const { data } = await supabase.from('tree_access').select('user_id, tree_id, role')
+        if (Array.isArray(data)) {
+          const map: Record<string, { tree_id: string; role: TreeRole }[]> = {}
+          for (const row of data as { user_id: string; tree_id: string; role: TreeRole }[]) {
+            ;(map[row.user_id] ??= []).push({ tree_id: row.tree_id, role: row.role })
+          }
+          setTreeAccessByUser(map)
+        }
+      })()
     }
   }, [fetchEditRequests, fetchAccessRequests, fetchFeedback])
+
+  // Super-admin changes / grants a user's role on a tree. Optimistic
+  // local update + rollback if the delete-then-insert in the store
+  // reports a failure. Used by the per-user "roles in trees" editor.
+  const changeTreeRole = async (userId: string, treeId: string, role: TreeRole) => {
+    const prev = treeAccessByUser
+    setTreeAccessByUser((m) => {
+      const rows = (m[userId] ?? []).filter((r) => r.tree_id !== treeId)
+      return { ...m, [userId]: [...rows, { tree_id: treeId, role }] }
+    })
+    const { ok } = await adminSetTreeRole(userId, treeId, role)
+    if (!ok) { setTreeAccessByUser(prev); reportRlsBlock('update') }
+  }
+  const removeTreeRole = async (userId: string, treeId: string) => {
+    const prev = treeAccessByUser
+    setTreeAccessByUser((m) => ({ ...m, [userId]: (m[userId] ?? []).filter((r) => r.tree_id !== treeId) }))
+    await revokeTreeMember(userId, treeId)
+    // revokeTreeMember reports its own failures; re-sync from prev only
+    // if the row unexpectedly persists is handled by the next reload.
+    void prev
+  }
 
   // Admin-applied tier change (Phase A "billing"): upsert only the
   // plan column so the leaf balance is untouched.
@@ -687,6 +725,10 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
                         onToggleActive={toggleUserActive}
                         onRemove={removeUser}
                         onRestore={restoreUser}
+                        trees={trees}
+                        treeRoles={treeAccessByUser[u.id] ?? []}
+                        onChangeTreeRole={changeTreeRole}
+                        onRemoveTreeRole={removeTreeRole}
                       />
                       {/* Subscription controls — the manual "billing
                           desk" of Phase A. */}
@@ -1051,6 +1093,7 @@ function ProgressRow({ label, count, total, color }: { label: string; count: num
 
 function UserRow({
   user, t, rtl, demo, lang, onSetSuperAdmin, onToggleActive, onRemove, onRestore,
+  trees, treeRoles, onChangeTreeRole, onRemoveTreeRole,
 }: {
   user: AdminUser
   t: Translations
@@ -1061,6 +1104,10 @@ function UserRow({
   onToggleActive: (u: AdminUser) => void
   onRemove: (u: AdminUser) => void
   onRestore: (u: AdminUser) => void
+  trees: { id: string; name: string }[]
+  treeRoles: { tree_id: string; role: TreeRole }[]
+  onChangeTreeRole: (userId: string, treeId: string, role: TreeRole) => void
+  onRemoveTreeRole: (userId: string, treeId: string) => void
 }) {
   const joined = user.created_at
     ? new Date(user.created_at).toLocaleDateString(rtl ? 'he-IL' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })
@@ -1070,6 +1117,12 @@ function UserRow({
   // (profiles.role === 'admin'). Per-tree power lives in tree_access
   // and is managed from the tree's own management panel.
   const isAdmin = user.role === 'admin'
+  // Group this user's per-tree roles for the "roles in trees" editor:
+  // trees they belong to (with a role picker) vs trees they could be
+  // added to.
+  const roleByTree = new Map(treeRoles.map((r) => [r.tree_id, r.role]))
+  const memberTrees = trees.filter((tr) => roleByTree.has(tr.id))
+  const otherTrees = trees.filter((tr) => !roleByTree.has(tr.id))
 
   const handleReset = async () => {
     if (demo) { void alertDialog({ message: t.adminDemoAlert }); return }
@@ -1160,6 +1213,65 @@ function UserRow({
           {lang === 'he'
             ? `מושעה מאז ${new Date(user.deleted_at).toLocaleDateString('he-IL', { year: 'numeric', month: 'short', day: 'numeric' })} — יוסר אוטומטית אחרי 30 יום`
             : `Suspended since ${new Date(user.deleted_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })} — auto-removed after 30 days`}
+        </div>
+      )}
+
+      {/* Roles in trees — at-a-glance view of every tree this user
+          belongs to and their role in each, with inline change/revoke
+          and add-to-tree. This is the per-tree authority that replaced
+          the old global role tiers. */}
+      {!demo && (
+        <div className="mt-3 rounded-2xl bg-[#F2F2F7]/60 p-3 space-y-2">
+          <p className="text-sf-caption font-bold text-[#1C1C1E]">{t.adminUserTreesTitle}</p>
+          {memberTrees.length === 0 ? (
+            <p className="text-[11px] text-[#8E8E93]">{t.adminUserTreesNone}</p>
+          ) : (
+            memberTrees.map((tr) => {
+              const role = roleByTree.get(tr.id)
+              return (
+                <div key={tr.id} className="flex items-center gap-2 flex-wrap">
+                  <span className="flex-1 min-w-0 truncate text-[12px] font-semibold text-[#1C1C1E]">🌳 {tr.name}</span>
+                  <div className="bg-white rounded-lg p-0.5 flex gap-0.5">
+                    {TREE_ROLE_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => onChangeTreeRole(user.id, tr.id, opt.key)}
+                        aria-pressed={role === opt.key}
+                        className={`px-2 py-1 rounded-md text-[10.5px] font-bold transition ${
+                          role === opt.key ? 'bg-[#007AFF] text-white' : 'text-[#636366] hover:bg-[#F2F2F7]'
+                        }`}
+                      >
+                        {t[opt.labelKey]}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onRemoveTreeRole(user.id, tr.id)}
+                    className="text-[10.5px] font-bold text-[#FF3B30] px-1.5 py-1 rounded-md hover:bg-[#FF3B30]/10"
+                  >
+                    {t.adminUserRemoveFromTree}
+                  </button>
+                </div>
+              )
+            })
+          )}
+          {otherTrees.length > 0 && (
+            <div className="flex items-center gap-2 pt-1">
+              <span className="text-[11px] text-[#8E8E93]">{t.adminUserAddToTree}:</span>
+              <select
+                value=""
+                onChange={(e) => { if (e.target.value) onChangeTreeRole(user.id, e.target.value, 'editor') }}
+                className="flex-1 min-w-0 text-[11px] font-semibold text-[#1C1C1E] bg-white rounded-lg px-2 py-1 outline-none"
+              >
+                <option value="">{t.adminUserAddToTreePick}</option>
+                {otherTrees.map((tr) => (
+                  <option key={tr.id} value={tr.id}>{tr.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       )}
     </div>
