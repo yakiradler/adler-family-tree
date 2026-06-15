@@ -286,7 +286,10 @@ export default function App() {
           }),
         )
         for (const k of LEGACY_KEYS) window.localStorage.removeItem(k)
-        window.dispatchEvent(new CustomEvent('ft-saved'))
+        // NOTE: autosave is intentionally SILENT — it runs on every state
+        // change (incl. data loads) so dispatching 'ft-saved' here made
+        // the green "נשמר" pill flash constantly. The pill now fires only
+        // from explicit user saves (see lib/saved.ts → notifySaved()).
       } catch (err) {
         const reason =
           err instanceof Error && err.name === 'QuotaExceededError'

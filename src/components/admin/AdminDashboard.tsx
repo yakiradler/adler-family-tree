@@ -36,7 +36,17 @@ export default function AdminDashboard() {
   const rtl = isRTL(lang)
   const navigate = useNavigate()
 
-  const [tab, setTab] = useState<Tab>('overview')
+  // Open straight to the requests/reports inbox when arriving from a
+  // notification (the bell/toast set this flag before navigating).
+  const [tab, setTab] = useState<Tab>(() => {
+    try {
+      if (sessionStorage.getItem('ft-admin-open-inbox') === '1') {
+        sessionStorage.removeItem('ft-admin-open-inbox')
+        return 'inbox'
+      }
+    } catch { /* ignore */ }
+    return 'overview'
+  })
   const [manageTree, setManageTree] = useState<{ id: string; name: string } | null>(null)
   const [users, setUsers] = useState<AdminUser[]>([])
   const [usersLoading, setUsersLoading] = useState(false)

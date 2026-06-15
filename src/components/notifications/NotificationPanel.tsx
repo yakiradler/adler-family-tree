@@ -107,7 +107,7 @@ export default function NotificationPanel({ open, onClose }: Props) {
                     <div
                       key={n.id}
                       role={clickable ? 'button' : undefined}
-                      onClick={clickable ? () => { onClose(); navigate('/admin') } : undefined}
+                      onClick={clickable ? () => { onClose(); try { sessionStorage.setItem('ft-admin-open-inbox', '1') } catch { /* ignore */ } navigate('/admin') } : undefined}
                       className={[
                         'rounded-2xl px-3 py-2.5 flex items-start gap-2.5',
                         n.read_at == null ? 'bg-[#007AFF]/8' : 'bg-[#F2F2F7]',

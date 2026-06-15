@@ -20,6 +20,28 @@ function canDecideEditRequest(
   if (profile.linked_member_id && profile.linked_member_id === targetMemberId) return true
   return canWriteTree(targetMemberTreeId ? myTreeRoles[targetMemberTreeId] : undefined)
 }
+
+/**
+ * Resolve display names for a set of requester ids. We can't embed
+ * `profiles:requester_id` in the request queries because requester_id FKs
+ * to auth.users (not profiles) — that embed errors the whole query — so we
+ * look the names up separately. Returns {} on error (names fall back to
+ * 'Unknown'), never throws.
+ */
+async function fetchProfileNames(ids: (string | null | undefined)[]): Promise<Record<string, string>> {
+  const unique = [...new Set(ids.filter(Boolean) as string[])]
+  if (unique.length === 0) return {}
+  try {
+    const { data } = await supabase.from('profiles').select('id, full_name').in('id', unique)
+    const out: Record<string, string> = {}
+    for (const p of (data ?? []) as { id: string; full_name: string | null }[]) {
+      if (p.full_name) out[p.id] = p.full_name
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
 import { resolveRequestTreeId } from '../lib/accessRequests'
 import { gateAddMember, gateAddTree, SIGNUP_GIFT_LEAVES, TRIAL_DAYS } from '../lib/plans'
 import { isShareCodeRequest, mergeNotificationLists } from '../lib/notifications'
@@ -469,25 +491,28 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   },
 
   fetchEditRequests: async () => {
+    // NOTE: requester_id FKs to auth.users, NOT profiles, so a PostgREST
+    // embed `profiles:requester_id(...)` cannot resolve and makes the
+    // WHOLE query error (→ admin sees "no requests" forever). We embed
+    // only `members` (a real FK) and resolve requester names in a second
+    // query. members:target_member_id is a genuine FK so that embed is OK.
     const { data, error } = await supabase
       .from('edit_requests')
-      .select(`*, profiles:requester_id(full_name), members:target_member_id(first_name, last_name)`)
+      .select(`*, members:target_member_id(first_name, last_name)`)
       .eq('status', 'pending')
       .order('created_at', { ascending: false })
 
     if (error) {
-      // Surface this — previously the admin would see "no requests"
-      // forever even when the backend was returning errors (RLS
-      // blocked, table missing). We now log + keep whatever optimistic
-      // state was there before so the UI doesn't silently empty out.
       reportSupabaseFailure('fetchEditRequests', error, 'read')
       return
     }
 
-    const mapped = (data ?? []).map((r: Record<string, unknown>) => ({
+    const rows = (data ?? []) as Record<string, unknown>[]
+    const names = await fetchProfileNames(rows.map((r) => r.requester_id as string))
+    const mapped = rows.map((r) => ({
       id: r.id as string,
       requester_id: r.requester_id as string,
-      requester_name: (r.profiles as { full_name: string } | null)?.full_name ?? 'Unknown',
+      requester_name: names[r.requester_id as string] ?? 'Unknown',
       target_member_id: r.target_member_id as string,
       target_member_name: r.members
         ? `${(r.members as { first_name: string; last_name: string }).first_name} ${(r.members as { first_name: string; last_name: string }).last_name}`
@@ -859,18 +884,24 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   accessRequests: [],
 
   fetchAccessRequests: async () => {
+    // requester_id FKs to auth.users (not profiles) — see fetchEditRequests.
+    // The `profiles:requester_id` embed errors out the whole query, which
+    // is exactly why the admin inbox showed nothing. Fetch plainly and
+    // resolve names separately.
     const { data, error } = await supabase
       .from('access_requests')
-      .select(`*, profiles:requester_id(full_name)`)
+      .select('*')
       .order('created_at', { ascending: false })
     if (error) {
       reportSupabaseFailure('fetchAccessRequests', error, 'read')
       return  // keep optimistic state intact
     }
-    const mapped: AccessRequest[] = (data ?? []).map((r: Record<string, unknown>) => ({
+    const rows = (data ?? []) as Record<string, unknown>[]
+    const names = await fetchProfileNames(rows.map((r) => r.requester_id as string))
+    const mapped: AccessRequest[] = rows.map((r) => ({
       id: r.id as string,
       requester_id: r.requester_id as string,
-      requester_name: (r.profiles as { full_name: string } | null)?.full_name ?? 'Unknown',
+      requester_name: names[r.requester_id as string] ?? 'Unknown',
       requested_role: r.requested_role as UserRole,
       answers: (r.answers as Record<string, unknown>) ?? {},
       invite_code: (r.invite_code as string | null) ?? null,

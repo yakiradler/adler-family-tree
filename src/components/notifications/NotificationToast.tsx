@@ -58,7 +58,7 @@ export default function NotificationToast() {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -24, scale: 0.96 }}
           transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-          onClick={() => { if (toast.toAdmin) navigate('/admin'); setToast(null) }}
+          onClick={() => { if (toast.toAdmin) { try { sessionStorage.setItem('ft-admin-open-inbox', '1') } catch { /* ignore */ } navigate('/admin') } setToast(null) }}
           className="fixed top-3 inset-x-0 mx-auto z-[200] w-[min(92%,420px)] flex items-center gap-2.5 rounded-2xl bg-white/95 backdrop-blur shadow-glass-lg border border-black/5 px-3.5 py-3 text-start active:scale-[0.99] transition"
           dir="auto"
         >

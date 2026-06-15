@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
 import { alertDialog } from '../lib/confirm'
+import { notifySaved } from '../lib/saved'
 import { useCloseOnBack } from '../hooks/useCloseOnBack'
 import { PersonAvatarIcon } from './MemberNode'
 import { getRingGradient, getFallbackGradient } from './memberVisuals'
@@ -187,6 +188,7 @@ export default function EditMemberModal({ open, onClose, member, suggestMode = f
       return
     }
     await updateMember(member.id, changes)
+    notifySaved()
     setSaving(false)
     onClose()
   }

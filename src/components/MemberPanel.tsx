@@ -17,6 +17,7 @@ import { canEditMember, canManageRelationships, computeNuclearFamilyIds, canWrit
 import { getParentMap, resolveLineage } from '../lib/lineage'
 import { uploadMemberPhoto } from '../lib/photoUpload'
 import { alertDialog } from '../lib/confirm'
+import { notifySaved } from '../lib/saved'
 import type { Member, SpouseStatus } from '../types'
 
 interface Props {
@@ -55,6 +56,7 @@ function ContactEditor({ member, direct, onClose }: { member: Member; direct: bo
     const contact = Object.values(next).some(Boolean) ? next : null
     if (direct) {
       await updateMember(member.id, { contact })
+      notifySaved()
     } else {
       const ok = await submitEditRequest(member.id, { contact })
       if (ok) await alertDialog({ message: t.contactSuggestSent })
