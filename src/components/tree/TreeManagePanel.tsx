@@ -4,6 +4,7 @@ import { supabase, isSupabaseConfigured } from '../../lib/supabase'
 import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang, isRTL } from '../../i18n/useT'
 import { useCloseOnBack } from '../../hooks/useCloseOnBack'
+import { confirmDialog } from '../../lib/confirm'
 import { isAdmin } from '../../lib/permissions'
 import type { TreeRole } from '../../types'
 
@@ -118,7 +119,11 @@ export default function TreeManagePanel({
                         <div key={r.user_id} className="bg-[#F2F2F7] rounded-2xl p-3">
                           <div className="flex items-center justify-between gap-2 mb-2">
                             <span className="text-sf-subhead font-semibold text-[#1C1C1E] truncate">{r.full_name}</span>
-                            <button type="button" onClick={() => { void revokeTreeMember(r.user_id, treeId); setRows((s) => s.filter((x) => x.user_id !== r.user_id)) }}
+                            <button type="button" onClick={() => { void (async () => {
+                                if (!(await confirmDialog({ message: t.treeManageRevokeConfirm, danger: true }))) return
+                                void revokeTreeMember(r.user_id, treeId)
+                                setRows((s) => s.filter((x) => x.user_id !== r.user_id))
+                              })() }}
                               className="text-[11px] font-semibold text-[#FF3B30]">{t.treeManageRevoke}</button>
                           </div>
                           <div className="flex items-center gap-1.5">

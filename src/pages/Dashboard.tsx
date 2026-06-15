@@ -11,17 +11,13 @@ import AccessRequestStatusToast from '../components/AccessRequestStatusToast'
 import NotificationBell from '../components/notifications/NotificationBell'
 import { PersonAvatarIcon } from '../components/MemberNode'
 import { getRingGradient, getFallbackGradient } from '../components/memberVisuals'
-import AIScanModal from '../components/ai/AIScanModal'
-import BuildFromTextModal from '../components/BuildFromTextModal'
+import ComingSoonModal from '../components/ComingSoonModal'
 import BrandMark from '../components/BrandMark'
 import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
 import { shouldAutoStartTutorial, markTutorialAutoStarted } from '../lib/firstRunTutorial'
-import { downloadMyData } from '../lib/exportMyData'
 import JoinTreeModal from '../components/JoinTreeModal'
 import SecuritySettingsModal from '../components/security/SecuritySettingsModal'
 import PlanCard, { LeafIcon } from '../components/plan/PlanCard'
-import { LEAF_COSTS } from '../lib/plans'
-import { confirmDialog, alertDialog } from '../lib/confirm'
 import TreeCardActionMenu from '../components/TreeCardActionMenu'
 import TreeManagePanel from '../components/tree/TreeManagePanel'
 import type { Member, Relationship } from '../types'
@@ -140,11 +136,12 @@ export default function Dashboard({ demoMode }: Props) {
   const { t, lang, toggleLang } = useLang()
   const dir = isRTL(lang) ? 'rtl' : 'ltr'
   const navigate = useNavigate()
-  const [aiScanOpen, setAiScanOpen] = useState(false)
-  // Two "coming soon" placeholder features the user wants visible in
-  // the UI now so the affordance exists; the modal explains what's
-  // coming and when. Wired to actual backends in a follow-up.
-  const [aiTreeFromTextOpen, setAiTreeFromTextOpen] = useState(false)
+  // AI tools (photo scan, build-from-text, photo enhancement) are
+  // consolidated behind ONE "כלי AI" tile that opens a coming-soon
+  // modal. The real tools (AIScanModal / BuildFromTextModal) still
+  // live in the codebase, just unwired, until they're ready for
+  // everyone. See ComingSoonModal at the page root below.
+  const [aiToolsOpen, setAiToolsOpen] = useState(false)
   // Long-press / right-click → tree-card context menu. `null` when
   // closed; otherwise carries the tree summary the user invoked on
   // so we can show its name in the sheet title.
@@ -175,25 +172,8 @@ export default function Dashboard({ demoMode }: Props) {
   // Account-security modal (opt-in two-factor) — real backend only.
   const [securityOpen, setSecurityOpen] = useState(false)
 
-  // AI actions cost leaves (subscription Phase A; admins exempt):
-  // confirm the price → atomic charge → open the tool. A failed charge
-  // means an empty balance, surfaced inline.
-  const spendLeaves = useFamilyStore((s) => s.spendLeaves)
+  // Leaf balance for the header pill (subscription Phase A).
   const myPlan = useFamilyStore((s) => s.myPlan)
-  const openAiAction = async (kind: 'scan' | 'treeFromText') => {
-    const cost = kind === 'scan' ? LEAF_COSTS.aiScan : LEAF_COSTS.aiTreeFromText
-    const open = () => (kind === 'scan' ? setAiScanOpen(true) : setAiTreeFromTextOpen(true))
-    if (isAdmin(profile)) {
-      open()
-      return
-    }
-    if (!(await confirmDialog({ message: t.aiCostConfirm.replace('{n}', String(cost)) }))) return
-    if (await spendLeaves(cost, kind === 'scan' ? 'ai-scan' : 'ai-tree-from-text')) {
-      open()
-    } else {
-      await alertDialog({ message: t.aiNoLeaves.replace('{n}', String(cost)) })
-    }
-  }
   // The tutorial no longer auto-launches on first paint — it stacked on top
   // of the install prompt + version modal and overwhelmed new users. It stays
   // one tap away via the "🎓" tile and the help menu.
@@ -855,18 +835,11 @@ export default function Dashboard({ demoMode }: Props) {
             />
             <AppTile
               index={2}
-              icon="✨"
-              label={t.aiScanTitle}
+              icon="🧰"
+              label={t.aiToolsLabel}
               gradient="from-[#5E5CE6] to-[#BF5AF2]"
-              onClick={() => openAiAction('scan')}
-            />
-            <AppTile
-              index={3}
-              icon="📝"
-              label={t.aiTreeFromTextLabel}
-              gradient="from-[#FF9F0A] to-[#FF375F]"
-              onClick={() => openAiAction('treeFromText')}
-              tooltip={t.btfSubtitle}
+              onClick={() => setAiToolsOpen(true)}
+              tooltip={t.aiToolsComingSoon}
             />
             <div data-tour="dash-tutorial-tile">
               <AppTile
@@ -890,16 +863,6 @@ export default function Dashboard({ demoMode }: Props) {
               onClick={() => setJoinTreeOpen(true)}
               tooltip={t.quickAccessJoinTreeHint}
             />
-            {/* Every user can download their own data — a personal
-                backup in their hands. Pure client-side export. */}
-            <AppTile
-              index={7}
-              icon="💾"
-              label={t.myDataTile}
-              gradient="from-[#34C759] to-[#30D158]"
-              onClick={() => downloadMyData()}
-              tooltip={t.myDataTileHint}
-            />
             {isAdmin(profile) && (
               <AppTile
                 index={8}
@@ -921,27 +884,18 @@ export default function Dashboard({ demoMode }: Props) {
             getting buried below the fold. */}
       </div>
 
-      {/* AI Scan modal — mounted at the page root so backdrop covers everything. */}
-      <AIScanModal
-        open={aiScanOpen}
-        onClose={() => setAiScanOpen(false)}
-        onAdded={(count) => {
-          void alertDialog({ message: `${count} ${t.aiScanAddedCount} ✓` })
-        }}
-      />
-
-      {/* Build-from-text — local parser modal (no API, ships in main
-          bundle). The matching tile launches this directly; the older
-          "Coming Soon" placeholder lives on only for the photo-enhance
-          tile below, which is still pending an API. */}
-      <BuildFromTextModal
-        open={aiTreeFromTextOpen}
-        onClose={() => setAiTreeFromTextOpen(false)}
-        onAdded={(count) => {
-          if (count > 0) {
-            void alertDialog({ message: `${count} ${lang === 'he' ? 'אנשים נוספו לעץ ✓' : 'people added to the tree ✓'}` })
-          }
-        }}
+      {/* "כלי AI" — one tile for all the AI features (photo scan,
+          build-from-text, photo enhancement). They're not ready for
+          everyone yet, so the tile pops a friendly "in development"
+          modal. The real modals still live in the codebase (unwired)
+          and get re-attached here once they go live. */}
+      <ComingSoonModal
+        open={aiToolsOpen}
+        onClose={() => setAiToolsOpen(false)}
+        icon="🧰"
+        title={t.aiToolsLabel}
+        description={t.aiToolsComingSoon}
+        bullets={[t.aiToolsBulletScan, t.aiToolsBulletText, t.aiToolsBulletEnhance]}
       />
 
       {/* Interactive tutorial. Launches automatically on first visit

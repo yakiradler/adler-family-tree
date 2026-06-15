@@ -12,6 +12,7 @@ import { PersonAvatarIcon } from '../MemberNode'
 import { getRingGradient, getFallbackGradient } from '../memberVisuals'
 import type { EditRequest, Member, Profile, UserRole, TreeRole, AccessRequest, UserPlan, PlanId } from '../../types'
 import { adminInboxCounts } from '../../lib/notifications'
+import { fieldLabel, formatValue } from '../../lib/editRequestDisplay'
 
 type Tab = 'overview' | 'users' | 'members' | 'trees' | 'inbox' | 'invites' | 'system'
 
@@ -654,7 +655,7 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <BigStat label={t.membersCount} value={members.length} icon="👨‍👩‍👧" grad="from-[#007AFF] to-[#32ADE6]" />
                 <BigStat label={t.adminTabUsers} value={users.length} icon="👤" grad="from-[#32ADE6] to-[#5AC8FA]" />
-                <BigStat label={t.adminTabRequests} value={pendingCount} icon="🔔" grad="from-[#5AC8FA] to-[#64D2FF]" />
+                <BigStat label={t.adminTabRequests} value={pendingCount} icon="🔔" grad="from-[#5AC8FA] to-[#64D2FF]" onClick={() => setTab('inbox')} />
                 <BigStat label={t.statDeceased} value={deceased} icon="🕯️" grad="from-[#8E8E93] to-[#636366]" />
               </div>
 
@@ -667,41 +668,31 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
                 </div>
               </div>
 
-              {/* Unified inbox — one card, four queues, each a direct
-                  jump to its tab. Answers "כמה בקשות מחכות לי" at a
-                  glance instead of forcing a tab-by-tab hunt. */}
-              <div className="glass-strong rounded-3xl p-5 shadow-glass">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sf-subhead font-bold text-[#1C1C1E]">📥 {t.adminInboxTitle}</h3>
-                  {pendingCount > 0 && (
-                    <span className="w-7 h-7 bg-[#FF3B30] rounded-full flex items-center justify-center text-white text-[11px] font-bold">
-                      {pendingCount}
-                    </span>
-                  )}
+              {/* Unified inbox — everything (access / edit / share-code /
+                  feedback) lives in ONE "בקשות ודיווחים" tab. The overview
+                  shows a single clear entry point that opens it, instead of
+                  a confusing per-queue breakdown that all led to the same
+                  place. */}
+              <button
+                type="button"
+                onClick={() => setTab('inbox')}
+                className="w-full glass-strong rounded-3xl p-5 shadow-glass flex items-center justify-between gap-3 text-start hover:bg-white/60 transition"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="text-2xl" aria-hidden>📥</span>
+                  <div className="min-w-0">
+                    <h3 className="text-sf-subhead font-bold text-[#1C1C1E] truncate">{t.adminInboxTitle}</h3>
+                    <p className="text-[11px] text-[#8E8E93]">
+                      {pendingCount > 0 ? t.adminInboxOpen : t.adminInboxAllClear}
+                    </p>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {([
-                    [t.adminInboxEdits, '✏️', inbox.edits],
-                    [t.adminInboxAccess, '🚪', inbox.access],
-                    [t.adminInboxShareCodes, '🔑', inbox.shareCodes],
-                    [t.adminInboxReports, '🐞', inbox.reports],
-                  ] as const).map(([label, icon, count], i) => (
-                    <button
-                      key={`inbox-${i}`}
-                      onClick={() => setTab('inbox')}
-                      className="rounded-2xl bg-white/70 border border-white/60 px-3 py-2.5 flex flex-col items-center gap-1 hover:bg-white transition"
-                    >
-                      <span className="text-lg" aria-hidden>{icon}</span>
-                      <span className={`text-[18px] font-extrabold leading-none ${count > 0 ? 'text-[#FF3B30]' : 'text-[#1C1C1E]'}`}>
-                        {count}
-                      </span>
-                      <span className="text-[10px] text-[#636366] font-semibold text-center leading-tight">
-                        {label}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+                {pendingCount > 0 && (
+                  <span className="flex-shrink-0 min-w-7 h-7 px-2 bg-[#FF3B30] rounded-full flex items-center justify-center text-white text-[12px] font-bold">
+                    {pendingCount}
+                  </span>
+                )}
+              </button>
             </motion.div>
           )}
 
@@ -1078,11 +1069,14 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
-function BigStat({ label, value, icon, grad }: { label: string; value: number; icon: string; grad: string }) {
+function BigStat({ label, value, icon, grad, onClick }: { label: string; value: number; icon: string; grad: string; onClick?: () => void }) {
   return (
     <motion.div
       whileHover={{ y: -2 }}
-      className={`relative overflow-hidden rounded-2xl p-3 shadow-glass-sm text-white bg-gradient-to-br ${grad}`}
+      whileTap={onClick ? { scale: 0.97 } : undefined}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      className={`relative overflow-hidden rounded-2xl p-3 shadow-glass-sm text-white bg-gradient-to-br ${grad} ${onClick ? 'cursor-pointer' : ''}`}
     >
       <div className="absolute -top-4 -right-4 w-14 h-14 bg-white/15 rounded-full blur-xl" />
       <div className="relative flex flex-col items-start gap-0.5">
@@ -1538,7 +1532,7 @@ interface RequestCardProps {
   request: EditRequest
   index: number
   t: Translations
-  lang: string
+  lang: 'he' | 'en'
   onApprove: () => void
   onReject: () => void
 }
@@ -1568,8 +1562,8 @@ function RequestCard({ request, index, t, lang, onApprove, onReject }: RequestCa
         <p className="text-sf-caption font-semibold text-[#8E8E93] uppercase tracking-wider">{t.proposedChanges}</p>
         {changes.map(([key, value]) => (
           <div key={key} className="flex items-center gap-2">
-            <span className="text-sf-caption text-[#636366] capitalize">{key.replace('_', ' ')}:</span>
-            <span className="text-sf-caption font-medium text-[#1C1C1E] truncate">{String(value)}</span>
+            <span className="text-sf-caption text-[#636366]">{fieldLabel(key, t)}:</span>
+            <span className="text-sf-caption font-medium text-[#1C1C1E] truncate">{formatValue(key, value, lang)}</span>
           </div>
         ))}
       </div>

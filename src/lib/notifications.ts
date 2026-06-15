@@ -33,6 +33,8 @@ export interface NotificationDisplay {
     | 'notifTypeShareCodeRequest'
     | 'notifTypeEditRequest'
     | 'notifTypeFeedback'
+    | 'notifTypeFeedbackBug'
+    | 'notifTypeFeedbackQuestion'
     | 'notifApprovedWithCode'
     | 'notifApproved'
     | 'notifRejected'
@@ -57,8 +59,16 @@ export function notificationDisplay(n: NotificationItem): NotificationDisplay {
       return { key: 'notifTypeShareCodeRequest', icon: '🔑', params: { name, tree }, navigatesToAdmin: true }
     case 'edit_request':
       return { key: 'notifTypeEditRequest', icon: '✏️', params: { name }, navigatesToAdmin: true }
-    case 'feedback':
+    case 'feedback': {
+      // Distinguish a question from a bug so the admin knows at a glance
+      // what kind of report came in (data.category set by the trigger).
+      const category = typeof d.category === 'string' ? d.category : undefined
+      if (category === 'question')
+        return { key: 'notifTypeFeedbackQuestion', icon: '❓', params: { name }, navigatesToAdmin: true }
+      if (category === 'bug')
+        return { key: 'notifTypeFeedbackBug', icon: '🐞', params: { name }, navigatesToAdmin: true }
       return { key: 'notifTypeFeedback', icon: '🐞', params: { name }, navigatesToAdmin: true }
+    }
     case 'request_approved':
       return code
         ? { key: 'notifApprovedWithCode', icon: '🎉', params: { tree, code }, navigatesToAdmin: false }
