@@ -15,6 +15,7 @@ import ComingSoonModal from '../components/ComingSoonModal'
 import BrandMark from '../components/BrandMark'
 import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
 import { shouldAutoStartTutorial, markTutorialAutoStarted } from '../lib/firstRunTutorial'
+import { nextHebrewBirthday } from '../lib/hebrewDate'
 import JoinTreeModal from '../components/JoinTreeModal'
 import SecuritySettingsModal from '../components/security/SecuritySettingsModal'
 import PlanCard, { LeafIcon } from '../components/plan/PlanCard'
@@ -26,17 +27,34 @@ interface Props { demoMode: boolean }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function getUpcomingBirthdays(members: Member[], days = 60) {
+interface UpcomingBirthday {
+  member: Member
+  daysUntil: number
+  nextDate: Date
+  calendar: 'gregorian' | 'hebrew'
+  hebrewLabel?: string
+}
+
+function getUpcomingBirthdays(members: Member[], days = 60): UpcomingBirthday[] {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   return members
     .filter(m => m.birth_date && !m.death_date)
-    .map(m => {
+    .map((m): UpcomingBirthday => {
+      // Gregorian anniversary.
       const bd = new Date(m.birth_date!)
-      const next = new Date(today.getFullYear(), bd.getMonth(), bd.getDate())
-      if (next < today) next.setFullYear(today.getFullYear() + 1)
-      const diff = Math.round((next.getTime() - today.getTime()) / 86400000)
-      return { member: m, daysUntil: diff, nextDate: next }
+      const greg = new Date(today.getFullYear(), bd.getMonth(), bd.getDate())
+      if (greg < today) greg.setFullYear(today.getFullYear() + 1)
+      const gregDiff = Math.round((greg.getTime() - today.getTime()) / 86400000)
+      // Real Hebrew-calendar anniversary (lib/hebrewDate, @hebcal/core).
+      const heb = nextHebrewBirthday(m.birth_date, today)
+      const hebDiff = heb ? Math.round((heb.nextDate.getTime() - today.getTime()) / 86400000) : Infinity
+      // Surface whichever celebration comes sooner so a member's Hebrew
+      // birthday alerts correctly even when its civil date differs.
+      if (heb && hebDiff < gregDiff) {
+        return { member: m, daysUntil: hebDiff, nextDate: heb.nextDate, calendar: 'hebrew', hebrewLabel: heb.hebrewLabel }
+      }
+      return { member: m, daysUntil: gregDiff, nextDate: greg, calendar: 'gregorian' }
     })
     .filter(x => x.daysUntil <= days)
     .sort((a, b) => a.daysUntil - b.daysUntil)
@@ -778,7 +796,7 @@ export default function Dashboard({ demoMode }: Props) {
             </div>
           ) : (
             <div className="space-y-1.5">
-              {upcoming.map(({ member, daysUntil, nextDate }) => (
+              {upcoming.map(({ member, daysUntil, nextDate, calendar, hebrewLabel }) => (
                 <button
                   key={member.id}
                   onClick={() => openMember(member.id)}
@@ -789,8 +807,10 @@ export default function Dashboard({ demoMode }: Props) {
                     <p className="text-sf-subhead font-semibold text-[#1C1C1E] truncate">
                       {member.first_name} {member.last_name}
                     </p>
-                    <p className="text-sf-caption text-[#8E8E93]">
-                      {nextDate.toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-US', { month: 'long', day: 'numeric' })}
+                    <p className="text-sf-caption text-[#8E8E93] truncate">
+                      {calendar === 'hebrew' && hebrewLabel
+                        ? `${hebrewLabel} · ${nextDate.toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-US', { month: 'long', day: 'numeric' })}`
+                        : nextDate.toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-US', { month: 'long', day: 'numeric' })}
                     </p>
                   </div>
                   <span className={`text-[11px] font-bold rounded-full px-2.5 py-1 ${

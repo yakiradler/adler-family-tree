@@ -18,6 +18,7 @@ import { getParentMap, resolveLineage } from '../lib/lineage'
 import { uploadMemberPhoto } from '../lib/photoUpload'
 import { alertDialog } from '../lib/confirm'
 import { notifySaved } from '../lib/saved'
+import { gregorianToHebrew } from '../lib/hebrewDate'
 import type { Member, SpouseStatus } from '../types'
 
 interface Props {
@@ -579,10 +580,10 @@ export default function MemberPanel({ onClose }: Props) {
                 className="space-y-2.5"
               >
                 {member.birth_date && (
-                  <InfoRow icon="🎂" label={t.bornLabel} value={formatDate(member.birth_date, lang)} sub={member.hebrew_birth_date} />
+                  <InfoRow icon="🎂" label={t.bornLabel} value={formatDate(member.birth_date, lang)} sub={gregorianToHebrew(member.birth_date) || member.hebrew_birth_date} />
                 )}
                 {member.death_date && (
-                  <InfoRow icon="🕯️" label={t.diedLabel} value={formatDate(member.death_date, lang)} sub={member.hebrew_death_date} />
+                  <InfoRow icon="🕯️" label={t.diedLabel} value={formatDate(member.death_date, lang)} sub={gregorianToHebrew(member.death_date) || member.hebrew_death_date} />
                 )}
                 {member.bio && (
                   <div className="bg-[#F2F2F7] rounded-2xl p-3">
