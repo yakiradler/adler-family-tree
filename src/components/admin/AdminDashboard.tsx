@@ -129,8 +129,8 @@ export default function AdminDashboard() {
     // effectively locked out until the admin restores them via
     // the "שחזר" button OR 30 days elapse.
     const confirmMsg = lang === 'he'
-      ? `${t.adminConfirmRemoveUser}\n\nהמשתמש יושעה למשך 30 יום. תוכל לשחזר אותו בכל רגע על ידי לחיצה על "שחזר".`
-      : `${t.adminConfirmRemoveUser}\n\nThe user will be suspended for 30 days. You can restore them at any time using the "Restore" button.`
+      ? `${t.adminConfirmRemoveUser}\n\nהמשתמש יושעה ולא יוכל להתחבר. תוכל לשחזר אותו בכל רגע, או למחוק אותו לצמיתות.`
+      : `${t.adminConfirmRemoveUser}\n\nThe user will be suspended and can't sign in. You can restore them at any time, or delete them permanently.`
     if (!(await confirmDialog({ message: confirmMsg, danger: true }))) return
     const nowIso = new Date().toISOString()
     // Optimistic local update so the row updates immediately.
@@ -179,6 +179,48 @@ export default function AdminDashboard() {
     if (error || !data || data.length === 0) {
       setUsers(prev)
       reportRlsBlock('update')
+    }
+  }
+
+  // Permanently delete a (already-suspended) user. Irreversible.
+  // We revoke all their tree access, then delete the profile row
+  // (profiles_delete_admin RLS). We CANNOT delete the auth.users login
+  // itself from the client (that needs the service-role key / an Edge
+  // Function), so if the person ever signs in again they return as a
+  // brand-new user with no profile data and no access — effectively
+  // removed. The confirm copy says this plainly.
+  const permanentlyDeleteUser = async (u: AdminUser) => {
+    if (!SUPABASE_CONFIGURED) {
+      // Demo: just forget them locally.
+      setUsers(us => us.filter(x => x.id !== u.id))
+      return
+    }
+    const who = u.full_name ?? u.email ?? ''
+    if (!(await confirmDialog({
+      message: t.adminDeletePermanentlyConfirm.replace('{name}', who),
+      danger: true,
+    }))) return
+    const prev = users
+    const prevAccess = treeAccessByUser
+    // Optimistic removal.
+    setUsers(us => us.filter(x => x.id !== u.id))
+    setTreeAccessByUser(m => { const next = { ...m }; delete next[u.id]; return next })
+    // Revoke access first (FK anchors on auth.users, so deleting the
+    // profile alone would leave these rows behind).
+    await supabase.from('tree_access').delete().eq('user_id', u.id)
+    const { data, error } = await supabase
+      .from('profiles')
+      .delete()
+      .eq('id', u.id)
+      .select()
+    if (error || !data || data.length === 0) {
+      setUsers(prev)
+      setTreeAccessByUser(prevAccess)
+      void alertDialog({
+        message: lang === 'he'
+          ? `לא ניתן למחוק לצמיתות: ${error?.message ?? 'הפעולה נחסמה'}`
+          : `Couldn't permanently delete: ${error?.message ?? 'action blocked'}`,
+      })
     }
   }
   const inviteUser = async () => {
@@ -725,6 +767,7 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
                         onToggleActive={toggleUserActive}
                         onRemove={removeUser}
                         onRestore={restoreUser}
+                        onPurge={permanentlyDeleteUser}
                         trees={trees}
                         treeRoles={treeAccessByUser[u.id] ?? []}
                         onChangeTreeRole={changeTreeRole}
@@ -1092,7 +1135,7 @@ function ProgressRow({ label, count, total, color }: { label: string; count: num
 }
 
 function UserRow({
-  user, t, rtl, demo, lang, onSetSuperAdmin, onToggleActive, onRemove, onRestore,
+  user, t, rtl, demo, lang, onSetSuperAdmin, onToggleActive, onRemove, onRestore, onPurge,
   trees, treeRoles, onChangeTreeRole, onRemoveTreeRole,
 }: {
   user: AdminUser
@@ -1104,6 +1147,7 @@ function UserRow({
   onToggleActive: (u: AdminUser) => void
   onRemove: (u: AdminUser) => void
   onRestore: (u: AdminUser) => void
+  onPurge: (u: AdminUser) => void
   trees: { id: string; name: string }[]
   treeRoles: { tree_id: string; role: TreeRole }[]
   onChangeTreeRole: (userId: string, treeId: string, role: TreeRole) => void
@@ -1191,14 +1235,9 @@ function UserRow({
           color={isAdmin ? 'blue' : 'gray'}
           icon="👑"
         />
-        {user.deleted_at ? (
-          <ActionChip
-            label={lang === 'he' ? 'שחזר' : 'Restore'}
-            onClick={() => onRestore(user)}
-            color="cyan"
-            icon="♻"
-          />
-        ) : (
+        {/* When suspended, restore + permanent-delete live in the
+            banner below; the strip only offers the initial remove. */}
+        {!user.deleted_at && (
           <ActionChip
             label={t.adminRemoveUser}
             onClick={() => onRemove(user)}
@@ -1209,10 +1248,26 @@ function UserRow({
       </div>
 
       {user.deleted_at && (
-        <div className="mt-2 rounded-2xl bg-[#FFD60A]/15 px-3 py-2 text-[11px] text-[#A06E00] font-medium">
-          {lang === 'he'
-            ? `מושעה מאז ${new Date(user.deleted_at).toLocaleDateString('he-IL', { year: 'numeric', month: 'short', day: 'numeric' })} — יוסר אוטומטית אחרי 30 יום`
-            : `Suspended since ${new Date(user.deleted_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })} — auto-removed after 30 days`}
+        <div className="mt-2 rounded-2xl bg-[#FFD60A]/15 px-3 py-2.5 space-y-2">
+          <p className="text-[11px] text-[#A06E00] font-medium">
+            {lang === 'he'
+              ? `מושעה מאז ${new Date(user.deleted_at).toLocaleDateString('he-IL', { year: 'numeric', month: 'short', day: 'numeric' })}. שחזר כדי להחזיר את הגישה, או מחק לצמיתות.`
+              : `Suspended since ${new Date(user.deleted_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}. Restore to bring them back, or delete permanently.`}
+          </p>
+          <div className="grid grid-cols-2 gap-1.5">
+            <ActionChip
+              label={lang === 'he' ? 'שחזר' : 'Restore'}
+              onClick={() => onRestore(user)}
+              color="cyan"
+              icon="♻"
+            />
+            <ActionChip
+              label={t.adminDeletePermanently}
+              onClick={() => onPurge(user)}
+              color="red"
+              icon="⛔"
+            />
+          </div>
         </div>
       )}
 
