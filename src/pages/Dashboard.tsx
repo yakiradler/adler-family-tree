@@ -17,6 +17,7 @@ import BrandMark from '../components/BrandMark'
 import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
 import WelcomeJourney from '../components/WelcomeJourney'
 import { hasSeenWelcomeJourney } from '../lib/welcomeJourney'
+import { downloadMyData } from '../lib/exportMyData'
 import JoinTreeModal from '../components/JoinTreeModal'
 import SecuritySettingsModal from '../components/security/SecuritySettingsModal'
 import PlanCard, { LeafIcon } from '../components/plan/PlanCard'
@@ -888,9 +889,19 @@ export default function Dashboard({ demoMode }: Props) {
               onClick={() => setJoinTreeOpen(true)}
               tooltip={t.quickAccessJoinTreeHint}
             />
+            {/* Every user can download their own data — a personal
+                backup in their hands. Pure client-side export. */}
+            <AppTile
+              index={7}
+              icon="💾"
+              label={t.myDataTile}
+              gradient="from-[#34C759] to-[#30D158]"
+              onClick={() => downloadMyData()}
+              tooltip={t.myDataTileHint}
+            />
             {isAdmin(profile) && (
               <AppTile
-                index={7}
+                index={8}
                 icon="⚙️"
                 label={lang === 'he' ? 'ניהול' : 'Admin'}
                 gradient="from-[#5AC8FA] to-[#64D2FF]"

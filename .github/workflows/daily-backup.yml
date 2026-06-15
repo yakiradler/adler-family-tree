@@ -1,0 +1,47 @@
+name: Daily DB backup
+
+# Exports a full snapshot of every public table in the live Supabase
+# database once a day and stores it as a downloadable artifact (kept 90
+# days). Off-site, automatic, free. Also runnable on demand from the
+# Actions tab ("Run workflow").
+#
+# REQUIRED ONE-TIME SETUP (owner): add a repository secret named
+#   SUPABASE_DB_PASSWORD  = the database password
+# under Settings → Secrets and variables → Actions. The snapshot script
+# reads it from the environment; the password should NOT live in the repo.
+
+on:
+  schedule:
+    - cron: '0 2 * * *'   # 02:00 UTC every day
+  workflow_dispatch: {}    # manual "Run workflow" button
+
+# Don't pile up overlapping runs.
+concurrency:
+  group: daily-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Export snapshot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - name: Export full DB snapshot
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          # Region of the Supabase connection pooler (host becomes
+          # aws-1-eu-central-1.pooler.supabase.com). Frankfurt project.
+          SUPABASE_POOLER_REGION: 'aws-1:eu-central-1'
+        run: npx tsx scripts/export-snapshot.ts
+      - name: Upload snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-snapshot-${{ github.run_id }}
+          path: scripts/backups/*.json
+          retention-days: 90
+          if-no-files-found: error
