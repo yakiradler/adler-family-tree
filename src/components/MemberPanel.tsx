@@ -44,6 +44,10 @@ export default function MemberPanel({ onClose }: Props) {
   // the tab content slides horizontally toward the chosen tab instead
   // of a plain fade.
   const [tabDir, setTabDir] = useState(0)
+  // Phone / email are private — kept hidden behind their icon until the
+  // viewer taps to reveal. Keyed by member id so the reveal auto-clears
+  // when switching to another member (no effect needed).
+  const [revealed, setRevealed] = useState<{ id: string; which: 'phone' | 'email' } | null>(null)
   const selectTab = (next: 'about' | 'family' | 'photos') => {
     const order = ['about', 'family', 'photos']
     // The new tab always slides in following the visual direction of
@@ -110,6 +114,10 @@ export default function MemberPanel({ onClose }: Props) {
     () => members.find(m => m.id === selectedMemberId) ?? null,
     [members, selectedMemberId],
   )
+  // Honour the reveal only for the member it was opened on.
+  const revealedContact = revealed && member && revealed.id === member.id ? revealed.which : null
+  const toggleReveal = (id: string, which: 'phone' | 'email') =>
+    setRevealed((r) => (r && r.id === id && r.which === which ? null : { id, which }))
 
   const { currentSpouses, formerSpouses, parents, children, siblings, spouses } = useMemo(() => {
     if (!member) return {
@@ -531,46 +539,115 @@ export default function MemberPanel({ onClose }: Props) {
                     )}
                   </div>
                   {hasContact && contact ? (
-                    <div className="space-y-1.5">
-                      {contact.phone && (
-                        <div className="flex items-center gap-1.5">
-                          <a href={telHref(contact.phone) ?? '#'} className="contact-link flex-1">
-                            <span aria-hidden>📞</span><span className="flex-1 truncate" dir="ltr">{contact.phone}</span>
+                    <div className="space-y-2">
+                      {/* A single row of round brand icons. Social links
+                          open directly; phone + email come LAST and stay
+                          hidden until their icon is tapped (privacy). */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {contact.phone && (
+                          <a
+                            href={whatsappHref(contact.phone) ?? '#'}
+                            target="_blank" rel="noopener noreferrer"
+                            aria-label="WhatsApp"
+                            className="w-11 h-11 rounded-full bg-white border border-black/5 shadow-sm flex items-center justify-center active:scale-95 transition"
+                          >
+                            <WhatsAppIcon size={24} />
                           </a>
-                          <a href={whatsappHref(contact.phone) ?? '#'} target="_blank" rel="noopener noreferrer"
-                            aria-label="WhatsApp" className="contact-link contact-link--wa">
-                            <WhatsAppIcon size={20} />
+                        )}
+                        {contact.facebook && (
+                          <a
+                            href={facebookHref(contact.facebook) ?? '#'}
+                            target="_blank" rel="noopener noreferrer"
+                            aria-label={t.contactFacebook}
+                            className="w-11 h-11 rounded-full bg-white border border-black/5 shadow-sm flex items-center justify-center active:scale-95 transition"
+                          >
+                            <FacebookIcon size={24} />
                           </a>
-                        </div>
-                      )}
-                      {contact.email && (
-                        <a href={mailtoHref(contact.email) ?? '#'} className="contact-link">
-                          <span aria-hidden>✉️</span><span className="flex-1 truncate" dir="ltr">{contact.email}</span>
-                        </a>
-                      )}
-                      {contact.facebook && (
-                        <a href={facebookHref(contact.facebook) ?? '#'} target="_blank" rel="noopener noreferrer" className="contact-link">
-                          <FacebookIcon size={18} /><span className="flex-1 truncate">{t.contactFacebook}</span>
-                          <span className="text-[#8E8E93]" aria-hidden>↗</span>
-                        </a>
-                      )}
-                      {contact.instagram && (
-                        <a href={instagramHref(contact.instagram) ?? '#'} target="_blank" rel="noopener noreferrer" className="contact-link">
-                          <InstagramIcon size={18} /><span className="flex-1 truncate">{t.contactInstagram}</span>
-                          <span className="text-[#8E8E93]" aria-hidden>↗</span>
-                        </a>
-                      )}
-                      <style>{`
-                        .contact-link {
-                          display: flex; align-items: center; gap: 0.6rem;
-                          padding: 0.6rem 0.75rem; border-radius: 0.75rem;
-                          background: #FFFFFF; border: 1px solid rgba(0,0,0,0.05);
-                          font-size: 13px; font-weight: 600; color: #1C1C1E;
-                          transition: transform 0.1s ease, background 0.15s ease;
-                        }
-                        .contact-link:active { transform: scale(0.98); }
-                        .contact-link--wa { flex: 0 0 auto; color: #25D366; }
-                      `}</style>
+                        )}
+                        {contact.instagram && (
+                          <a
+                            href={instagramHref(contact.instagram) ?? '#'}
+                            target="_blank" rel="noopener noreferrer"
+                            aria-label={t.contactInstagram}
+                            className="w-11 h-11 rounded-full bg-white border border-black/5 shadow-sm flex items-center justify-center active:scale-95 transition"
+                          >
+                            <InstagramIcon size={24} />
+                          </a>
+                        )}
+                        {contact.phone && (
+                          <button
+                            type="button"
+                            onClick={() => toggleReveal(member.id, 'phone')}
+                            aria-label={t.contactShowPhone}
+                            aria-pressed={revealedContact === 'phone'}
+                            className={`w-11 h-11 rounded-full flex items-center justify-center active:scale-95 transition shadow-sm border ${
+                              revealedContact === 'phone'
+                                ? 'bg-[#34C759] border-[#34C759] text-white'
+                                : 'bg-white border-black/5 text-[#34C759]'
+                            }`}
+                          >
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                              <path d="M6.6 3.2c.4 0 .8.3 1 .7l1 2.3c.1.4.1.8-.2 1.1l-1 1.1c.8 1.6 2.1 2.9 3.7 3.7l1.1-1c.3-.3.7-.3 1.1-.2l2.3 1c.4.2.7.6.7 1v2.3c0 .6-.5 1.1-1.1 1.1C8.9 17.4 2.6 11.1 2.6 3.8c0-.6.5-1.1 1.1-1.1h2.9Z" />
+                            </svg>
+                          </button>
+                        )}
+                        {contact.email && (
+                          <button
+                            type="button"
+                            onClick={() => toggleReveal(member.id, 'email')}
+                            aria-label={t.contactShowEmail}
+                            aria-pressed={revealedContact === 'email'}
+                            className={`w-11 h-11 rounded-full flex items-center justify-center active:scale-95 transition shadow-sm border ${
+                              revealedContact === 'email'
+                                ? 'bg-[#007AFF] border-[#007AFF] text-white'
+                                : 'bg-white border-black/5 text-[#007AFF]'
+                            }`}
+                          >
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                              <rect x="2.5" y="4.5" width="15" height="11" rx="2.5" stroke="currentColor" strokeWidth="1.6" />
+                              <path d="M3.5 6.5L10 11l6.5-4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Revealed value — only after the icon is tapped. */}
+                      <AnimatePresence initial={false}>
+                        {revealedContact === 'phone' && contact.phone && (
+                          <motion.div
+                            key="phone-reveal"
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="overflow-hidden"
+                          >
+                            <a
+                              href={telHref(contact.phone) ?? '#'}
+                              className="flex items-center gap-2 bg-white rounded-xl border border-black/5 px-3 py-2.5 active:scale-[0.99] transition"
+                            >
+                              <span className="w-7 h-7 rounded-full bg-[#34C759]/12 flex items-center justify-center flex-shrink-0" aria-hidden>📞</span>
+                              <span className="flex-1 text-[15px] font-bold text-[#1C1C1E]" dir="ltr">{contact.phone}</span>
+                            </a>
+                          </motion.div>
+                        )}
+                        {revealedContact === 'email' && contact.email && (
+                          <motion.div
+                            key="email-reveal"
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="overflow-hidden"
+                          >
+                            <a
+                              href={mailtoHref(contact.email) ?? '#'}
+                              className="flex items-center gap-2 bg-white rounded-xl border border-black/5 px-3 py-2.5 active:scale-[0.99] transition"
+                            >
+                              <span className="w-7 h-7 rounded-full bg-[#007AFF]/12 flex items-center justify-center flex-shrink-0" aria-hidden>✉️</span>
+                              <span className="flex-1 text-[13px] font-semibold text-[#1C1C1E] truncate" dir="ltr">{contact.email}</span>
+                            </a>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
                   ) : (
                     <p className="text-[11px] text-[#8E8E93] leading-snug">{t.contactNoneYet}</p>
