@@ -53,6 +53,7 @@ export default function PlanGateToast() {
               >
                 {t.planGateCta}
               </button>
+              <p className="mt-1 text-[10.5px] font-semibold text-[#1F7A3A]">💚 {t.pricingDonationShort}</p>
             </div>
             <button
               type="button"

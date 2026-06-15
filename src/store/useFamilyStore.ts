@@ -753,6 +753,9 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   approveEditRequest: async (requestId) => {
     const req = get().editRequests.find((r) => r.id === requestId)
     if (!req) return
+    // Nobody approves their OWN suggestion — it must be decided by a
+    // manager (or the subject), never the proposer.
+    if (req.requester_id === get().profile?.id) return
     // RBAC gate (app-level mirror of migration 024 RLS): admin, the
     // subject themselves, or a tree writer (editor/owner). RLS remains
     // the real boundary.

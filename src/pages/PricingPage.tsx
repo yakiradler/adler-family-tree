@@ -104,6 +104,13 @@ export default function PricingPage({ isAuth }: { isAuth: boolean }) {
           )}
         </div>
 
+        {/* Donation pledge — 20% of revenue to families in need / lone
+            soldiers. Front-and-centre so subscribing feels meaningful. */}
+        <div className="mb-6 mx-auto max-w-xl rounded-2xl bg-gradient-to-r from-[#34C759]/12 to-[#30D158]/8 border border-[#34C759]/25 px-4 py-3 text-center">
+          <p className="text-[13px] font-extrabold text-[#1F7A3A]">💚 {t.pricingDonationTitle}</p>
+          <p className="text-[11.5px] text-[#3C3C43] mt-0.5 leading-relaxed">{t.pricingDonation}</p>
+        </div>
+
         {notice && (
           <motion.p
             initial={{ opacity: 0, y: -6 }}

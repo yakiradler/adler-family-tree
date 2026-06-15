@@ -185,7 +185,7 @@ export default function MemberPanel({ onClose }: Props) {
     if (!m) return
     const mayApprove = profile?.role === 'admin'
       || (!!profile?.linked_member_id && profile.linked_member_id === m.id)
-      || canWriteTree(myTreeRoles[m.tree_id ?? ''])
+      || myTreeRoles[m.tree_id ?? ''] === 'owner'
     if (mayApprove) void fetchEditRequests()
   }, [selectedMemberId, members, profile, myTreeRoles, fetchEditRequests])
   const toggleReveal = (id: string, which: 'phone' | 'email') =>
@@ -314,16 +314,24 @@ export default function MemberPanel({ onClose }: Props) {
   // Is this the viewer's OWN card? They may edit it (incl. contact) with
   // no approval.
   const isSelf = !!ownMemberId && ownMemberId === member.id
+  // EXPLICIT per-tree role — never the permissive `canWriteTree(undefined)`
+  // here, or a stranger/proposer with no role would wrongly be treated as
+  // a manager and could approve their own suggestion (bug).
+  const myTreeRole = myTreeRoles[member.tree_id ?? '']
+  const isTreeManager = profile?.role === 'admin' || myTreeRole === 'owner'
+  const isTreeWriter = isTreeManager || myTreeRole === 'editor'
   // Contact saves write DIRECTLY for the subject + tree writers; everyone
   // else (any signed-in user) SUBMITS a suggestion for approval.
-  const contactDirect = isSelf || treeWritable
-  // Who may approve a pending contact suggestion: subject, tree writer,
-  // or admin.
-  const canApproveContact = isSelf || treeWritable || profile?.role === 'admin'
+  const contactDirect = isSelf || isTreeWriter
+  // Who may APPROVE a pending suggestion: the subject, the tree owner, or
+  // an admin — i.e. the MANAGER, never the person who proposed it.
+  const canApproveContact = isSelf || isTreeManager
   const contactEditing = contactEditId === member.id
   const contactSuggestions = canApproveContact
     ? editRequests.filter(
         (r) => r.target_member_id === member.id && r.status === 'pending'
+          // Never let the proposer approve their own suggestion.
+          && r.requester_id !== profile?.id
           && !!r.change_data && typeof r.change_data === 'object' && 'contact' in r.change_data,
       )
     : []
