@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type TouchEvent as ReactTouchEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type TouchEvent as ReactTouchEvent } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
@@ -16,6 +16,7 @@ import MemberReactionsBar from './MemberReactionsBar'
 import { canEditMember, canManageRelationships, computeNuclearFamilyIds, canWriteTree } from '../lib/permissions'
 import { getParentMap, resolveLineage } from '../lib/lineage'
 import { uploadMemberPhoto } from '../lib/photoUpload'
+import { alertDialog } from '../lib/confirm'
 import type { Member, SpouseStatus } from '../types'
 
 interface Props {
@@ -25,6 +26,63 @@ interface Props {
 function getHeaderGradient(_m?: Member) {
   // Unified blue/cyan gradient for all profiles (system theme)
   return 'from-[#007AFF] via-[#32ADE6] to-[#5AC8FA]'
+}
+
+/**
+ * Inline contact editor used inside the profile's Contact section.
+ * `direct` writes straight to the member (subject editing their own card,
+ * or a tree editor/owner). Otherwise it submits an edit_request that the
+ * subject / a tree writer / an admin can approve (migration 024).
+ */
+function ContactEditor({ member, direct, onClose }: { member: Member; direct: boolean; onClose: () => void }) {
+  const { updateMember, submitEditRequest } = useFamilyStore()
+  const { t } = useLang()
+  const c = member.contact ?? {}
+  const [phone, setPhone] = useState(c.phone ?? '')
+  const [email, setEmail] = useState(c.email ?? '')
+  const [facebook, setFacebook] = useState(c.facebook ?? '')
+  const [instagram, setInstagram] = useState(c.instagram ?? '')
+  const [saving, setSaving] = useState(false)
+
+  const save = async () => {
+    setSaving(true)
+    const next = {
+      phone: phone.trim() || undefined,
+      email: email.trim() || undefined,
+      facebook: facebook.trim() || undefined,
+      instagram: instagram.trim() || undefined,
+    }
+    const contact = Object.values(next).some(Boolean) ? next : null
+    if (direct) {
+      await updateMember(member.id, { contact })
+    } else {
+      const ok = await submitEditRequest(member.id, { contact })
+      if (ok) await alertDialog({ message: t.contactSuggestSent })
+    }
+    setSaving(false)
+    onClose()
+  }
+
+  const inputCls = 'w-full bg-white border border-black/5 rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] placeholder:text-[#8E8E93] focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40 transition'
+  return (
+    <div className="space-y-2">
+      {!direct && (
+        <p className="text-[11px] text-[#B25F00] bg-[#FF9F0A]/10 rounded-lg px-2.5 py-1.5 leading-snug">{t.contactSuggestHint}</p>
+      )}
+      <input type="tel" inputMode="tel" dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={t.editPhonePlaceholder} className={inputCls} />
+      <input type="email" inputMode="email" dir="ltr" autoCapitalize="none" autoCorrect="off" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t.editEmailPlaceholder} className={inputCls} />
+      <input type="text" dir="ltr" autoCapitalize="none" value={facebook} onChange={(e) => setFacebook(e.target.value)} placeholder={t.editFacebook} className={inputCls} />
+      <input type="text" dir="ltr" autoCapitalize="none" value={instagram} onChange={(e) => setInstagram(e.target.value)} placeholder={t.editInstagram} className={inputCls} />
+      <div className="flex gap-2 pt-0.5">
+        <button type="button" onClick={save} disabled={saving} className="flex-1 py-2 rounded-xl bg-[#007AFF] text-white text-sf-subhead font-bold active:scale-[0.98] transition disabled:opacity-50">
+          {saving ? '…' : direct ? t.contactSaveBtn : t.contactSuggestBtn}
+        </button>
+        <button type="button" onClick={onClose} disabled={saving} className="px-4 py-2 rounded-xl bg-[#F2F2F7] text-[#636366] text-sf-subhead font-semibold active:scale-[0.98] transition disabled:opacity-50">
+          {t.notesComposerCancel}
+        </button>
+      </div>
+    </div>
+  )
 }
 
 function formatDate(iso: string | undefined, lang: 'he' | 'en') {
@@ -37,7 +95,7 @@ function formatDate(iso: string | undefined, lang: 'he' | 'en') {
 }
 
 export default function MemberPanel({ onClose }: Props) {
-  const { members, relationships, selectedMemberId, setSelectedMemberId, profile, deleteMember, deleteRelationship, updateMember, addMember, trees, myTreeRoles } = useFamilyStore()
+  const { members, relationships, selectedMemberId, setSelectedMemberId, profile, deleteMember, deleteRelationship, updateMember, addMember, trees, myTreeRoles, fetchEditRequests, editRequests, approveEditRequest, rejectEditRequest } = useFamilyStore()
   const { t, lang } = useLang()
   const [tab, setTab] = useState<'about' | 'family' | 'photos'>('about')
   // Direction of the last tab change (+1 = moved right, -1 = left) so
@@ -48,6 +106,9 @@ export default function MemberPanel({ onClose }: Props) {
   // viewer taps to reveal. Keyed by member id so the reveal auto-clears
   // when switching to another member (no effect needed).
   const [revealed, setRevealed] = useState<{ id: string; which: 'phone' | 'email' } | null>(null)
+  // Inline contact editor open-state, keyed by member id so it closes
+  // automatically when switching members.
+  const [contactEditId, setContactEditId] = useState<string | null>(null)
   const selectTab = (next: 'about' | 'family' | 'photos') => {
     const order = ['about', 'family', 'photos']
     // The new tab always slides in following the visual direction of
@@ -116,6 +177,17 @@ export default function MemberPanel({ onClose }: Props) {
   )
   // Honour the reveal only for the member it was opened on.
   const revealedContact = revealed && member && revealed.id === member.id ? revealed.which : null
+  // Load pending suggestions (edit_requests) for the open member when the
+  // viewer might be allowed to approve them (subject / tree writer / admin).
+  // RLS scopes what actually comes back; this just primes the store.
+  useEffect(() => {
+    const m = members.find((x) => x.id === selectedMemberId)
+    if (!m) return
+    const mayApprove = profile?.role === 'admin'
+      || (!!profile?.linked_member_id && profile.linked_member_id === m.id)
+      || canWriteTree(myTreeRoles[m.tree_id ?? ''])
+    if (mayApprove) void fetchEditRequests()
+  }, [selectedMemberId, members, profile, myTreeRoles, fetchEditRequests])
   const toggleReveal = (id: string, which: 'phone' | 'email') =>
     setRevealed((r) => (r && r.id === id && r.which === which ? null : { id, which }))
 
@@ -237,6 +309,24 @@ export default function MemberPanel({ onClose }: Props) {
   })
   // Delete is admin-only — destructive, can't be undone.
   const deleteAllowed = profile?.role === 'admin'
+
+  // ── Contact editing / suggestions (migration 024) ──
+  // Is this the viewer's OWN card? They may edit it (incl. contact) with
+  // no approval.
+  const isSelf = !!ownMemberId && ownMemberId === member.id
+  // Contact saves write DIRECTLY for the subject + tree writers; everyone
+  // else (any signed-in user) SUBMITS a suggestion for approval.
+  const contactDirect = isSelf || treeWritable
+  // Who may approve a pending contact suggestion: subject, tree writer,
+  // or admin.
+  const canApproveContact = isSelf || treeWritable || profile?.role === 'admin'
+  const contactEditing = contactEditId === member.id
+  const contactSuggestions = canApproveContact
+    ? editRequests.filter(
+        (r) => r.target_member_id === member.id && r.status === 'pending'
+          && !!r.change_data && typeof r.change_data === 'object' && 'contact' in r.change_data,
+      )
+    : []
 
   const handleCopyToTree = async (targetTreeId: string | null) => {
     if (!member || copying) return
@@ -523,22 +613,27 @@ export default function MemberPanel({ onClose }: Props) {
                 <div className="bg-[#F2F2F7] rounded-2xl p-3">
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wide">{t.contactSection}</p>
-                    {editAllowed && (
+                    {profile?.id && !contactEditing && (
                       <button
                         type="button"
-                        onClick={() => setEditOpen(true)}
-                        aria-label={hasContact ? t.contactEditDetails : t.contactAddDetails}
-                        title={hasContact ? t.contactEditDetails : t.contactAddDetails}
+                        onClick={() => setContactEditId(member.id)}
                         className="flex items-center gap-1 text-[11px] font-semibold text-[#007AFF] hover:underline"
                       >
                         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                           <path d="M2.5 12V14H4.5L13 5.5L11 3.5L2.5 12Z" fill="#007AFF" />
                         </svg>
-                        {hasContact ? t.contactEditDetails : t.contactAddDetails}
+                        {contactDirect ? (hasContact ? t.contactEditDetails : t.contactAddDetails) : t.contactSuggestUpdate}
                       </button>
                     )}
                   </div>
-                  {hasContact && contact ? (
+                  {contactEditing && (
+                    <ContactEditor
+                      member={member}
+                      direct={contactDirect}
+                      onClose={() => setContactEditId(null)}
+                    />
+                  )}
+                  {!contactEditing && (hasContact && contact ? (
                     <div className="space-y-2">
                       {/* A single row of round brand icons. Social links
                           open directly; phone + email come LAST and stay
@@ -651,6 +746,48 @@ export default function MemberPanel({ onClose }: Props) {
                     </div>
                   ) : (
                     <p className="text-[11px] text-[#8E8E93] leading-snug">{t.contactNoneYet}</p>
+                  ))}
+
+                  {/* Pending contact suggestions — shown to whoever may
+                      approve them (the subject, a tree editor/owner, or an
+                      admin). Approving writes the contact to the member. */}
+                  {contactSuggestions.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-[10px] font-bold text-[#B25F00] uppercase tracking-wide">{t.contactSuggestionsTitle}</p>
+                      {contactSuggestions.map((req) => {
+                        const c = (req.change_data as { contact?: { phone?: string; email?: string; facebook?: string; instagram?: string } | null }).contact ?? null
+                        return (
+                          <div key={req.id} className="bg-white rounded-xl border border-[#FF9F0A]/30 p-2.5 space-y-1.5">
+                            <p className="text-[11px] text-[#8E8E93]">
+                              {t.from} <span className="font-semibold text-[#1C1C1E]">{req.requester_name ?? '—'}</span>
+                            </p>
+                            <div className="text-[12px] text-[#1C1C1E] space-y-0.5" dir="ltr">
+                              {c?.phone && <p>📞 {c.phone}</p>}
+                              {c?.email && <p>✉️ {c.email}</p>}
+                              {c?.facebook && <p>f {c.facebook}</p>}
+                              {c?.instagram && <p>IG {c.instagram}</p>}
+                              {!c && <p className="text-[#8E8E93]" dir="auto">{t.contactNoneYet}</p>}
+                            </div>
+                            <div className="flex gap-1.5 pt-0.5">
+                              <button
+                                type="button"
+                                onClick={() => approveEditRequest(req.id)}
+                                className="flex-1 py-1.5 rounded-lg bg-[#34C759] text-white text-[11px] font-bold active:scale-95 transition"
+                              >
+                                {t.approve}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => rejectEditRequest(req.id)}
+                                className="flex-1 py-1.5 rounded-lg bg-[#FF3B30]/10 text-[#FF3B30] text-[11px] font-bold border border-[#FF3B30]/20 active:scale-95 transition"
+                              >
+                                {t.reject}
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
                   )}
                 </div>
               </motion.div>

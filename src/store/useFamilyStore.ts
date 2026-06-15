@@ -1,6 +1,25 @@
 import { create } from 'zustand'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
-import { canApproveEditRequests, isAdmin } from '../lib/permissions'
+import { isAdmin, canWriteTree } from '../lib/permissions'
+
+/**
+ * May the current user decide (approve/reject) an edit request? Allowed
+ * for: a super-admin; the SUBJECT (the person it's about — their linked
+ * member card); or anyone with WRITE access to that member's tree
+ * (editor/owner). Mirrors migration 024's RLS so the app gate and the DB
+ * agree. RLS remains the real boundary.
+ */
+function canDecideEditRequest(
+  profile: { role?: string; linked_member_id?: string | null } | null | undefined,
+  targetMemberTreeId: string | null | undefined,
+  targetMemberId: string,
+  myTreeRoles: Record<string, 'owner' | 'editor' | 'viewer'>,
+): boolean {
+  if (!profile) return false
+  if (isAdmin(profile as never)) return true
+  if (profile.linked_member_id && profile.linked_member_id === targetMemberId) return true
+  return canWriteTree(targetMemberTreeId ? myTreeRoles[targetMemberTreeId] : undefined)
+}
 import { resolveRequestTreeId } from '../lib/accessRequests'
 import { gateAddMember, gateAddTree, SIGNUP_GIFT_LEAVES, TRIAL_DAYS } from '../lib/plans'
 import { isShareCodeRequest, mergeNotificationLists } from '../lib/notifications'
@@ -734,11 +753,11 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   approveEditRequest: async (requestId) => {
     const req = get().editRequests.find((r) => r.id === requestId)
     if (!req) return
-    // RBAC gate: app-level check that the caller is permitted to approve.
-    // Supabase RLS is the source of truth, but per AGENTS.md the app
-    // must also gate so a misconfigured RLS doesn't silently expose the
-    // action.
-    if (!canApproveEditRequests(get().profile)) return
+    // RBAC gate (app-level mirror of migration 024 RLS): admin, the
+    // subject themselves, or a tree writer (editor/owner). RLS remains
+    // the real boundary.
+    const tMember = get().members.find((m) => m.id === req.target_member_id)
+    if (!canDecideEditRequest(get().profile, tMember?.tree_id, req.target_member_id, get().myTreeRoles)) return
     // Optimistic: drop the request locally + apply the member patch so
     // the admin sees their approval land immediately, even in demo mode
     // (no Supabase) or when RLS later rejects the write.
@@ -817,7 +836,9 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   },
 
   rejectEditRequest: async (requestId) => {
-    if (!canApproveEditRequests(get().profile)) return
+    const rReq = get().editRequests.find((r) => r.id === requestId)
+    const rMember = rReq ? get().members.find((m) => m.id === rReq.target_member_id) : undefined
+    if (!rReq || !canDecideEditRequest(get().profile, rMember?.tree_id, rReq.target_member_id, get().myTreeRoles)) return
     // Optimistic drop first; Supabase status update is best-effort.
     set((s) => ({ editRequests: s.editRequests.filter((r) => r.id !== requestId) }))
     try {
