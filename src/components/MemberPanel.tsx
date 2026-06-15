@@ -655,72 +655,23 @@ export default function MemberPanel({ onClose }: Props) {
         {/* Action buttons: full-width stacked rows so labels are always readable */}
         {(editAllowed || relAllowed || deleteAllowed || member.last_name) && (
           <div className="px-4 pb-4 pt-1 space-y-1.5">
-            {/* Surname-aware tree jump — only renders if the member's
-                surname doesn't match the active tree (handled inside
-                the component). Lets families navigate between linked
-                trees without leaving the profile card. */}
-            <JumpToFamilyTreeButton member={member} />
-            {/* ── Add relative — the #1 thing a family member wants, made
-                obvious right here instead of hidden behind tree edit-mode.
-                Gated by relAllowed; opens the compact quick-add modal. ── */}
-            {relAllowed && (
-              <div className="space-y-1.5">
-                <button
-                  type="button"
-                  onClick={() => setAddRelExpanded((v) => !v)}
-                  aria-expanded={addRelExpanded}
-                  aria-label={t.panelAddRelative}
-                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#34C759] to-[#30D158] text-white text-sf-subhead font-bold active:scale-[0.98] transition flex items-center justify-center gap-2 shadow-md"
-                >
-                  <span className="text-lg leading-none" aria-hidden>＋</span>
-                  <span>{t.panelAddRelative}</span>
-                </button>
-                <AnimatePresence>
-                  {addRelExpanded && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="grid grid-cols-2 gap-1.5 overflow-hidden"
-                    >
-                      {([
-                        ['parent', t.addParent, '🧓'],
-                        ['child', t.addChild, '👶'],
-                        ['spouse', t.addSpouse, '💍'],
-                        ['sibling', t.addSibling, '🧑‍🤝‍🧑'],
-                      ] as const).map(([dir, label, icon]) => (
-                        <button
-                          key={dir}
-                          type="button"
-                          onClick={() => { setQuickAddDir(dir); setAddRelExpanded(false) }}
-                          className="py-2.5 rounded-xl border border-[#34C759]/40 text-[#1F7A3A] text-sf-footnote font-semibold active:scale-95 transition flex items-center justify-center gap-1.5 hover:bg-[#34C759]/5"
-                        >
-                          <span aria-hidden>{icon}</span>
-                          <span>{label}</span>
-                        </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            )}
-            {/* ── Edit accordion — profile edit, relationships, copy
-                and delete live one tap away so the card stays clean.
-                The toggle shows only if at least one inner action is
-                available to this user. ── */}
-            {(editAllowed || (!editAllowed && profile?.role === 'user') || relAllowed || deleteAllowed) && (
+            {/* ── Single Actions accordion — EVERYTHING lives in here so
+                the profile card shows only one toggle by default. Tapping
+                it reveals tree-jump, add-relative, edit, relationships,
+                copy and delete (each still gated by permission). ── */}
+            {(editAllowed || (!editAllowed && profile?.role === 'user') || relAllowed || deleteAllowed || member.last_name) && (
               <div className="space-y-1.5">
                 <button
                   type="button"
                   onClick={() => setEditExpanded((v) => !v)}
                   aria-expanded={editExpanded}
-                  aria-label={t.panelEditMenu}
+                  aria-label={t.panelActionsMenu}
                   className="w-full py-3 rounded-2xl bg-[#F2F2F7] text-[#1C1C1E] text-sf-subhead font-bold active:scale-[0.98] transition flex items-center justify-center gap-2"
                 >
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                    <path d="M2.5 12V14H4.5L13 5.5L11 3.5L2.5 12Z" fill="#1C1C1E" />
+                    <path d="M2 4h12M2 8h12M2 12h12" stroke="#1C1C1E" strokeWidth="1.6" strokeLinecap="round" />
                   </svg>
-                  <span>{t.panelEditMenu}</span>
+                  <span>{t.panelActionsMenu}</span>
                   <motion.span animate={{ rotate: editExpanded ? 180 : 0 }} className="text-xs leading-none text-[#8E8E93]" aria-hidden>▾</motion.span>
                 </button>
                 <AnimatePresence>
@@ -731,6 +682,52 @@ export default function MemberPanel({ onClose }: Props) {
                       exit={{ opacity: 0, height: 0 }}
                       className="space-y-1.5 overflow-hidden"
                     >
+                      {/* Surname-aware tree jump — self-hides if the
+                          surname matches the active tree. */}
+                      <JumpToFamilyTreeButton member={member} />
+                      {/* Add relative — the #1 action, with its own
+                          4-direction expansion. */}
+                      {relAllowed && (
+                        <div className="space-y-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setAddRelExpanded((v) => !v)}
+                            aria-expanded={addRelExpanded}
+                            aria-label={t.panelAddRelative}
+                            className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#34C759] to-[#30D158] text-white text-sf-subhead font-bold active:scale-[0.98] transition flex items-center justify-center gap-2 shadow-md"
+                          >
+                            <span className="text-lg leading-none" aria-hidden>＋</span>
+                            <span>{t.panelAddRelative}</span>
+                          </button>
+                          <AnimatePresence>
+                            {addRelExpanded && (
+                              <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="grid grid-cols-2 gap-1.5 overflow-hidden"
+                              >
+                                {([
+                                  ['parent', t.addParent, '🧓'],
+                                  ['child', t.addChild, '👶'],
+                                  ['spouse', t.addSpouse, '💍'],
+                                  ['sibling', t.addSibling, '🧑‍🤝‍🧑'],
+                                ] as const).map(([dir, label, icon]) => (
+                                  <button
+                                    key={dir}
+                                    type="button"
+                                    onClick={() => { setQuickAddDir(dir); setAddRelExpanded(false) }}
+                                    className="py-2.5 rounded-xl border border-[#34C759]/40 text-[#1F7A3A] text-sf-footnote font-semibold active:scale-95 transition flex items-center justify-center gap-1.5 hover:bg-[#34C759]/5"
+                                  >
+                                    <span aria-hidden>{icon}</span>
+                                    <span>{label}</span>
+                                  </button>
+                                ))}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      )}
                       {editAllowed && (
                       <button
                         type="button"
