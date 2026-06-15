@@ -15,8 +15,7 @@ import AIScanModal from '../components/ai/AIScanModal'
 import BuildFromTextModal from '../components/BuildFromTextModal'
 import BrandMark from '../components/BrandMark'
 import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
-import WelcomeJourney from '../components/WelcomeJourney'
-import { hasSeenWelcomeJourney } from '../lib/welcomeJourney'
+import { shouldAutoStartTutorial, markTutorialAutoStarted } from '../lib/firstRunTutorial'
 import { downloadMyData } from '../lib/exportMyData'
 import JoinTreeModal from '../components/JoinTreeModal'
 import SecuritySettingsModal from '../components/security/SecuritySettingsModal'
@@ -165,9 +164,11 @@ export default function Dashboard({ demoMode }: Props) {
   // manual "Tutorial" tile in the Apps grid below. Skipping or
   // finishing the tour writes the flag so the auto-launch never
   // pops up again.
-  const [tutorialOpen, setTutorialOpen] = useState(false)
-  // First-login welcome journey — once per device, real (non-demo) users.
-  const [welcomeOpen, setWelcomeOpen] = useState(() => !demoMode && !hasSeenWelcomeJourney())
+  // The built-in tutorial auto-launches ONCE on the user's first visit to
+  // the home page (per device) — that's the first-login "learning mode".
+  // After that it's replayable from the 🎓 tile. Skipping/finishing marks
+  // the flag (see closeTutorial) so it never auto-pops again.
+  const [tutorialOpen, setTutorialOpen] = useState(() => !demoMode && shouldAutoStartTutorial('dashboard'))
   // Join-tree-by-code modal — reachable from both the QuickAccessMenu
   // and the new "🔑" tile in the Apps grid below.
   const [joinTreeOpen, setJoinTreeOpen] = useState(false)
@@ -196,7 +197,7 @@ export default function Dashboard({ demoMode }: Props) {
   // The tutorial no longer auto-launches on first paint — it stacked on top
   // of the install prompt + version modal and overwhelmed new users. It stays
   // one tap away via the "🎓" tile and the help menu.
-  const closeTutorial = () => setTutorialOpen(false)
+  const closeTutorial = () => { markTutorialAutoStarted('dashboard'); setTutorialOpen(false) }
 
   // Tour steps — described in Hebrew first (user's primary locale)
   // with English fallbacks. Selectors target `data-tour` attributes
@@ -955,8 +956,6 @@ export default function Dashboard({ demoMode }: Props) {
         steps={tutorialSteps}
         onClose={closeTutorial}
       />
-
-      <WelcomeJourney open={welcomeOpen} onClose={() => setWelcomeOpen(false)} />
 
       {/* Tree-card long-press / right-click menu.  "Request share
           code" is real — it files an access_request the admin picks

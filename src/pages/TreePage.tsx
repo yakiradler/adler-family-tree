@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence, useDragControls } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
+import { shouldAutoStartTutorial, markTutorialAutoStarted } from '../lib/firstRunTutorial'
 import TreeView from '../components/views/TreeView'
 import SchematicView from '../components/views/SchematicView'
 import TimelineView from '../components/views/TimelineView'
@@ -107,10 +108,11 @@ export default function TreePage({ demoMode }: Props) {
   // a guided walkthrough is "even more important" here than on the
   // dashboard because the tree has the most controls.
   //
-  // No auto-launch — the tree tutorial is replayable on demand from the
-  // "?" button next to the search icon, so it never ambushes a new user.
-  const [treeTutorialOpen, setTreeTutorialOpen] = useState(false)
-  const closeTreeTutorial = () => setTreeTutorialOpen(false)
+  // Auto-launches ONCE on the user's first visit to the tree page (per
+  // device) as part of the first-login learning mode; afterwards it's
+  // replayable on demand from the "?" button next to the search icon.
+  const [treeTutorialOpen, setTreeTutorialOpen] = useState(() => !demoMode && shouldAutoStartTutorial('tree'))
+  const closeTreeTutorial = () => { markTutorialAutoStarted('tree'); setTreeTutorialOpen(false) }
   // Tutorial step generator. Some of the new steps require the
   // hamburger to be EXPANDED (so the filter / focus / density chips
   // are visible). We achieve that via the `onEnter` callback which
