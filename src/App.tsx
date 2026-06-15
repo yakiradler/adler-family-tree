@@ -14,6 +14,7 @@ import PersistenceIndicator from './components/PersistenceIndicator'
 import InstallPrompt from './components/InstallPrompt'
 import VersionUpdateModal from './components/VersionUpdateModal'
 import DialogHost from './components/ui/DialogHost'
+import NotificationToast from './components/notifications/NotificationToast'
 import { alertDialog } from './lib/confirm'
 import DevEnvBanner from './components/DevEnvBanner'
 import MfaChallengeGate from './components/security/MfaChallengeGate'
@@ -573,6 +574,9 @@ export default function App() {
               the store's addMember/addTree gates. Inside the router so
               its "see plans" button can navigate. */}
           <PlanGateToast />
+          {/* Pops a transient card when a new notification arrives so the
+              admin notices without opening the bell. */}
+          <NotificationToast />
           {/* Suspense boundary for the lazy-loaded routes. The fallback
               mirrors the auth-loading spinner so the visual feel stays
               consistent while a route chunk streams in over the
