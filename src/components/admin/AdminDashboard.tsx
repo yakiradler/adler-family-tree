@@ -10,43 +10,10 @@ import InviteCodeManager from './InviteCodeManager'
 import TreeManagePanel from '../tree/TreeManagePanel'
 import { PersonAvatarIcon } from '../MemberNode'
 import { getRingGradient, getFallbackGradient } from '../memberVisuals'
-import type { EditRequest, Member, Profile, UserRole, TreeRole, MasterPermissions, AccessRequest, UserPlan, PlanId } from '../../types'
-import type { PermissionKey } from '../../lib/permissions'
+import type { EditRequest, Member, Profile, UserRole, TreeRole, AccessRequest, UserPlan, PlanId } from '../../types'
 import { adminInboxCounts } from '../../lib/notifications'
 
 type Tab = 'overview' | 'users' | 'members' | 'trees' | 'requests' | 'access' | 'reports' | 'invites' | 'system'
-
-const ROLE_OPTIONS: { key: UserRole; icon: string; labelKey: 'adminRoleGuest' | 'adminRoleUser' | 'adminRoleMaster' | 'adminRoleAdmin' }[] = [
-  { key: 'guest',  icon: '👤', labelKey: 'adminRoleGuest' },
-  { key: 'user',   icon: '👨‍👩‍👧', labelKey: 'adminRoleUser' },
-  { key: 'master', icon: '⭐', labelKey: 'adminRoleMaster' },
-  { key: 'admin',  icon: '👑', labelKey: 'adminRoleAdmin' },
-]
-
-const PERM_KEYS: PermissionKey[] = [
-  'canEditAnyMember',
-  'canDeleteMembers',
-  'canManageRelationships',
-  'canApproveEditRequests',
-  'canManageInvites',
-]
-
-const PERM_LABEL: Record<PermissionKey, 'permEditAnyMember' | 'permDeleteMembers' | 'permManageRelationships' | 'permApproveEditRequests' | 'permManageInvites'> = {
-  canEditAnyMember: 'permEditAnyMember',
-  canDeleteMembers: 'permDeleteMembers',
-  canManageRelationships: 'permManageRelationships',
-  canApproveEditRequests: 'permApproveEditRequests',
-  canManageInvites: 'permManageInvites',
-}
-
-function roleBadgeClass(role: UserRole): string {
-  switch (role) {
-    case 'admin':  return 'bg-[#007AFF]/15 text-[#007AFF]'
-    case 'master': return 'bg-[#FF9F0A]/15 text-[#FF9F0A]'
-    case 'user':   return 'bg-[#5AC8FA]/15 text-[#32ADE6]'
-    case 'guest':  return 'bg-[#8E8E93]/15 text-[#636366]'
-  }
-}
 
 interface AdminUser extends Profile {
   email?: string
@@ -61,7 +28,7 @@ export default function AdminDashboard() {
   const {
     editRequests, fetchEditRequests, approveEditRequest, rejectEditRequest,
     members, deleteMember, profile, trees,
-    accessRequests, fetchAccessRequests, decideAccessRequest, updateProfileById,
+    accessRequests, fetchAccessRequests, decideAccessRequest,
     feedback, fetchFeedback, updateFeedback, deleteFeedback,
   } = useFamilyStore()
   const { t, lang } = useLang()
@@ -93,7 +60,6 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState('')
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteName, setInviteName] = useState('')
-  const [inviteRole, setInviteRole] = useState<UserRole>('user')
   const [inviting, setInviting] = useState(false)
   // Subscription Phase A: per-user plan + leaf balance, editable here
   // because there's no payment provider yet — the admin IS the
@@ -120,7 +86,12 @@ export default function AdminDashboard() {
     void verb
   }
 
-  const changeUserRole = async (u: AdminUser, role: UserRole) => {
+  // Grant or revoke the single global authority: super-admin. In the
+  // two-axis model `profiles.role` only matters as 'admin' (super-admin)
+  // vs anyone else; per-tree power lives in tree_access. Optimistic +
+  // rollback on RLS rejection, same as the other profile mutations.
+  const setSuperAdmin = async (u: AdminUser, makeAdmin: boolean) => {
+    const role: UserRole = makeAdmin ? 'admin' : 'user'
     const prev = users
     setUsers(us => us.map(x => x.id === u.id ? { ...x, role } : x))
     if (!SUPABASE_CONFIGURED) return
@@ -129,11 +100,6 @@ export default function AdminDashboard() {
       setUsers(prev)
       reportRlsBlock('update')
     }
-  }
-  const changeMasterPerm = async (u: AdminUser, key: PermissionKey, value: boolean) => {
-    const next: MasterPermissions = { ...(u.master_permissions ?? {}), [key]: value }
-    setUsers(us => us.map(x => x.id === u.id ? { ...x, master_permissions: next } : x))
-    await updateProfileById(u.id, { master_permissions: next })
   }
   const toggleUserActive = async (u: AdminUser) => {
     const cur = (u as unknown as { active?: boolean }).active !== false
@@ -225,7 +191,12 @@ export default function AdminDashboard() {
           email: inviteEmail.trim(),
           options: {
             shouldCreateUser: true,
-            data: { full_name: inviteName.trim(), invited_role: inviteRole },
+            // No global role is assigned at invite time. The new user
+            // signs up, onboards, and requests access to a tree; the
+            // tree owner then grants their per-tree role (editor by
+            // default). Global authority (super-admin) is granted
+            // separately from the users tab.
+            data: { full_name: inviteName.trim() },
             // Pin the magic-link target to this origin so the invite
             // works regardless of what Site URL the Supabase dashboard
             // is currently holding. Without this the magic link points
@@ -241,12 +212,11 @@ export default function AdminDashboard() {
         id: `invited-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         full_name: inviteName.trim(),
         email: inviteEmail.trim(),
-        role: inviteRole,
+        role: 'user',
         created_at: new Date().toISOString(),
       }
       setUsers(us => [newUser, ...us])
       setInviteEmail(''); setInviteName('')
-      setInviteRole('user')
       // Friendlier than the previous "Invite sent" — explain what the
       // user will actually receive in their inbox.
       const msg = inviteOutcome === 'magic-link'
@@ -684,38 +654,14 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
                     className="w-full px-3 py-2 rounded-xl bg-[#F2F2F7] text-sf-body text-[#1C1C1E] placeholder:text-[#8E8E93] outline-none focus:ring-2 focus:ring-[#007AFF]/50"
                   />
                 </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className="flex-1 min-w-[200px] bg-[#F2F2F7] rounded-xl p-1 flex gap-1">
-                    {ROLE_OPTIONS.map(r => (
-                      <button
-                        key={r.key}
-                        type="button"
-                        onClick={() => setInviteRole(r.key)}
-                        aria-label={t[r.labelKey]}
-                        title={t[r.labelKey]}
-                        className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition flex flex-col items-center gap-0.5 ${
-                          inviteRole === r.key
-                            ? 'bg-white text-[#1C1C1E] shadow-sm'
-                            : 'text-[#636366]'
-                        }`}
-                      >
-                        {/* Label ALWAYS visible (mobile + desktop) —
-                            the previous hidden-on-small-screens setup
-                            left users guessing what each emoji meant. */}
-                        <span className="text-[14px] leading-none">{r.icon}</span>
-                        <span className="text-[9.5px] font-bold whitespace-nowrap">{t[r.labelKey]}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={inviteUser}
-                    disabled={!inviteEmail.trim() || !inviteName.trim() || inviting}
-                    className="py-2 px-4 rounded-xl bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white text-sf-subhead font-bold shadow-md disabled:opacity-40"
-                  >
-                    {inviting ? '…' : t.adminInviteSend}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={inviteUser}
+                  disabled={!inviteEmail.trim() || !inviteName.trim() || inviting}
+                  className="w-full py-2 px-4 rounded-xl bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white text-sf-subhead font-bold shadow-md disabled:opacity-40"
+                >
+                  {inviting ? '…' : t.adminInviteSend}
+                </button>
               </div>
 
               <div className="glass-strong rounded-2xl p-3 shadow-glass-sm flex items-start gap-2">
@@ -737,11 +683,10 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
                         rtl={rtl}
                         demo={!SUPABASE_CONFIGURED}
                         lang={lang}
-                        onRoleChange={changeUserRole}
+                        onSetSuperAdmin={setSuperAdmin}
                         onToggleActive={toggleUserActive}
                         onRemove={removeUser}
                         onRestore={restoreUser}
-                        onMasterPermChange={changeMasterPerm}
                       />
                       {/* Subscription controls — the manual "billing
                           desk" of Phase A. */}
@@ -1105,26 +1050,26 @@ function ProgressRow({ label, count, total, color }: { label: string; count: num
 }
 
 function UserRow({
-  user, t, rtl, demo, lang, onRoleChange, onToggleActive, onRemove, onRestore, onMasterPermChange,
+  user, t, rtl, demo, lang, onSetSuperAdmin, onToggleActive, onRemove, onRestore,
 }: {
   user: AdminUser
   t: Translations
   rtl: boolean
   demo: boolean
   lang: 'he' | 'en'
-  onRoleChange: (u: AdminUser, role: UserRole) => void
+  onSetSuperAdmin: (u: AdminUser, makeAdmin: boolean) => void
   onToggleActive: (u: AdminUser) => void
   onRemove: (u: AdminUser) => void
   onRestore: (u: AdminUser) => void
-  onMasterPermChange: (u: AdminUser, key: PermissionKey, value: boolean) => void
 }) {
-  const [showPerms, setShowPerms] = useState(false)
   const joined = user.created_at
     ? new Date(user.created_at).toLocaleDateString(rtl ? 'he-IL' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })
     : '—'
   const isActive = (user as unknown as { active?: boolean }).active !== false
-  const roleLabel = ROLE_OPTIONS.find(r => r.key === user.role)
-  const perms = user.master_permissions ?? {}
+  // In the two-axis model the only global authority is super-admin
+  // (profiles.role === 'admin'). Per-tree power lives in tree_access
+  // and is managed from the tree's own management panel.
+  const isAdmin = user.role === 'admin'
 
   const handleReset = async () => {
     if (demo) { void alertDialog({ message: t.adminDemoAlert }); return }
@@ -1133,6 +1078,15 @@ function UserRow({
       redirectTo: `${window.location.origin}/`,
     })
     await alertDialog({ message: `${t.adminSendReset} ✓` })
+  }
+
+  const handleSuperAdmin = async () => {
+    if (demo) { void alertDialog({ message: t.adminDemoAlert }); return }
+    const who = user.full_name ?? user.email ?? ''
+    const msg = (isAdmin ? t.adminSuperAdminRevokeConfirm : t.adminSuperAdminConfirm).replace('{name}', who)
+    if (await confirmDialog({ message: msg, danger: true })) {
+      onSetSuperAdmin(user, !isAdmin)
+    }
   }
 
   return (
@@ -1148,9 +1102,11 @@ function UserRow({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-sf-subhead font-semibold text-[#1C1C1E] truncate">{user.full_name}</p>
-            <span className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${roleBadgeClass(user.role)}`}>
-              {roleLabel?.icon} {roleLabel ? t[roleLabel.labelKey] : user.role}
-            </span>
+            {isAdmin && (
+              <span className="text-[10px] font-bold rounded-full px-2 py-0.5 bg-[#007AFF]/15 text-[#007AFF]">
+                👑 {t.adminSuperAdmin}
+              </span>
+            )}
             <span className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${
               isActive ? 'bg-[#34C759]/15 text-[#34C759]' : 'bg-[#8E8E93]/15 text-[#636366]'
             }`}>
@@ -1162,31 +1118,8 @@ function UserRow({
         </div>
       </div>
 
-      {/* Role picker — 4-tier. Labels ALWAYS visible (mobile too)
-          per a user complaint that the bare emojis were ambiguous. */}
-      <div className="mt-3 bg-[#F2F2F7] rounded-xl p-1 flex gap-1">
-        {ROLE_OPTIONS.map(r => (
-          <button
-            key={r.key}
-            type="button"
-            onClick={() => onRoleChange(user, r.key)}
-            title={t[r.labelKey]}
-            aria-label={t[r.labelKey]}
-            aria-pressed={user.role === r.key}
-            className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition flex flex-col items-center gap-0.5 ${
-              user.role === r.key
-                ? 'bg-white text-[#1C1C1E] shadow-sm'
-                : 'text-[#636366] hover:bg-white/40'
-            }`}
-          >
-            <span className="text-[14px] leading-none">{r.icon}</span>
-            <span className="text-[9.5px] font-bold whitespace-nowrap">{t[r.labelKey]}</span>
-          </button>
-        ))}
-      </div>
-
       {/* Action strip — labeled buttons */}
-      <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+      <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-1.5">
         <ActionChip
           label={isActive ? t.adminDeactivate : t.adminActivate}
           onClick={() => onToggleActive(user)}
@@ -1200,10 +1133,10 @@ function UserRow({
           icon="🔑"
         />
         <ActionChip
-          label={showPerms ? t.adminPermsHidden : t.adminTogglePerms}
-          onClick={() => setShowPerms(v => !v)}
-          color="blue"
-          icon="🛡"
+          label={t.adminSuperAdmin}
+          onClick={handleSuperAdmin}
+          color={isAdmin ? 'blue' : 'gray'}
+          icon="👑"
         />
         {user.deleted_at ? (
           <ActionChip
@@ -1229,82 +1162,7 @@ function UserRow({
             : `Suspended since ${new Date(user.deleted_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })} — auto-removed after 30 days`}
         </div>
       )}
-
-      {/* Master permissions panel — only meaningful for masters,
-          but admins implicitly have everything; shown if user toggles. */}
-      <AnimatePresence initial={false}>
-        {showPerms && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <div className="mt-3 rounded-2xl bg-[#F2F2F7]/60 p-3 space-y-2">
-              <div className="flex items-baseline justify-between">
-                <p className="text-sf-caption font-bold text-[#1C1C1E]">{t.adminMasterPerms}</p>
-                <p className="text-[10px] text-[#8E8E93]">{t.adminMasterPermsDesc}</p>
-              </div>
-              {user.role === 'admin' ? (
-                <p className="text-[11px] text-[#34C759] font-medium">
-                  👑 admin — {Object.values(PERM_LABEL).map(k => t[k]).join(' · ')}
-                </p>
-              ) : user.role === 'guest' ? (
-                <p className="text-[11px] text-[#8E8E93] font-medium">
-                  👤 {t.adminRoleGuest} — read-only
-                </p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                  {PERM_KEYS.map(k => (
-                    <PermToggle
-                      key={k}
-                      label={t[PERM_LABEL[k]]}
-                      checked={user.role === 'master' ? Boolean(perms[k]) : false}
-                      disabled={user.role !== 'master'}
-                      onChange={(v) => onMasterPermChange(user, k, v)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
-  )
-}
-
-function PermToggle({
-  label, checked, onChange, disabled,
-}: { label: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={() => !disabled && onChange(!checked)}
-      disabled={disabled}
-      className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-[11px] font-semibold transition ${
-        disabled
-          ? 'bg-white/30 text-[#C7C7CC] cursor-not-allowed'
-          : checked
-            ? 'bg-[#34C759]/15 text-[#34C759]'
-            : 'bg-white text-[#636366] hover:bg-white/80'
-      }`}
-    >
-      <span className="truncate">{label}</span>
-      <span
-        aria-hidden
-        className={`w-8 h-5 rounded-full relative transition ${
-          checked ? 'bg-[#34C759]' : 'bg-[#C7C7CC]'
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
-            checked ? 'left-3.5' : 'left-0.5'
-          }`}
-        />
-      </span>
-    </button>
   )
 }
 
@@ -1605,7 +1463,6 @@ function AccessRequestCard({ request, index, t, onApprove, onReject }: AccessReq
   const a = answers as Record<string, unknown>
   const relAnswer = a.relationship as string | undefined
   const purposeAnswer = a.purpose as string | undefined
-  const requestedLabel = ROLE_OPTIONS.find(r => r.key === request.requested_role)
   // Tree-access requests are filed by JumpToFamilyTreeButton when a
   // non-admin tries to open a tree they don't have access to. We
   // surface them with a distinct purple chip so an admin scanning the
@@ -1638,12 +1495,6 @@ function AccessRequestCard({ request, index, t, onApprove, onReject }: AccessReq
         <div className="flex-1 min-w-0">
           <p className="text-sf-subhead font-semibold text-[#1C1C1E] truncate">
             {request.requester_name ?? request.requester_id.slice(0, 8)}
-          </p>
-          <p className="text-sf-caption text-[#8E8E93] mt-0.5">
-            {t.adminAccessRequestedRole}:{' '}
-            <span className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${roleBadgeClass(request.requested_role)}`}>
-              {requestedLabel?.icon} {requestedLabel ? t[requestedLabel.labelKey] : request.requested_role}
-            </span>
           </p>
         </div>
         <div className="flex flex-col items-end gap-1 flex-shrink-0">
