@@ -207,13 +207,13 @@ export default function Dashboard({ demoMode }: Props) {
           {
             selector: 'dash-hero',
             title: '👋 ברוכים הבאים!',
-            body: 'כאן המרכז של המשפחה שלכם. נעבור ביחד על המסכים והכפתורים החשובים — ב-7 שלבים קצרים.',
+            body: 'כאן המרכז של המשפחה שלכם. נעבור ביחד על המסכים והכפתורים החשובים — ב-6 שלבים קצרים.',
             side: 'bottom',
           },
           {
             selector: 'dash-stats',
             title: 'תמונת מצב מהירה',
-            body: 'מספר החברים, הדורות והענפים — נטען אוטומטית מהעץ שלכם.',
+            body: 'מספר החברים, הדורות, הענפים והעצים — נטען אוטומטית מהנתונים שלכם.',
             side: 'bottom',
           },
           {
@@ -231,7 +231,7 @@ export default function Dashboard({ demoMode }: Props) {
           {
             selector: 'dash-apps',
             title: '🚀 אפליקציות נוספות',
-            body: 'מכאן ניגשים לעץ עצמו, לימי הולדת, ולפיצ\'רי ה-AI (סריקה, בניית עץ מטקסט, שיפור תמונות).',
+            body: 'מכאן ניגשים לעץ עצמו, לימי הולדת, וכלי ה-AI (בקרוב). וזהו — מוכנים להתחיל לבנות!',
             side: 'top',
           },
           {
@@ -240,21 +240,14 @@ export default function Dashboard({ demoMode }: Props) {
             body: 'תוכלו לחזור על המדריך הזה בכל זמן מהכפתור הזה. אנחנו ממליצים לעבור שוב אחרי שתוסיפו חברי משפחה.',
             side: 'top',
           },
-          {
-            selector: 'dash-about',
-            title: '📖 על המשפחה',
-            body: 'הסיפור של המשפחה שלכם. תוכלו לערוך אותו דרך מסך הניהול. וזהו — מוכנים להתחיל לבנות!',
-            side: 'bottom',
-          },
         ]
       : [
-          { selector: 'dash-hero', title: '👋 Welcome!', body: 'This is your family hub. We\'ll walk you through the key screens in 7 short steps.', side: 'bottom' },
-          { selector: 'dash-stats', title: 'Quick snapshot', body: 'Member count, generations and branches — auto-derived from your tree.', side: 'bottom' },
+          { selector: 'dash-hero', title: '👋 Welcome!', body: 'This is your family hub. We\'ll walk you through the key screens in 6 short steps.', side: 'bottom' },
+          { selector: 'dash-stats', title: 'Quick snapshot', body: 'Members, generations, branches and trees — auto-derived from your data.', side: 'bottom' },
           { selector: 'dash-trees', title: '🌿 Family trees', body: 'Every tree you belong to shows up here as a card. Tap one to open it.', side: 'top' },
           { selector: 'dash-birthdays', title: '🎂 Upcoming birthdays', body: 'Who\'s celebrating soon — computed from each member\'s birth date.', side: 'top' },
-          { selector: 'dash-apps', title: '🚀 Apps', body: 'Jump into the tree itself, birthdays view, and the AI features.', side: 'top' },
+          { selector: 'dash-apps', title: '🚀 Apps', body: 'Jump into the tree itself, birthdays view, and the AI tools (coming soon). That\'s it — let\'s start building!', side: 'top' },
           { selector: 'dash-tutorial-tile', title: '✨ This tutorial', body: 'You can replay this walkthrough any time from this button.', side: 'top' },
-          { selector: 'dash-about', title: '📖 About the family', body: 'Your family story. Editable from Admin. That\'s it — let\'s start building!', side: 'bottom' },
         ]
   ), [lang])
 
@@ -486,19 +479,20 @@ export default function Dashboard({ demoMode }: Props) {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.06 }}
-          className="mt-6 grid grid-cols-3 gap-2"
+          className="mt-6 grid grid-cols-4 gap-2"
         >
           {[
             { value: visibleMembers.length, label: t.dashMembers, color: '#007AFF', bg: 'from-[#007AFF]/10 to-[#32ADE6]/10' },
             { value: generations, label: t.dashGenerations, color: '#32ADE6', bg: 'from-[#32ADE6]/10 to-[#5AC8FA]/10' },
             { value: founders.length, label: t.dashBranches, color: '#5AC8FA', bg: 'from-[#5AC8FA]/10 to-[#64D2FF]/10' },
+            { value: treeSummaries.length, label: t.dashTrees, color: '#30D158', bg: 'from-[#34C759]/10 to-[#30D158]/10' },
           ].map((s, i) => (
             <div
               key={i}
-              className={`rounded-3xl p-3 text-center bg-gradient-to-br ${s.bg} border border-white/60 backdrop-blur-xl shadow-glass-sm`}
+              className={`rounded-2xl p-2.5 text-center bg-gradient-to-br ${s.bg} border border-white/60 backdrop-blur-xl shadow-glass-sm`}
             >
-              <p className="text-2xl font-bold leading-none" style={{ color: s.color }}>{s.value}</p>
-              <p className="text-[11px] text-[#636366] font-medium mt-1">{s.label}</p>
+              <p className="text-xl font-bold leading-none" style={{ color: s.color }}>{s.value}</p>
+              <p className="text-[10px] text-[#636366] font-medium mt-1">{s.label}</p>
             </div>
           ))}
         </motion.div>
@@ -531,47 +525,9 @@ export default function Dashboard({ demoMode }: Props) {
           </motion.button>
         )}
 
-        {/* ─── ABOUT (now ABOVE the branches per user request) ───
-            Reframed as a small "hero card" with an animated decorative
-            glow + a floating book icon so it carries the Landing-page
-            vibe. Sits at the top of the secondary stack so a returning
-            visitor reads the family description before scanning the
-            tree rail below. */}
-        <motion.section
-          data-tour="dash-about"
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.55, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
-          className="relative overflow-hidden rounded-3xl p-4 shadow-glass border border-white/60"
-          style={{
-            background:
-              'linear-gradient(135deg, rgba(0,122,255,0.10), rgba(94,92,230,0.10) 55%, rgba(255,45,146,0.08))',
-            backdropFilter: 'blur(18px) saturate(160%)',
-            WebkitBackdropFilter: 'blur(18px) saturate(160%)',
-          }}
-        >
-          {/* Soft radial glows — same palette as Landing's TreeBackdrop
-              so the two screens feel like the same family of pages.
-              pointer-events-none keeps them out of the click path. */}
-          <div className="pointer-events-none absolute -top-16 -start-16 w-44 h-44 rounded-full bg-[#5E5CE6]/25 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-14 -end-12 w-44 h-44 rounded-full bg-[#FF2D92]/18 blur-3xl" />
-          <div className="pointer-events-none absolute top-8 end-8 w-24 h-24 rounded-full bg-[#32ADE6]/20 blur-2xl" />
-
-          <div className="relative flex items-start gap-3">
-            <motion.div
-              initial={{ scale: 0.6, rotate: -10, opacity: 0 }}
-              animate={{ scale: 1, rotate: 0, opacity: 1 }}
-              transition={{ delay: 0.18, type: 'spring', stiffness: 260, damping: 18 }}
-              className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#5AC8FA] to-[#007AFF] flex items-center justify-center flex-shrink-0 shadow-md shadow-blue-300/40"
-            >
-              <span className="text-lg">📖</span>
-            </motion.div>
-            <div>
-              <h3 className="text-sf-subhead font-bold text-[#1C1C1E] mb-1">{t.dashAbout}</h3>
-              <p className="text-sf-footnote text-[#3A3A3C] leading-relaxed">{t.dashAboutText}</p>
-            </div>
-          </div>
-        </motion.section>
+        {/* The standalone "About the family" card was removed per owner
+            request — its message is already the concise tagline shown
+            under the family name in the hero above. */}
 
         {/* ─── FAMILY TREES RAIL ───
             Used to show individual founders by photo; per a user
@@ -580,7 +536,10 @@ export default function Dashboard({ demoMode }: Props) {
             name ("עץ משפחת אדלר") + a member count, NO faces. The
             row scrolls horizontally so multi-tree households fit
             without redesigning the page. */}
-        {treeSummaries.length > 0 && (
+        {/* Always render the branches section — even a brand-new user with
+            no trees yet sees it (with a sample "demo" card) so the feature
+            is discoverable from the very first login. */}
+        {(
           <motion.section
             data-tour="dash-trees"
             initial={{ opacity: 0, y: 12 }}
@@ -597,10 +556,43 @@ export default function Dashboard({ demoMode }: Props) {
                 <span className="text-base">🌿</span>
                 <h3 className="text-sf-subhead font-bold text-[#1C1C1E]">{t.dashBranchesTitle}</h3>
               </div>
-              <button onClick={() => navigate('/tree')} className="text-[12px] text-[#007AFF] font-semibold">
-                {t.dashSeeAll}
+              {/* "Join a tree with a code" lives right here in the branches
+                  header (replaced the old "See all" link, which only ever
+                  opened the first tree). */}
+              <button
+                onClick={() => setJoinTreeOpen(true)}
+                className="flex items-center gap-1 text-[12px] text-[#007AFF] font-semibold"
+              >
+                <span aria-hidden>🔑</span>
+                {t.quickAccessJoinTree}
               </button>
             </div>
+            {treeSummaries.length === 0 && (
+              <div className="relative flex items-center gap-3 rounded-2xl bg-white/50 border border-dashed border-[#C7C7CC] p-3 mb-1">
+                {/* Sample "demo" tree card so the section is never empty on
+                    first login — communicates what a real tree will look
+                    like and points to the actions below. Non-interactive. */}
+                <div className="flex-shrink-0 flex flex-col items-center gap-1.5 opacity-90" style={{ width: 84 }}>
+                  <div className="rounded-2xl shadow-md flex items-center justify-center w-[56px] h-[56px] relative bg-gradient-to-br from-[#34C759] to-[#30D158]">
+                    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden>
+                      <circle cx="16" cy="9" r="3.4" fill="white" opacity="0.95" />
+                      <circle cx="8" cy="20" r="3" fill="white" opacity="0.78" />
+                      <circle cx="24" cy="20" r="3" fill="white" opacity="0.78" />
+                      <line x1="16" y1="12.4" x2="8" y2="17" stroke="white" strokeWidth="1.4" strokeOpacity="0.7" strokeLinecap="round" />
+                      <line x1="16" y1="12.4" x2="24" y2="17" stroke="white" strokeWidth="1.4" strokeOpacity="0.7" strokeLinecap="round" />
+                    </svg>
+                    <span className="absolute -top-1.5 -end-1.5 bg-[#8E8E93] text-white rounded-full px-1.5 py-0.5 text-[8px] font-bold shadow-sm">
+                      {t.dashDemoTag}
+                    </span>
+                  </div>
+                  <p className="text-[10.5px] font-semibold text-[#1C1C1E] text-center leading-tight">{t.dashDemoTreeName}</p>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sf-footnote font-semibold text-[#1C1C1E]">{t.dashNoTreesTitle}</p>
+                  <p className="text-[11px] text-[#636366] mt-0.5 leading-snug">{t.dashNoTreesHint}</p>
+                </div>
+              </div>
+            )}
             <div
               className="relative flex gap-3 overflow-x-auto pb-1 -mx-1 px-1"
               style={{ scrollbarWidth: 'none' }}
