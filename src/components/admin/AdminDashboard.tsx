@@ -13,7 +13,7 @@ import { getRingGradient, getFallbackGradient } from '../memberVisuals'
 import type { EditRequest, Member, Profile, UserRole, TreeRole, AccessRequest, UserPlan, PlanId } from '../../types'
 import { adminInboxCounts } from '../../lib/notifications'
 
-type Tab = 'overview' | 'users' | 'members' | 'trees' | 'requests' | 'access' | 'reports' | 'invites' | 'system'
+type Tab = 'overview' | 'users' | 'members' | 'trees' | 'inbox' | 'invites' | 'system'
 
 interface AdminUser extends Profile {
   email?: string
@@ -466,9 +466,7 @@ export default function AdminDashboard() {
   const deceased = members.filter(m => m.death_date).length
   const alive = members.length - deceased
   const tabBadges: Partial<Record<Tab, number>> = {
-    requests: inbox.edits,
-    access: inbox.access + inbox.shareCodes,
-    reports: inbox.reports,
+    inbox: inbox.total,
   }
 
   return (
@@ -605,9 +603,7 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
             ['overview', t.adminTabOverview, '📊'],
             ['trees', t.adminTabTrees, '🌲'],
             ['users', t.adminTabUsers, '👥'],
-            ['requests', t.adminTabRequests, '🔔'],
-            ['access', t.adminTabAccess, '🚪'],
-            ['reports', t.adminTabReports, '🐞'],
+            ['inbox', t.adminTabInbox, '📥'],
             ['invites', t.adminTabInvites, '🔑'],
             ['system', t.adminTabSystem, '⚙️'],
           ] as const).map(([key, label, icon]) => (
@@ -675,14 +671,14 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {([
-                    ['requests', t.adminInboxEdits, '✏️', inbox.edits],
-                    ['access', t.adminInboxAccess, '🚪', inbox.access],
-                    ['access', t.adminInboxShareCodes, '🔑', inbox.shareCodes],
-                    ['reports', t.adminInboxReports, '🐞', inbox.reports],
-                  ] as const).map(([targetTab, label, icon, count], i) => (
+                    [t.adminInboxEdits, '✏️', inbox.edits],
+                    [t.adminInboxAccess, '🚪', inbox.access],
+                    [t.adminInboxShareCodes, '🔑', inbox.shareCodes],
+                    [t.adminInboxReports, '🐞', inbox.reports],
+                  ] as const).map(([label, icon, count], i) => (
                     <button
-                      key={`${targetTab}-${i}`}
-                      onClick={() => setTab(targetTab)}
+                      key={`inbox-${i}`}
+                      onClick={() => setTab('inbox')}
                       className="rounded-2xl bg-white/70 border border-white/60 px-3 py-2.5 flex flex-col items-center gap-1 hover:bg-white transition"
                     >
                       <span className="text-lg" aria-hidden>{icon}</span>
@@ -888,40 +884,21 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
             </motion.div>
           )}
 
-          {tab === 'requests' && (
+          {tab === 'inbox' && (
             <motion.div
-              key="requests"
+              key="inbox"
               initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}
-              className="space-y-3"
+              className="space-y-5"
             >
-              <SectionHeader title={t.notificationCenter} desc={t.pendingRequests} />
-              {editRequests.length === 0 ? (
-                <EmptyBlock icon="✅" text={t.noPending} />
-              ) : (
-                <div className="space-y-3">
-                  {editRequests.map((req, i) => (
-                    <RequestCard key={req.id} request={req} index={i} t={t} lang={lang}
-                      onApprove={() => approveEditRequest(req.id)}
-                      onReject={() => rejectEditRequest(req.id)} />
-                  ))}
-                </div>
+              {pendingAccess.length === 0 && editRequests.length === 0 && feedback.length === 0 && (
+                <EmptyBlock icon="✅" text={t.adminInboxEmpty} />
               )}
-            </motion.div>
-          )}
 
-          {tab === 'access' && (
-            <motion.div
-              key="access"
-              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}
-              className="space-y-3"
-            >
-              <SectionHeader title={t.adminAccessTitle} desc={t.adminAccessDesc} />
-              {pendingAccess.length === 0 ? (
-                <EmptyBlock icon="✅" text={t.adminAccessNoPending} />
-              ) : (
+              {/* Access + share-code requests */}
+              {pendingAccess.length > 0 && (
                 <div className="space-y-3">
+                  <SectionHeader title={t.adminAccessTitle} desc={t.adminAccessDesc} />
                   {pendingAccess.map((req, i) => (
                     <AccessRequestCard
                       key={req.id}
@@ -934,21 +911,23 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
                   ))}
                 </div>
               )}
-            </motion.div>
-          )}
 
-          {tab === 'reports' && (
-            <motion.div
-              key="reports"
-              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}
-              className="space-y-3"
-            >
-              <SectionHeader title={t.adminReportsTitle} desc={t.adminReportsDesc} />
-              {feedback.length === 0 ? (
-                <EmptyBlock icon="📭" text={t.adminReportsEmpty} />
-              ) : (
+              {/* Member-edit suggestions */}
+              {editRequests.length > 0 && (
+                <div className="space-y-3">
+                  <SectionHeader title={t.notificationCenter} desc={t.pendingRequests} />
+                  {editRequests.map((req, i) => (
+                    <RequestCard key={req.id} request={req} index={i} t={t} lang={lang}
+                      onApprove={() => approveEditRequest(req.id)}
+                      onReject={() => rejectEditRequest(req.id)} />
+                  ))}
+                </div>
+              )}
+
+              {/* Reports / feedback */}
+              {feedback.length > 0 && (
                 <div className="space-y-2">
+                  <SectionHeader title={t.adminReportsTitle} desc={t.adminReportsDesc} />
                   {feedback.map((f) => (
                     <div
                       key={f.id}
