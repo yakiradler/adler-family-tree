@@ -6,7 +6,7 @@ import { useLang, isRTL } from '../i18n/useT'
 import { supabase } from '../lib/supabase'
 import { isAdmin, isOnboarded } from '../lib/permissions'
 import { scopePersonalTrees } from '../lib/treeScope'
-import { countUnreadAdminInbox, hasUnseenShareCode } from '../lib/notifications'
+import { countUnreadAdminInbox, hasUnseenShareCode, adminInboxCounts } from '../lib/notifications'
 import AccessRequestStatusToast from '../components/AccessRequestStatusToast'
 import NotificationBell from '../components/notifications/NotificationBell'
 import { PersonAvatarIcon } from '../components/MemberNode'
@@ -115,11 +115,26 @@ export default function Dashboard({ demoMode }: Props) {
   const myTreeAccessIds = useFamilyStore((s) => s.myTreeAccessIds)
   const fetchMyTreeAccess = useFamilyStore((s) => s.fetchMyTreeAccess)
   const notifications = useFamilyStore((s) => s.notifications)
+  // Admin inbox sources — pulled here so the home "ניהול" tile can badge
+  // ACTUAL pending work (access/edit/feedback), which survives glancing
+  // at the bell, instead of the notification read-state that clears.
+  const editRequests = useFamilyStore((s) => s.editRequests)
+  const accessRequests = useFamilyStore((s) => s.accessRequests)
+  const feedback = useFamilyStore((s) => s.feedback)
+  const fetchEditRequests = useFamilyStore((s) => s.fetchEditRequests)
+  const fetchAccessRequests = useFamilyStore((s) => s.fetchAccessRequests)
+  const fetchFeedback = useFamilyStore((s) => s.fetchFeedback)
   // Hydrate the shared-with-me tree list once the profile is known —
   // it feeds scopePersonalTrees below (admin dashboard scoping).
   useEffect(() => {
     if (!demoMode && profile) fetchMyTreeAccess()
   }, [demoMode, profile, fetchMyTreeAccess])
+  // Prime the admin inbox counts for the home tile badge (admins only).
+  useEffect(() => {
+    if (demoMode || !isAdmin(profile)) return
+    fetchEditRequests(); fetchAccessRequests(); fetchFeedback()
+  }, [demoMode, profile, fetchEditRequests, fetchAccessRequests, fetchFeedback])
+  const adminInboxTotal = adminInboxCounts(editRequests, accessRequests, feedback).total
   const { t, lang, toggleLang } = useLang()
   const dir = isRTL(lang) ? 'rtl' : 'ltr'
   const navigate = useNavigate()
@@ -876,7 +891,7 @@ export default function Dashboard({ demoMode }: Props) {
                 label={lang === 'he' ? 'ניהול' : 'Admin'}
                 gradient="from-[#5AC8FA] to-[#64D2FF]"
                 onClick={() => navigate('/admin')}
-                badge={countUnreadAdminInbox(notifications)}
+                badge={Math.max(adminInboxTotal, countUnreadAdminInbox(notifications))}
               />
             )}
           </div>

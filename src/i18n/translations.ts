@@ -258,6 +258,7 @@ export const translations = {
     // ── Notification center ──
     notifTitle: 'התראות',
     notifEmpty: 'אין התראות עדיין',
+    notifNewTitle: 'התראה חדשה',
     notifMarkAllRead: 'סמן הכול כנקרא',
     notifBellAria: 'פתח התראות',
     notifTypeAccessRequest: 'בקשת גישה חדשה מאת {name} • {tree}',
@@ -1150,6 +1151,7 @@ export const translations = {
     // ── Notification center ──
     notifTitle: 'Notifications',
     notifEmpty: 'No notifications yet',
+    notifNewTitle: 'New notification',
     notifMarkAllRead: 'Mark all as read',
     notifBellAria: 'Open notifications',
     notifTypeAccessRequest: 'New access request from {name} • {tree}',
