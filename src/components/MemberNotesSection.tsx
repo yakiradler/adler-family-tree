@@ -93,44 +93,54 @@ export default function MemberNotesSection({ memberId }: Props) {
         )}
       </p>
 
-      {/* "Add" affordance — promoted to the TOP of the section (per
-          owner request it should sit above the reactions/emoji bar).
-          Doubles as Cancel when the composer is already open. */}
-      <div className="mb-2 flex justify-center">
-        {canWrite ? (
-          <button
-            type="button"
-            onClick={() => setComposerOpen((s) => !s)}
-            className="text-[11px] font-semibold text-[#007AFF] hover:underline px-1 py-1"
-          >
-            {composerOpen ? `× ${t.notesComposerCancel}` : `+ ${t.notesAddLink}`}
-          </button>
-        ) : (
-          <p className="text-[10px] text-[#8E8E93]">{t.notesLoginToWrite}</p>
-        )}
-      </div>
-
-      {/* Composer — collapsed by default, expands just BELOW the add
-          link when the user taps it. */}
-      <AnimatePresence initial={false}>
-        {composerOpen && canWrite && (
-          <motion.div
-            key="composer"
-            initial={{ height: 0, opacity: 0, y: -6 }}
-            animate={{ height: 'auto', opacity: 1, y: 0 }}
-            exit={{ height: 0, opacity: 0, y: -6 }}
-            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            style={{ overflow: 'hidden' }}
-            className="mb-2"
-          >
-            <NoteComposer
-              memberId={memberId}
-              onDone={() => setComposerOpen(false)}
-              onCancel={() => setComposerOpen(false)}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Comment box — Facebook/chat style. A rounded "write a comment"
+          bubble with the user's avatar sits at the top (above the
+          reactions bar) and invites a quick note; tapping it expands the
+          full composer (text, photo, memory/comment toggle, send). */}
+      {canWrite ? (
+        <div className="mb-3">
+          <AnimatePresence initial={false} mode="wait">
+            {composerOpen ? (
+              <motion.div
+                key="composer"
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              >
+                <NoteComposer
+                  memberId={memberId}
+                  onDone={() => setComposerOpen(false)}
+                  onCancel={() => setComposerOpen(false)}
+                />
+              </motion.div>
+            ) : (
+              <motion.button
+                key="bubble"
+                type="button"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                onClick={() => setComposerOpen(true)}
+                className="w-full flex items-center gap-2 bg-white border border-black/10 rounded-full ps-1.5 pe-3 py-1.5 shadow-sm active:scale-[0.99] transition"
+              >
+                <span className="w-7 h-7 rounded-full overflow-hidden flex-shrink-0 bg-gradient-to-br from-[#007AFF] to-[#32ADE6] flex items-center justify-center text-white text-[11px] font-bold">
+                  {profile?.avatar_url ? (
+                    <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    (profile?.full_name ?? '?').charAt(0).toUpperCase()
+                  )}
+                </span>
+                <span className="flex-1 text-start text-[12px] text-[#8E8E93] truncate">{t.notesBubblePlaceholder}</span>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0" aria-hidden="true">
+                  <path d="M2.5 12V14H4.5L13 5.5L11 3.5L2.5 12Z" fill="#007AFF" />
+                </svg>
+              </motion.button>
+            )}
+          </AnimatePresence>
+        </div>
+      ) : (
+        <p className="mb-2 text-center text-[10px] text-[#8E8E93]">{t.notesLoginToWrite}</p>
+      )}
 
       {/* Feed — always rendered (no extra click needed). */}
       {list.length === 0 ? (
