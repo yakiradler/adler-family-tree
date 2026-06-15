@@ -15,6 +15,8 @@ import AIScanModal from '../components/ai/AIScanModal'
 import BuildFromTextModal from '../components/BuildFromTextModal'
 import BrandMark from '../components/BrandMark'
 import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
+import WelcomeJourney from '../components/WelcomeJourney'
+import { hasSeenWelcomeJourney } from '../lib/welcomeJourney'
 import JoinTreeModal from '../components/JoinTreeModal'
 import SecuritySettingsModal from '../components/security/SecuritySettingsModal'
 import PlanCard, { LeafIcon } from '../components/plan/PlanCard'
@@ -163,6 +165,8 @@ export default function Dashboard({ demoMode }: Props) {
   // finishing the tour writes the flag so the auto-launch never
   // pops up again.
   const [tutorialOpen, setTutorialOpen] = useState(false)
+  // First-login welcome journey — once per device, real (non-demo) users.
+  const [welcomeOpen, setWelcomeOpen] = useState(() => !demoMode && !hasSeenWelcomeJourney())
   // Join-tree-by-code modal — reachable from both the QuickAccessMenu
   // and the new "🔑" tile in the Apps grid below.
   const [joinTreeOpen, setJoinTreeOpen] = useState(false)
@@ -940,6 +944,8 @@ export default function Dashboard({ demoMode }: Props) {
         steps={tutorialSteps}
         onClose={closeTutorial}
       />
+
+      <WelcomeJourney open={welcomeOpen} onClose={() => setWelcomeOpen(false)} />
 
       {/* Tree-card long-press / right-click menu.  "Request share
           code" is real — it files an access_request the admin picks
