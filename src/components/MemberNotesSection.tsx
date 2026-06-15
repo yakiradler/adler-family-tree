@@ -93,6 +93,45 @@ export default function MemberNotesSection({ memberId }: Props) {
         )}
       </p>
 
+      {/* "Add" affordance — promoted to the TOP of the section (per
+          owner request it should sit above the reactions/emoji bar).
+          Doubles as Cancel when the composer is already open. */}
+      <div className="mb-2 flex justify-center">
+        {canWrite ? (
+          <button
+            type="button"
+            onClick={() => setComposerOpen((s) => !s)}
+            className="text-[11px] font-semibold text-[#007AFF] hover:underline px-1 py-1"
+          >
+            {composerOpen ? `× ${t.notesComposerCancel}` : `+ ${t.notesAddLink}`}
+          </button>
+        ) : (
+          <p className="text-[10px] text-[#8E8E93]">{t.notesLoginToWrite}</p>
+        )}
+      </div>
+
+      {/* Composer — collapsed by default, expands just BELOW the add
+          link when the user taps it. */}
+      <AnimatePresence initial={false}>
+        {composerOpen && canWrite && (
+          <motion.div
+            key="composer"
+            initial={{ height: 0, opacity: 0, y: -6 }}
+            animate={{ height: 'auto', opacity: 1, y: 0 }}
+            exit={{ height: 0, opacity: 0, y: -6 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            style={{ overflow: 'hidden' }}
+            className="mb-2"
+          >
+            <NoteComposer
+              memberId={memberId}
+              onDone={() => setComposerOpen(false)}
+              onCancel={() => setComposerOpen(false)}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Feed — always rendered (no extra click needed). */}
       {list.length === 0 ? (
         <p className="text-[11px] text-[#8E8E93] px-1 leading-snug">{t.notesNoneYet}</p>
@@ -112,46 +151,6 @@ export default function MemberNotesSection({ memberId }: Props) {
           </AnimatePresence>
         </div>
       )}
-
-      {/* Composer — collapsed by default, expands JUST ABOVE the add
-          link when the user taps it. Per the spec: "the editor should
-          pop up slightly above" the add link.  */}
-      <AnimatePresence initial={false}>
-        {composerOpen && canWrite && (
-          <motion.div
-            key="composer"
-            initial={{ height: 0, opacity: 0, y: 6 }}
-            animate={{ height: 'auto', opacity: 1, y: 0 }}
-            exit={{ height: 0, opacity: 0, y: 6 }}
-            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            style={{ overflow: 'hidden' }}
-            className="mt-2"
-          >
-            <NoteComposer
-              memberId={memberId}
-              onDone={() => setComposerOpen(false)}
-              onCancel={() => setComposerOpen(false)}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* "Add" affordance — small, link-styled, lives at the very
-          bottom of the section. Doubles as Cancel when the composer
-          is already open. */}
-      <div className="mt-2 flex justify-center">
-        {canWrite ? (
-          <button
-            type="button"
-            onClick={() => setComposerOpen((s) => !s)}
-            className="text-[11px] font-semibold text-[#007AFF] hover:underline px-1 py-1"
-          >
-            {composerOpen ? `× ${t.notesComposerCancel}` : `+ ${t.notesAddLink}`}
-          </button>
-        ) : (
-          <p className="text-[10px] text-[#8E8E93]">{t.notesLoginToWrite}</p>
-        )}
-      </div>
 
       {/* Inline delete confirmation — kept simple (no modal) so a
           quick "oh I didn't mean that" is one tap away. */}
