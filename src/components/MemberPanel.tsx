@@ -40,6 +40,15 @@ export default function MemberPanel({ onClose }: Props) {
   const { members, relationships, selectedMemberId, setSelectedMemberId, profile, deleteMember, deleteRelationship, updateMember, addMember, trees, myTreeRoles } = useFamilyStore()
   const { t, lang } = useLang()
   const [tab, setTab] = useState<'about' | 'family' | 'photos'>('about')
+  // Direction of the last tab change (+1 = moved right, -1 = left) so
+  // the tab content slides horizontally toward the chosen tab instead
+  // of a plain fade.
+  const [tabDir, setTabDir] = useState(0)
+  const selectTab = (next: 'about' | 'family' | 'photos') => {
+    const order = ['about', 'family', 'photos']
+    setTabDir(order.indexOf(next) >= order.indexOf(tab) ? 1 : -1)
+    setTab(next)
+  }
   const [editOpen, setEditOpen] = useState(false)
   const [relOpen, setRelOpen] = useState(false)
   // "Add relative" — the most-wanted action, surfaced right on the card.
@@ -406,7 +415,7 @@ export default function MemberPanel({ onClose }: Props) {
             ] as const).map(([key, label]) => (
               <button
                 key={key}
-                onClick={() => setTab(key)}
+                onClick={() => selectTab(key)}
                 className={`flex-1 py-1.5 px-2 rounded-xl text-[12px] font-semibold transition-all ${
                   tab === key ? 'bg-white text-[#1C1C1E] shadow-sm' : 'text-[#8E8E93]'
                 }`}
@@ -423,10 +432,10 @@ export default function MemberPanel({ onClose }: Props) {
             {tab === 'about' && (
               <motion.div
                 key="about"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.18 }}
+                initial={{ opacity: 0, x: tabDir * 40 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: tabDir * -40 }}
+                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
                 className="space-y-2.5"
               >
                 {member.birth_date && (
@@ -466,11 +475,30 @@ export default function MemberPanel({ onClose }: Props) {
                 {member.maiden_name && (
                   <InfoRow icon="🌸" label={t.maidenNameLabel} value={member.maiden_name} />
                 )}
-                {/* ── Contact + social links — one tap to call / WhatsApp /
-                    email / open a family member's social profile. ── */}
-                {hasContact && contact && (
-                  <div className="bg-[#F2F2F7] rounded-2xl p-3">
-                    <p className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wide mb-2">{t.contactSection}</p>
+                {/* ── Contact + social links — ALWAYS shown so the
+                    profile clearly invites contact details even before
+                    any are entered. One tap to call / WhatsApp / email /
+                    open a social profile. Editors get a quick add/edit
+                    link that opens the editor straight to these fields. ── */}
+                <div className="bg-[#F2F2F7] rounded-2xl p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wide">{t.contactSection}</p>
+                    {editAllowed && (
+                      <button
+                        type="button"
+                        onClick={() => setEditOpen(true)}
+                        aria-label={hasContact ? t.contactEditDetails : t.contactAddDetails}
+                        title={hasContact ? t.contactEditDetails : t.contactAddDetails}
+                        className="flex items-center gap-1 text-[11px] font-semibold text-[#007AFF] hover:underline"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                          <path d="M2.5 12V14H4.5L13 5.5L11 3.5L2.5 12Z" fill="#007AFF" />
+                        </svg>
+                        {hasContact ? t.contactEditDetails : t.contactAddDetails}
+                      </button>
+                    )}
+                  </div>
+                  {hasContact && contact ? (
                     <div className="space-y-1.5">
                       {contact.phone && (
                         <div className="flex items-center gap-1.5">
@@ -500,33 +528,32 @@ export default function MemberPanel({ onClose }: Props) {
                           <span className="text-[#8E8E93]" aria-hidden>↗</span>
                         </a>
                       )}
+                      <style>{`
+                        .contact-link {
+                          display: flex; align-items: center; gap: 0.6rem;
+                          padding: 0.6rem 0.75rem; border-radius: 0.75rem;
+                          background: #FFFFFF; border: 1px solid rgba(0,0,0,0.05);
+                          font-size: 13px; font-weight: 600; color: #1C1C1E;
+                          transition: transform 0.1s ease, background 0.15s ease;
+                        }
+                        .contact-link:active { transform: scale(0.98); }
+                        .contact-link--wa { flex: 0 0 auto; color: #25D366; }
+                      `}</style>
                     </div>
-                    <style>{`
-                      .contact-link {
-                        display: flex; align-items: center; gap: 0.6rem;
-                        padding: 0.6rem 0.75rem; border-radius: 0.75rem;
-                        background: #FFFFFF; border: 1px solid rgba(0,0,0,0.05);
-                        font-size: 13px; font-weight: 600; color: #1C1C1E;
-                        transition: transform 0.1s ease, background 0.15s ease;
-                      }
-                      .contact-link:active { transform: scale(0.98); }
-                      .contact-link--wa { flex: 0 0 auto; color: #25D366; }
-                    `}</style>
-                  </div>
-                )}
-                {!member.birth_date && !member.death_date && !member.bio && !member.maiden_name && !lineageInfo?.showBadge && !lineageInfo?.daughterOf && !hasContact && (
-                  <EmptyTab icon="📝" text={t.panelNoInfo} />
-                )}
+                  ) : (
+                    <p className="text-[11px] text-[#8E8E93] leading-snug">{t.contactNoneYet}</p>
+                  )}
+                </div>
               </motion.div>
             )}
 
             {tab === 'family' && (
               <motion.div
                 key="family"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.18 }}
+                initial={{ opacity: 0, x: tabDir * 40 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: tabDir * -40 }}
+                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
                 className="space-y-4"
               >
                 {currentSpouses.length > 0 && (
@@ -556,10 +583,10 @@ export default function MemberPanel({ onClose }: Props) {
             {tab === 'photos' && (
               <motion.div
                 key="photos"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.18 }}
+                initial={{ opacity: 0, x: tabDir * 40 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: tabDir * -40 }}
+                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
               >
                 {/* Hidden file input; the visible tile + empty-state
                     button below trigger it. accept+capture both make
@@ -647,10 +674,13 @@ export default function MemberPanel({ onClose }: Props) {
             clicking memories"). A faint top divider keeps it
             visually distinct from the tab content above. */}
         <div className="mx-4 mt-1 border-t border-black/5" />
-        <div className="px-4 pt-3">
+        {/* Add-comment/memory affordance sits at the top of the notes
+            section, so notes render ABOVE the reactions bar per owner
+            request. */}
+        <MemberNotesSection memberId={member.id} />
+        <div className="px-4 pb-1">
           <MemberReactionsBar memberId={member.id} />
         </div>
-        <MemberNotesSection memberId={member.id} />
 
         {/* Action buttons: full-width stacked rows so labels are always readable */}
         {(editAllowed || relAllowed || deleteAllowed || member.last_name) && (
@@ -666,13 +696,13 @@ export default function MemberPanel({ onClose }: Props) {
                   onClick={() => setEditExpanded((v) => !v)}
                   aria-expanded={editExpanded}
                   aria-label={t.panelActionsMenu}
-                  className="w-full py-3 rounded-2xl bg-[#F2F2F7] text-[#1C1C1E] text-sf-subhead font-bold active:scale-[0.98] transition flex items-center justify-center gap-2"
+                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#AF52DE] via-[#7D5CFF] to-[#5E5CE6] text-white text-sf-subhead font-bold active:scale-[0.98] transition flex items-center justify-center gap-2 shadow-md"
                 >
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                    <path d="M2 4h12M2 8h12M2 12h12" stroke="#1C1C1E" strokeWidth="1.6" strokeLinecap="round" />
+                    <path d="M2 4h12M2 8h12M2 12h12" stroke="white" strokeWidth="1.6" strokeLinecap="round" />
                   </svg>
                   <span>{t.panelActionsMenu}</span>
-                  <motion.span animate={{ rotate: editExpanded ? 180 : 0 }} className="text-xs leading-none text-[#8E8E93]" aria-hidden>▾</motion.span>
+                  <motion.span animate={{ rotate: editExpanded ? 180 : 0 }} className="text-xs leading-none text-white/80" aria-hidden>▾</motion.span>
                 </button>
                 <AnimatePresence>
                   {editExpanded && (
@@ -682,9 +712,8 @@ export default function MemberPanel({ onClose }: Props) {
                       exit={{ opacity: 0, height: 0 }}
                       className="space-y-1.5 overflow-hidden"
                     >
-                      {/* Surname-aware tree jump — self-hides if the
-                          surname matches the active tree. */}
-                      <JumpToFamilyTreeButton member={member} />
+                      {/* Order: add · edit · manage · open(jump) · copy
+                          · delete (per owner request). */}
                       {/* Add relative — the #1 action, with its own
                           4-direction expansion. */}
                       {relAllowed && (
@@ -775,6 +804,9 @@ export default function MemberPanel({ onClose }: Props) {
                         <span>{t.relManageBtn}</span>
                       </button>
                       )}
+                      {/* Surname-aware tree jump — self-hides if the
+                          surname matches the active tree. */}
+                      <JumpToFamilyTreeButton member={member} />
                       {/* ── Copy to another tree (advanced) ── */}
                       {editAllowed && (
                       <button

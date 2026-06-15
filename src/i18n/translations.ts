@@ -358,6 +358,9 @@ export const translations = {
     treeRoleEditor: 'עורך',
     treeRoleViewer: 'צופה',
     contactSection: 'צור קשר',
+    contactNoneYet: 'טרם נוספו פרטי יצירת קשר',
+    contactAddDetails: 'הוסף פרטים',
+    contactEditDetails: 'עריכה',
     contactFacebook: 'פייסבוק',
     contactInstagram: 'אינסטגרם',
     editContactSection: 'צור קשר ורשתות חברתיות',
@@ -403,7 +406,7 @@ export const translations = {
     notesLoginToWrite: 'התחבר כדי לכתוב זיכרון',
     notesImageAdd: 'הוסף תמונה',
     notesImageRemove: 'הסר תמונה',
-    notesAddLink: 'הוסף זיכרון / תגובה',
+    notesAddLink: 'הוסף תגובה או זיכרון',
     notesComposerCancel: 'ביטול',
 
     // Navigation hide/show
@@ -1242,6 +1245,9 @@ export const translations = {
     treeRoleEditor: 'Editor',
     treeRoleViewer: 'Viewer',
     contactSection: 'Contact',
+    contactNoneYet: 'No contact details yet',
+    contactAddDetails: 'Add details',
+    contactEditDetails: 'Edit',
     contactFacebook: 'Facebook',
     contactInstagram: 'Instagram',
     editContactSection: 'Contact & social links',
@@ -1287,7 +1293,7 @@ export const translations = {
     notesLoginToWrite: 'Sign in to write a memory',
     notesImageAdd: 'Add a photo',
     notesImageRemove: 'Remove photo',
-    notesAddLink: 'Add memory / comment',
+    notesAddLink: 'Add comment or memory',
     notesComposerCancel: 'Cancel',
 
     // Navigation hide/show
