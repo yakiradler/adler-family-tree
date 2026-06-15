@@ -112,8 +112,13 @@ export interface MemberContact {
 
 export interface Member {
   id: string
+  /** Primary (Hebrew) name. */
   first_name: string
   last_name: string
+  /** Optional English name (for relatives abroad). The UI shows the name
+   * matching the active language, falling back to the Hebrew one. */
+  first_name_en?: string
+  last_name_en?: string
   /** Previous family name (e.g. maiden name). Surfaces only inside the
    * profile panel; never on the tree, so the tree stays compact. */
   maiden_name?: string

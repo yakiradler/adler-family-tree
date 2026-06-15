@@ -6,6 +6,7 @@ import { useLang, isRTL, type Translations } from '../i18n/useT'
 import { PersonAvatarIcon } from '../components/MemberNode'
 import { getRingGradient, getFallbackGradient } from '../components/memberVisuals'
 import { nextHebrewBirthday } from '../lib/hebrewDate'
+import { displayName } from '../lib/memberName'
 import type { Member } from '../types'
 
 interface Props { demoMode: boolean }
@@ -236,7 +237,7 @@ function BirthdayRow({
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sf-subhead font-semibold text-[#1C1C1E] truncate">
-          {member.first_name} {member.last_name}
+          {displayName(member, lang)}
         </p>
         <p className="text-[11px] text-[#8E8E93] truncate">
           {calendar === 'hebrew' && entry.hebrewLabel

@@ -68,7 +68,7 @@ export function applyTreeFilters(
 
   const passesSearch = (m: Member): boolean => {
     if (!search) return true
-    const hay = `${m.first_name} ${m.last_name} ${m.nickname ?? ''}`.toLowerCase()
+    const hay = `${m.first_name} ${m.last_name} ${m.first_name_en ?? ''} ${m.last_name_en ?? ''} ${m.nickname ?? ''}`.toLowerCase()
     return hay.includes(search)
   }
 

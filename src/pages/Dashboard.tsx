@@ -16,6 +16,7 @@ import BrandMark from '../components/BrandMark'
 import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
 import { shouldAutoStartTutorial, markTutorialAutoStarted } from '../lib/firstRunTutorial'
 import { nextHebrewBirthday } from '../lib/hebrewDate'
+import { displayName } from '../lib/memberName'
 import JoinTreeModal from '../components/JoinTreeModal'
 import SecuritySettingsModal from '../components/security/SecuritySettingsModal'
 import PlanCard, { LeafIcon } from '../components/plan/PlanCard'
@@ -805,7 +806,7 @@ export default function Dashboard({ demoMode }: Props) {
                   <MiniAvatar member={member} />
                   <div className="flex-1 min-w-0 text-start">
                     <p className="text-sf-subhead font-semibold text-[#1C1C1E] truncate">
-                      {member.first_name} {member.last_name}
+                      {displayName(member, lang)}
                     </p>
                     <p className="text-sf-caption text-[#8E8E93] truncate">
                       {calendar === 'hebrew' && hebrewLabel

@@ -20,7 +20,7 @@ export default function AddMemberModal({ open, onClose }: Props) {
   const { t, lang } = useLang()
   // Phone back button closes the modal instead of leaving the page.
   useCloseOnBack(open, onClose)
-  const [form, setForm] = useState({ first_name: '', last_name: '', maiden_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '' as Gender | '', birth_order: '', lineage: '' as Lineage | '' })
+  const [form, setForm] = useState({ first_name: '', last_name: '', first_name_en: '', last_name_en: '', maiden_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '' as Gender | '', birth_order: '', lineage: '' as Lineage | '' })
   const [loading, setLoading] = useState(false)
   const [photoBusy, setPhotoBusy] = useState(false)
   const photoInputRef = useRef<HTMLInputElement>(null)
@@ -67,7 +67,7 @@ export default function AddMemberModal({ open, onClose }: Props) {
   }, [treeMembers, relSearch])
 
   const resetAndClose = () => {
-    setForm({ first_name: '', last_name: '', maiden_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '', birth_order: '', lineage: '' })
+    setForm({ first_name: '', last_name: '', first_name_en: '', last_name_en: '', maiden_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '', birth_order: '', lineage: '' })
     setRelDirection('')
     setAnchorId('')
     setRelSearch('')
@@ -85,6 +85,8 @@ export default function AddMemberModal({ open, onClose }: Props) {
     const created = await addMember({
       first_name: form.first_name,
       last_name: form.last_name,
+      first_name_en: form.first_name_en.trim() || undefined,
+      last_name_en: form.last_name_en.trim() || undefined,
       maiden_name: form.maiden_name.trim() || undefined,
       birth_date: form.birth_date || undefined,
       death_date: form.death_date || undefined,
@@ -147,6 +149,11 @@ export default function AddMemberModal({ open, onClose }: Props) {
                 <div className="grid grid-cols-2 gap-2">
                   <input required placeholder={t.firstName} value={form.first_name} onChange={(e) => setForm((f) => ({ ...f, first_name: e.target.value }))} className="input-field py-2.5" />
                   <input required placeholder={t.lastName} value={form.last_name} onChange={(e) => setForm((f) => ({ ...f, last_name: e.target.value }))} className="input-field py-2.5" />
+                </div>
+                {/* Optional English name (for relatives abroad). */}
+                <div className="grid grid-cols-2 gap-2">
+                  <input dir="ltr" placeholder={t.firstNameEn} value={form.first_name_en} onChange={(e) => setForm((f) => ({ ...f, first_name_en: e.target.value }))} className="input-field py-2.5" />
+                  <input dir="ltr" placeholder={t.lastNameEn} value={form.last_name_en} onChange={(e) => setForm((f) => ({ ...f, last_name_en: e.target.value }))} className="input-field py-2.5" />
                 </div>
                 <div>
                   <label className="text-sf-caption text-[#8E8E93] mb-1 block">{t.maidenNameLabel}</label>

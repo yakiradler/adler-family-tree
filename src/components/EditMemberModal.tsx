@@ -27,6 +27,8 @@ interface Props {
 interface FormState {
   first_name: string
   last_name: string
+  first_name_en: string
+  last_name_en: string
   maiden_name: string
   nickname: string
   bio: string
@@ -51,6 +53,8 @@ function fromMember(m: Member): FormState {
   return {
     first_name: m.first_name ?? '',
     last_name: m.last_name ?? '',
+    first_name_en: m.first_name_en ?? '',
+    last_name_en: m.last_name_en ?? '',
     maiden_name: m.maiden_name ?? '',
     nickname: m.nickname ?? '',
     bio: m.bio ?? '',
@@ -154,6 +158,8 @@ export default function EditMemberModal({ open, onClose, member, suggestMode = f
     const changes = {
       first_name: form.first_name.trim() || member.first_name,
       last_name: form.last_name.trim(),
+      first_name_en: form.first_name_en.trim() || undefined,
+      last_name_en: form.last_name_en.trim() || undefined,
       maiden_name: form.maiden_name.trim() || undefined,
       nickname: form.nickname.trim() || undefined,
       bio: form.bio.trim() || undefined,
@@ -341,6 +347,27 @@ export default function EditMemberModal({ open, onClose, member, suggestMode = f
                     />
                   </Field>
                 </div>
+                {/* Optional English name (for relatives abroad). Shown when
+                    the app language is English, falling back to Hebrew. */}
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label={t.firstNameEn}>
+                    <input
+                      dir="ltr"
+                      className="w-full bg-[#F2F2F7] border border-transparent rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] placeholder:text-[#8E8E93] focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40 focus:bg-white focus:border-[#007AFF]/30 transition"
+                      value={form.first_name_en}
+                      onChange={e => patch('first_name_en', e.target.value)}
+                    />
+                  </Field>
+                  <Field label={t.lastNameEn}>
+                    <input
+                      dir="ltr"
+                      className="w-full bg-[#F2F2F7] border border-transparent rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] placeholder:text-[#8E8E93] focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40 focus:bg-white focus:border-[#007AFF]/30 transition"
+                      value={form.last_name_en}
+                      onChange={e => patch('last_name_en', e.target.value)}
+                    />
+                  </Field>
+                </div>
+                <p className="text-[10px] text-[#8E8E93] -mt-1">{t.nameEnglishHint}</p>
                 <Field label={t.maidenNameLabel}>
                   <input
                     className="w-full bg-[#F2F2F7] border border-transparent rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] placeholder:text-[#8E8E93] focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40 focus:bg-white focus:border-[#007AFF]/30 transition"
