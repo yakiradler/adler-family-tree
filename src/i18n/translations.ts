@@ -828,6 +828,8 @@ export const translations = {
     feedbackPlaceholderBug: 'מה קרה? תארו מה ניסיתם לעשות ומה השתבש…',
     feedbackPlaceholderQuestion: 'מה תרצו לשאול?',
     feedbackSend: 'שליחה',
+    feedbackError: 'השליחה נכשלה. בדוק את החיבור לאינטרנט ונסה שוב.',
+    feedbackRetry: 'נסה שוב',
     feedbackSent: 'ההודעה נשלחה!',
     feedbackSentDesc: 'תודה! המנהל יראה את הפנייה במסך הניהול ויטפל בה.',
 
@@ -1740,6 +1742,8 @@ export const translations = {
     feedbackPlaceholderBug: 'What happened? Describe what you tried and what went wrong…',
     feedbackPlaceholderQuestion: 'What would you like to ask?',
     feedbackSend: 'Send',
+    feedbackError: 'Couldn\'t send. Check your connection and try again.',
+    feedbackRetry: 'Try again',
     feedbackSent: 'Message sent!',
     feedbackSentDesc: 'Thanks! The admin will see your report in the admin dashboard.',
 

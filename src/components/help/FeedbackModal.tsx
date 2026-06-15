@@ -19,6 +19,7 @@ export default function FeedbackModal({ open, onClose }: { open: boolean; onClos
   const [body, setBody] = useState('')
   const [sent, setSent] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
 
   // Phone back button closes the form instead of leaving the page.
   useCloseOnBack(open, onClose)
@@ -26,21 +27,23 @@ export default function FeedbackModal({ open, onClose }: { open: boolean; onClos
   const handleClose = () => {
     onClose()
     // Reset AFTER the exit animation would have hidden the content.
-    window.setTimeout(() => { setSent(false); setBody(''); setCategory('bug') }, 250)
+    window.setTimeout(() => { setSent(false); setFailed(false); setBody(''); setCategory('bug') }, 250)
   }
 
   const submit = async () => {
     if (!body.trim() || busy) return
     setBusy(true)
+    setFailed(false)
     try {
-      await addFeedback({
-        author_id: profile?.id ?? 'anonymous',
+      const ok = await addFeedback({
+        author_id: profile?.id ?? null,
         author_name: profile?.full_name ?? 'אנונימי',
         category,
         body: body.trim(),
         context: window.location.hash || null,
       })
-      setSent(true)
+      if (ok) setSent(true)
+      else setFailed(true)
     } finally {
       setBusy(false)
     }
@@ -128,13 +131,17 @@ export default function FeedbackModal({ open, onClose }: { open: boolean; onClos
                   className="w-full rounded-2xl bg-[#F2F2F7] px-3.5 py-3 text-[13px] text-[#1C1C1E] placeholder:text-[#8E8E93] outline-none focus:ring-2 focus:ring-[#007AFF]/40 resize-none"
                 />
 
+                {failed && (
+                  <p className="text-[12px] text-[#FF3B30] text-center -mb-1">{t.feedbackError}</p>
+                )}
+
                 <button
                   type="button"
                   onClick={submit}
                   disabled={!body.trim() || busy}
                   className="w-full py-2.5 rounded-2xl bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white text-sf-subhead font-bold disabled:opacity-40 active:scale-[0.98] transition"
                 >
-                  {busy ? '…' : t.feedbackSend}
+                  {busy ? '…' : (failed ? t.feedbackRetry : t.feedbackSend)}
                 </button>
               </>
             )}

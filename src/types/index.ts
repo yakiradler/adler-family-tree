@@ -268,7 +268,8 @@ export type FeedbackStatus = 'open' | 'resolved'
 
 export interface FeedbackItem {
   id: string
-  author_id: string
+  /** Profiles row of the reporter; null if unresolved (FK is ON DELETE SET NULL). */
+  author_id: string | null
   author_name: string
   category: FeedbackCategory
   body: string
