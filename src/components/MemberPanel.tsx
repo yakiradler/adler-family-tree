@@ -13,7 +13,6 @@ import LineageBadge from './LineageBadge'
 import { telHref, whatsappHref, mailtoHref, facebookHref, instagramHref } from '../lib/contactLinks'
 import MemberNotesSection from './MemberNotesSection'
 import MemberReactionsBar from './MemberReactionsBar'
-import BuildFromTextModal from './BuildFromTextModal'
 import { canEditMember, canManageRelationships, computeNuclearFamilyIds, canWriteTree } from '../lib/permissions'
 import { getParentMap, resolveLineage } from '../lib/lineage'
 import { uploadMemberPhoto } from '../lib/photoUpload'
@@ -47,6 +46,10 @@ export default function MemberPanel({ onClose }: Props) {
   // `addRelExpanded` toggles the 4 direction choices; `quickAddDir` opens
   // the compact QuickAddRelativeModal anchored to this member.
   const [addRelExpanded, setAddRelExpanded] = useState(false)
+  // "Edit" accordion — keeps the card clean by tucking profile edit /
+  // relationships / copy / delete behind one tap, leaving only the
+  // everyday actions (jump, add relative) visible by default.
+  const [editExpanded, setEditExpanded] = useState(false)
   const [quickAddDir, setQuickAddDir] = useState<RelativeDirection | null>(null)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -61,9 +64,6 @@ export default function MemberPanel({ onClose }: Props) {
   const photoInputRef = useRef<HTMLInputElement | null>(null)
   // Defined inline inside the JSX where `member` is in scope —
   // see the photos-tab block for the implementation.
-  // "Coming soon" feature placeholders — wired to a friendly modal
-  // that explains what each will do once the backend lands.
-  const [aiTreeFromTextOpen, setAiTreeFromTextOpen] = useState(false)
 
   const member = useMemo(
     () => members.find(m => m.id === selectedMemberId) ?? null,
@@ -704,101 +704,115 @@ export default function MemberPanel({ onClose }: Props) {
                 </AnimatePresence>
               </div>
             )}
-            {editAllowed && (
-            <button
-              type="button"
-              onClick={() => setEditOpen(true)}
-              aria-label={t.panelEdit}
-              title={t.panelEdit}
-              className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white text-sf-subhead font-bold active:scale-[0.98] transition flex items-center justify-center gap-2 shadow-md"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path d="M2.5 12V14H4.5L13 5.5L11 3.5L2.5 12Z" fill="white" />
-              </svg>
-              <span>{t.panelEdit}</span>
-            </button>
-            )}
-            {/* Members outside the user's nuclear family: same form, but
-                saving submits an edit PROPOSAL for admin approval — this
-                is the producer side of the admin "requests" tab, which
-                previously had no way to receive anything. Guests stay
-                read-only. */}
-            {!editAllowed && profile?.role === 'user' && (
-            <button
-              type="button"
-              onClick={() => setEditOpen(true)}
-              aria-label={t.panelSuggestEdit}
-              title={t.panelSuggestEdit}
-              className="w-full py-3 rounded-2xl bg-[#007AFF]/10 text-[#007AFF] text-sf-subhead font-bold active:scale-[0.98] transition flex items-center justify-center gap-2"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path d="M2.5 12V14H4.5L13 5.5L11 3.5L2.5 12Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-              </svg>
-              <span>{t.panelSuggestEdit}</span>
-            </button>
-            )}
-            {relAllowed && (
-            <button
-              type="button"
-              onClick={() => setRelOpen(true)}
-              aria-label={t.relManageBtn}
-              title={t.relManageBtn}
-              className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#5AC8FA] to-[#64D2FF] text-white text-sf-subhead font-bold active:scale-[0.98] transition flex items-center justify-center gap-2 shadow-md"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <circle cx="5" cy="4" r="2" fill="white" />
-                <circle cx="11" cy="4" r="2" fill="white" />
-                <path d="M1.5 13.5c0-2.2 1.6-3.5 3.5-3.5s3.5 1.3 3.5 3.5M7.5 13.5c0-2.2 1.6-3.5 3.5-3.5s3.5 1.3 3.5 3.5" stroke="white" strokeWidth="1.3" strokeLinecap="round" fill="none" />
-              </svg>
-              <span>{t.relManageBtn}</span>
-            </button>
-            )}
-            {/* ── Build relatives from a free-form description.
-                Local parser — no API needed (Option A of the hybrid
-                plan). Selecting this opens BuildFromTextModal with
-                the current member as the anchor so anything we parse
-                is auto-linked back to them. */}
-            <button
-              type="button"
-              onClick={() => setAiTreeFromTextOpen(true)}
-              aria-label={t.aiTreeFromTextLabel}
-              title={t.btfSubtitle}
-              className="w-full py-2.5 rounded-2xl border border-[#FF9F0A]/40 text-[#B8730A] text-sf-subhead font-semibold active:scale-[0.98] transition flex items-center justify-center gap-2 hover:bg-[#FF9F0A]/5"
-            >
-              <span>📝</span>
-              <span>{t.aiTreeFromTextLabel}</span>
-            </button>
-
-            {/* ── Copy to another tree ── */}
-            {editAllowed && (
-            <button
-              type="button"
-              onClick={() => { setCopyToTreeOpen(true); setCopyDone(false) }}
-              aria-label={t.panelCopyToTree}
-              title={t.panelCopyToTree}
-              className="w-full py-2.5 rounded-2xl border border-[#5AC8FA]/40 text-[#0A84FF] text-sf-subhead font-semibold active:scale-[0.98] transition flex items-center justify-center gap-2 hover:bg-[#0A84FF]/5"
-            >
-              <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-                <rect x="2" y="4.5" width="8" height="8.5" rx="1.8" stroke="currentColor" strokeWidth="1.5" />
-                <path d="M5 4.5V3A1.5 1.5 0 0 1 6.5 1.5h5.5A1.5 1.5 0 0 1 13.5 3v8.5A1.5 1.5 0 0 1 12 11.5h-1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-              <span>{copyDone ? t.panelCopyToTreeDone : t.panelCopyToTree}</span>
-            </button>
-            )}
-            {/* ── Delete (admin-only, destructive) ── */}
-            {deleteAllowed && (
-            <button
-              type="button"
-              onClick={() => setDeleteConfirmOpen(true)}
-              aria-label={t.panelDeleteMember}
-              title={t.panelDeleteMember}
-              className="w-full py-2.5 rounded-2xl border border-[#FF3B30]/30 text-[#FF3B30] text-sf-subhead font-semibold active:scale-[0.98] transition flex items-center justify-center gap-2 hover:bg-[#FF3B30]/5"
-            >
-              <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-                <path d="M3 4h9M6 4V2.5h3V4M5.5 4v7.5h4V4" stroke="#FF3B30" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <span>{t.panelDeleteMember}</span>
-            </button>
+            {/* ── Edit accordion — profile edit, relationships, copy
+                and delete live one tap away so the card stays clean.
+                The toggle shows only if at least one inner action is
+                available to this user. ── */}
+            {(editAllowed || (!editAllowed && profile?.role === 'user') || relAllowed || deleteAllowed) && (
+              <div className="space-y-1.5">
+                <button
+                  type="button"
+                  onClick={() => setEditExpanded((v) => !v)}
+                  aria-expanded={editExpanded}
+                  aria-label={t.panelEditMenu}
+                  className="w-full py-3 rounded-2xl bg-[#F2F2F7] text-[#1C1C1E] text-sf-subhead font-bold active:scale-[0.98] transition flex items-center justify-center gap-2"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M2.5 12V14H4.5L13 5.5L11 3.5L2.5 12Z" fill="#1C1C1E" />
+                  </svg>
+                  <span>{t.panelEditMenu}</span>
+                  <motion.span animate={{ rotate: editExpanded ? 180 : 0 }} className="text-xs leading-none text-[#8E8E93]" aria-hidden>▾</motion.span>
+                </button>
+                <AnimatePresence>
+                  {editExpanded && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="space-y-1.5 overflow-hidden"
+                    >
+                      {editAllowed && (
+                      <button
+                        type="button"
+                        onClick={() => setEditOpen(true)}
+                        aria-label={t.panelEdit}
+                        title={t.panelEdit}
+                        className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white text-sf-subhead font-bold active:scale-[0.98] transition flex items-center justify-center gap-2 shadow-md"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                          <path d="M2.5 12V14H4.5L13 5.5L11 3.5L2.5 12Z" fill="white" />
+                        </svg>
+                        <span>{t.panelEdit}</span>
+                      </button>
+                      )}
+                      {/* Members outside the user's nuclear family: same
+                          form, but saving submits an edit PROPOSAL for
+                          admin approval. Guests stay read-only. */}
+                      {!editAllowed && profile?.role === 'user' && (
+                      <button
+                        type="button"
+                        onClick={() => setEditOpen(true)}
+                        aria-label={t.panelSuggestEdit}
+                        title={t.panelSuggestEdit}
+                        className="w-full py-3 rounded-2xl bg-[#007AFF]/10 text-[#007AFF] text-sf-subhead font-bold active:scale-[0.98] transition flex items-center justify-center gap-2"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                          <path d="M2.5 12V14H4.5L13 5.5L11 3.5L2.5 12Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+                        </svg>
+                        <span>{t.panelSuggestEdit}</span>
+                      </button>
+                      )}
+                      {relAllowed && (
+                      <button
+                        type="button"
+                        onClick={() => setRelOpen(true)}
+                        aria-label={t.relManageBtn}
+                        title={t.relManageBtn}
+                        className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#5AC8FA] to-[#64D2FF] text-white text-sf-subhead font-bold active:scale-[0.98] transition flex items-center justify-center gap-2 shadow-md"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                          <circle cx="5" cy="4" r="2" fill="white" />
+                          <circle cx="11" cy="4" r="2" fill="white" />
+                          <path d="M1.5 13.5c0-2.2 1.6-3.5 3.5-3.5s3.5 1.3 3.5 3.5M7.5 13.5c0-2.2 1.6-3.5 3.5-3.5s3.5 1.3 3.5 3.5" stroke="white" strokeWidth="1.3" strokeLinecap="round" fill="none" />
+                        </svg>
+                        <span>{t.relManageBtn}</span>
+                      </button>
+                      )}
+                      {/* ── Copy to another tree (advanced) ── */}
+                      {editAllowed && (
+                      <button
+                        type="button"
+                        onClick={() => { setCopyToTreeOpen(true); setCopyDone(false) }}
+                        aria-label={t.panelCopyToTree}
+                        title={t.panelCopyToTree}
+                        className="w-full py-2.5 rounded-2xl border border-[#5AC8FA]/40 text-[#0A84FF] text-sf-subhead font-semibold active:scale-[0.98] transition flex items-center justify-center gap-2 hover:bg-[#0A84FF]/5"
+                      >
+                        <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+                          <rect x="2" y="4.5" width="8" height="8.5" rx="1.8" stroke="currentColor" strokeWidth="1.5" />
+                          <path d="M5 4.5V3A1.5 1.5 0 0 1 6.5 1.5h5.5A1.5 1.5 0 0 1 13.5 3v8.5A1.5 1.5 0 0 1 12 11.5h-1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                        </svg>
+                        <span>{copyDone ? t.panelCopyToTreeDone : t.panelCopyToTree}</span>
+                      </button>
+                      )}
+                      {/* ── Delete (admin-only, destructive) ── */}
+                      {deleteAllowed && (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirmOpen(true)}
+                        aria-label={t.panelDeleteMember}
+                        title={t.panelDeleteMember}
+                        className="w-full py-2.5 rounded-2xl border border-[#FF3B30]/30 text-[#FF3B30] text-sf-subhead font-semibold active:scale-[0.98] transition flex items-center justify-center gap-2 hover:bg-[#FF3B30]/5"
+                      >
+                        <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+                          <path d="M3 4h9M6 4V2.5h3V4M5.5 4v7.5h4V4" stroke="#FF3B30" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        <span>{t.panelDeleteMember}</span>
+                      </button>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             )}
           </div>
         )}
@@ -816,16 +830,6 @@ export default function MemberPanel({ onClose }: Props) {
         onClose={() => setQuickAddDir(null)}
         anchor={member}
         direction={quickAddDir ?? 'child'}
-      />
-
-      {/* Build-from-text → real local parser. The modal frames itself
-          around the currently-selected member as the anchor so any
-          parsed roots get auto-linked as descendants. Photo-enhance
-          remains a coming-soon placeholder until the backend lands. */}
-      <BuildFromTextModal
-        open={aiTreeFromTextOpen}
-        onClose={() => setAiTreeFromTextOpen(false)}
-        anchorMember={member}
       />
 
       {/* ── Copy to tree dialog ── */}
