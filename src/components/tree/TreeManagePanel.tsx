@@ -8,7 +8,7 @@ import { confirmDialog } from '../../lib/confirm'
 import { isAdmin } from '../../lib/permissions'
 import type { TreeRole } from '../../types'
 
-interface AccessRow { user_id: string; role: TreeRole; full_name: string; is_minor: boolean }
+interface AccessRow { user_id: string; role: TreeRole; full_name: string; is_minor: boolean; hasName: boolean }
 interface PendingNote { id: string; author_name: string; body: string; member_id: string }
 
 /**
@@ -57,11 +57,15 @@ export default function TreeManagePanel({
           .from('member_notes').select('id, author_name, body, member_id').eq('status', 'pending')
         const treeMemberIds = new Set(members.filter((m) => m.tree_id === treeId).map((m) => m.id))
         if (cancelled) return
-        setRows(accessRows.map((r) => ({
-          user_id: r.user_id, role: r.role,
-          full_name: profilesById[r.user_id]?.full_name ?? '—',
-          is_minor: profilesById[r.user_id]?.is_minor ?? false,
-        })))
+        setRows(accessRows.map((r) => {
+          const name = profilesById[r.user_id]?.full_name ?? ''
+          return {
+            user_id: r.user_id, role: r.role,
+            full_name: name,
+            hasName: name.trim().length > 0,
+            is_minor: profilesById[r.user_id]?.is_minor ?? false,
+          }
+        }))
         setPending(((notes ?? []) as PendingNote[]).filter((n) => treeMemberIds.has(n.member_id)))
       } catch { /* defensive — degrade to empty lists */ }
     })()
@@ -118,7 +122,16 @@ export default function TreeManagePanel({
                       {rows.map((r) => (
                         <div key={r.user_id} className="bg-[#F2F2F7] rounded-2xl p-3">
                           <div className="flex items-center justify-between gap-2 mb-2">
-                            <span className="text-sf-subhead font-semibold text-[#1C1C1E] truncate">{r.full_name}</span>
+                            <span className="min-w-0 truncate">
+                              {r.hasName ? (
+                                <span className="text-sf-subhead font-semibold text-[#1C1C1E]">{r.full_name}</span>
+                              ) : (
+                                <span className="text-sf-subhead font-semibold text-[#8E8E93]">
+                                  {t.treeManageUnknownUser}
+                                  <span className="ms-1.5 text-[10px] font-normal text-[#C7C7CC]">{r.user_id.slice(0, 8)}</span>
+                                </span>
+                              )}
+                            </span>
                             <button type="button" onClick={() => { void (async () => {
                                 if (!(await confirmDialog({ message: t.treeManageRevokeConfirm, danger: true }))) return
                                 void revokeTreeMember(r.user_id, treeId)
