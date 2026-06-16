@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLang, isRTL } from '../../i18n/useT'
 import { useFamilyStore } from '../../store/useFamilyStore'
@@ -20,8 +21,10 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
   const { t, lang, toggleLang } = useLang()
   const rtl = isRTL(lang)
   const { profile, setProfile, updateProfileById, members, activeTreeId } = useFamilyStore()
+  const navigate = useNavigate()
 
   const [theme, setThemeState] = useState<ThemeId>(getTheme())
+  const [showPwd, setShowPwd] = useState(false)
   const [name, setName] = useState(profile?.full_name ?? '')
   const [nameSaved, setNameSaved] = useState(false)
   const [curPwd, setCurPwd] = useState('')
@@ -92,6 +95,12 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
     } finally {
       setBusy(false)
     }
+  }
+
+  const signOut = async () => {
+    onClose()
+    try { if (isSupabaseConfigured) await supabase.auth.signOut() } catch { /* best-effort */ }
+    navigate('/')
   }
 
   return (
@@ -207,23 +216,29 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                 <section>
                   <p className="text-[11px] font-bold text-[#8E8E93] uppercase tracking-wide mb-2">{t.settingsPassword}</p>
                   <div className="space-y-2">
-                    <input
-                      type="password"
-                      value={curPwd}
-                      onChange={(e) => setCurPwd(e.target.value)}
-                      placeholder={t.settingsCurrentPassword}
-                      autoComplete="current-password"
-                      className="w-full bg-[#F2F2F7] rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] outline-none focus:ring-2 focus:ring-[#007AFF]/40"
-                    />
-                    <div className="flex gap-2">
+                    <div className="relative">
                       <input
-                        type="password"
-                        value={pwd}
-                        onChange={(e) => setPwd(e.target.value)}
-                        placeholder={t.settingsNewPassword}
-                        autoComplete="new-password"
-                        className="flex-1 bg-[#F2F2F7] rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] outline-none focus:ring-2 focus:ring-[#007AFF]/40"
+                        type={showPwd ? 'text' : 'password'}
+                        value={curPwd}
+                        onChange={(e) => setCurPwd(e.target.value)}
+                        placeholder={t.settingsCurrentPassword}
+                        autoComplete="current-password"
+                        className="w-full bg-[#F2F2F7] rounded-xl px-3 py-2 pe-10 text-sf-subhead text-[#1C1C1E] outline-none focus:ring-2 focus:ring-[#007AFF]/40"
                       />
+                      <PwdToggle show={showPwd} onToggle={() => setShowPwd((v) => !v)} label={t.authShowPassword} />
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          type={showPwd ? 'text' : 'password'}
+                          value={pwd}
+                          onChange={(e) => setPwd(e.target.value)}
+                          placeholder={t.settingsNewPassword}
+                          autoComplete="new-password"
+                          className="w-full bg-[#F2F2F7] rounded-xl px-3 py-2 pe-10 text-sf-subhead text-[#1C1C1E] outline-none focus:ring-2 focus:ring-[#007AFF]/40"
+                        />
+                        <PwdToggle show={showPwd} onToggle={() => setShowPwd((v) => !v)} label={t.authShowPassword} />
+                      </div>
                       <button type="button" onClick={changePassword} disabled={busy || !curPwd.trim() || pwd.trim().length < 6}
                         className="px-4 rounded-xl bg-[#007AFF] text-white text-[13px] font-bold disabled:opacity-40">
                         {t.settingsChangePassword}
@@ -256,6 +271,17 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                   </button>
                 </section>
               )}
+
+              {/* Sign out */}
+              <section>
+                <button type="button" onClick={signOut}
+                  className="w-full flex items-center justify-center gap-2 rounded-2xl bg-[#FF3B30]/8 text-[#FF3B30] py-3 text-[13px] font-bold active:scale-[0.98] transition">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                    <path d="M6 2H3.5A1.5 1.5 0 0 0 2 3.5v9A1.5 1.5 0 0 0 3.5 14H6M10.5 11l3-3-3-3M13 8H6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  {t.signOut}
+                </button>
+              </section>
             </div>
           </motion.div>
 
@@ -266,5 +292,31 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
         </motion.div>
       )}
     </AnimatePresence>
+  )
+}
+
+/** Eye toggle inside a password field — reveals / hides the typed value. */
+function PwdToggle({ show, onToggle, label }: { show: boolean; onToggle: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={label}
+      aria-pressed={show}
+      className="absolute inset-y-0 end-2 flex items-center text-[#8E8E93] hover:text-[#636366]"
+    >
+      {show ? (
+        // eye-off
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+          <path d="M2 9s2.5-4.5 7-4.5c1 0 1.9.2 2.7.5M16 9s-2.5 4.5-7 4.5c-1 0-1.9-.2-2.7-.5M7.4 7.4a2.2 2.2 0 0 0 3.2 3.2M3 3l12 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ) : (
+        // eye
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+          <path d="M2 9s2.5-4.5 7-4.5S16 9 16 9s-2.5 4.5-7 4.5S2 9 2 9Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+          <circle cx="9" cy="9" r="2" stroke="currentColor" strokeWidth="1.4" />
+        </svg>
+      )}
+    </button>
   )
 }
