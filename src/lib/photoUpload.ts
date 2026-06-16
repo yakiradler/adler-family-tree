@@ -48,3 +48,41 @@ export async function uploadMemberPhoto(file: File, treeId?: string | null): Pro
     return fileToDownscaledDataURL(file)
   }
 }
+
+export type StatusMedia = { url: string; type: 'image' | 'video' }
+
+/** Max video size we'll accept (no client-side transcoding). */
+const MAX_VIDEO_BYTES = 25 * 1024 * 1024
+
+/**
+ * Upload one media file for a family-feed status. Images reuse the
+ * downscale+upload path; videos upload raw to the same tree-anchored
+ * bucket (size-capped). Returns null if a video can't be stored (no
+ * backend, too large, or upload error) so the caller can skip it
+ * without losing the rest of the post.
+ */
+export async function uploadStatusMedia(file: File, treeId?: string | null): Promise<StatusMedia | null> {
+  const isVideo = file.type.startsWith('video/')
+  if (!isVideo) {
+    const url = await uploadMemberPhoto(file, treeId)
+    return { url, type: 'image' }
+  }
+  // Video: needs a real backend (too big to inline) + a size cap.
+  if (!isSupabaseConfigured || !treeId) return null
+  if (file.size > MAX_VIDEO_BYTES) return null
+  try {
+    const ext = (file.name.split('.').pop() || 'mp4').toLowerCase()
+    const rand = Math.random().toString(36).slice(2, 10)
+    const path = photoStoragePath(treeId, ext, Date.now(), rand)
+    const { error } = await supabase.storage
+      .from(MEMBER_PHOTO_BUCKET)
+      .upload(path, file, { contentType: file.type || 'video/mp4' })
+    if (error) throw error
+    const { data: pub } = supabase.storage.from(MEMBER_PHOTO_BUCKET).getPublicUrl(path)
+    if (!pub?.publicUrl) throw new Error('no public url')
+    return { url: pub.publicUrl, type: 'video' }
+  } catch (e) {
+    console.warn('[status-media] video upload failed', e)
+    return null
+  }
+}

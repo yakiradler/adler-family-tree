@@ -304,6 +304,8 @@ export interface FamilyStatus {
   author_id: string | null
   author_name: string
   body: string
+  /** Attached photos / videos (migration 030). */
+  media?: { url: string; type: 'image' | 'video' }[]
   created_at: string
 }
 

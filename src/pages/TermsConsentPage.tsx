@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
+import { markTermsAcceptedLocal } from '../lib/firstRunGate'
 import BrandMark from '../components/BrandMark'
 
 /**
@@ -25,6 +26,9 @@ export default function TermsConsentPage() {
     if (!agree || !profile || busy) return
     setBusy(true)
     try {
+      // Device-local flag first so the gate never loops even if the DB
+      // self-update is RLS-blocked for this account.
+      markTermsAcceptedLocal()
       await updateProfileById(profile.id, {
         terms_accepted_at: new Date().toISOString(),
         marketing_consent: marketing,

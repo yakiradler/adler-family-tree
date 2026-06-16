@@ -357,7 +357,7 @@ interface FamilyState {
   /** Family "network" feed — short statuses scoped to a tree (migration 029). */
   statuses: FamilyStatus[]
   fetchStatuses: (treeId: string) => Promise<void>
-  addStatus: (treeId: string, body: string) => Promise<boolean>
+  addStatus: (treeId: string, body: string, media?: FamilyStatus['media']) => Promise<boolean>
   deleteStatus: (id: string) => Promise<void>
 }
 
@@ -1810,15 +1810,16 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       set({ statuses: (data ?? []) as FamilyStatus[] })
     } catch (err) { reportSupabaseFailure('fetchStatuses', err, 'read') }
   },
-  addStatus: async (treeId, body) => {
+  addStatus: async (treeId, body, media) => {
     const text = body.trim()
     const me = get().profile
-    if (!text || !treeId) return false
+    const mediaArr = media ?? []
+    if ((!text && mediaArr.length === 0) || !treeId) return false
     const localId = `st-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     const optimistic: FamilyStatus = {
       id: localId, tree_id: treeId,
       author_id: me?.id ?? null, author_name: me?.full_name ?? '',
-      body: text, created_at: new Date().toISOString(),
+      body: text, media: mediaArr, created_at: new Date().toISOString(),
     }
     set((s) => ({ statuses: [optimistic, ...s.statuses] }))
     if (!isSupabaseConfigured) return true
@@ -1827,7 +1828,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       // up the server id. (Same lesson as feedback.)
       const { error } = await supabase.from('family_statuses').insert({
         tree_id: treeId, author_id: me?.id ?? null,
-        author_name: me?.full_name ?? '', body: text,
+        author_name: me?.full_name ?? '', body: text, media: mediaArr,
       })
       if (error) {
         console.warn('[addStatus]', error)
