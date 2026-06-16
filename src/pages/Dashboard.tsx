@@ -17,7 +17,7 @@ import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
 import { shouldAutoStartTutorial, markTutorialAutoStarted } from '../lib/firstRunTutorial'
 import { nextHebrewBirthday } from '../lib/hebrewDate'
 import { displayName } from '../lib/memberName'
-import { uploadTreeIcon } from '../lib/photoUpload'
+import { uploadMemberPhoto } from '../lib/photoUpload'
 import JoinTreeModal from '../components/JoinTreeModal'
 import SettingsModal from '../components/settings/SettingsModal'
 import PlanCard, { LeafIcon } from '../components/plan/PlanCard'
@@ -129,7 +129,7 @@ function computeBranchFounders(members: Member[], relationships: Relationship[])
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function Dashboard({ demoMode }: Props) {
-  const { members, relationships, profile, setSelectedMemberId, trees, setActiveTreeId, activeTreeId, myTreeRoles, updateTree } = useFamilyStore()
+  const { members, relationships, profile, setSelectedMemberId, trees, setActiveTreeId, activeTreeId, setProfile, updateProfileById } = useFamilyStore()
   const myTreeAccessIds = useFamilyStore((s) => s.myTreeAccessIds)
   const fetchMyTreeAccess = useFamilyStore((s) => s.fetchMyTreeAccess)
   const notifications = useFamilyStore((s) => s.notifications)
@@ -192,23 +192,24 @@ export default function Dashboard({ demoMode }: Props) {
   // Settings hub (language, theme, name, password, 2-factor).
   const [settingsOpen, setSettingsOpen] = useState(false)
 
-  // Family emblem shown above the name in the hero. Uses the active
-  // tree's custom icon (tree-icons bucket) if set, else the default
-  // family glyph. The tree owner / admin can tap it to upload a new one.
-  const activeTree = trees.find((tr) => tr.id === (activeTreeId ?? trees[0]?.id)) ?? trees[0] ?? null
-  const familyIconUrl = activeTree?.icon_url ?? null
-  const canEditFamilyIcon = !demoMode && !!activeTree && (isAdmin(profile) || myTreeRoles[activeTree.id] === 'owner')
-  const familyIconInputRef = useRef<HTMLInputElement>(null)
-  const [familyIconBusy, setFamilyIconBusy] = useState(false)
-  const pickFamilyIcon = async (file: File | null) => {
-    if (!file || !activeTree) return
-    setFamilyIconBusy(true)
+  // The emblem above the name in the hero is the LOGGED-IN USER's own
+  // picture (profile.avatar_url) — a standalone personal photo, NOT the
+  // family/tree icon (that one stays on the tree cards and is set from the
+  // tree menu). Any logged-in user can tap it to change their own photo.
+  const heroAvatarUrl = profile?.avatar_url ?? null
+  const canEditAvatar = !demoMode && !!profile
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+  const [avatarBusy, setAvatarBusy] = useState(false)
+  const pickHeroAvatar = async (file: File | null) => {
+    if (!file || !profile) return
+    setAvatarBusy(true)
     try {
-      const url = await uploadTreeIcon(file, activeTree.id)
-      await updateTree(activeTree.id, { icon_url: url })
+      const url = await uploadMemberPhoto(file, activeTreeId)
+      await updateProfileById(profile.id, { avatar_url: url })
+      setProfile({ ...profile, avatar_url: url })
     } finally {
-      setFamilyIconBusy(false)
-      if (familyIconInputRef.current) familyIconInputRef.current.value = ''
+      setAvatarBusy(false)
+      if (avatarInputRef.current) avatarInputRef.current.value = ''
     }
   }
 
@@ -488,27 +489,27 @@ export default function Dashboard({ demoMode }: Props) {
             />
             <button
               type="button"
-              onClick={() => { if (canEditFamilyIcon) familyIconInputRef.current?.click() }}
-              disabled={!canEditFamilyIcon || familyIconBusy}
+              onClick={() => { if (canEditAvatar) avatarInputRef.current?.click() }}
+              disabled={!canEditAvatar || avatarBusy}
               aria-label={t.familyIconChange}
               className="relative w-20 h-20 rounded-3xl bg-gradient-to-br from-[#007AFF] via-[#32ADE6] to-[#5AC8FA] shadow-2xl flex items-center justify-center overflow-hidden disabled:cursor-default"
             >
-              {familyIconUrl
-                ? <img src={familyIconUrl} alt="" className="w-full h-full object-cover" />
-                : <span className="text-4xl">👨‍👩‍👧‍👦</span>}
-              {canEditFamilyIcon && (
+              {heroAvatarUrl
+                ? <img src={heroAvatarUrl} alt="" className="w-full h-full object-cover" />
+                : <span className="text-4xl">👤</span>}
+              {canEditAvatar && (
                 <span className="absolute bottom-0 inset-x-0 bg-black/45 text-white text-[9px] font-semibold py-0.5 leading-none flex items-center justify-center gap-0.5">
-                  {familyIconBusy ? '…' : `📷 ${t.familyIconChange}`}
+                  {avatarBusy ? '…' : `📷 ${t.familyIconChange}`}
                 </span>
               )}
             </button>
-            {canEditFamilyIcon && (
+            {canEditAvatar && (
               <input
-                ref={familyIconInputRef}
+                ref={avatarInputRef}
                 type="file"
                 accept="image/*"
                 className="hidden"
-                onChange={(e) => void pickFamilyIcon(e.target.files?.[0] ?? null)}
+                onChange={(e) => void pickHeroAvatar(e.target.files?.[0] ?? null)}
               />
             )}
           </div>
