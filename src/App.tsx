@@ -25,6 +25,7 @@ import { ADLER_MEMBERS, ADLER_RELATIONSHIPS, ADLER_TREES } from './data/adlerFam
 import { isPendingOnboarding, clearPendingOnboarding, markPendingOnboarding } from './lib/pendingOnboarding'
 import { useNotificationPolling } from './hooks/useNotificationPolling'
 import { readPendingJoinCode } from './lib/joinLink'
+import { hasAcceptedTermsLocal, hasAckedPlanLocal } from './lib/firstRunGate'
 import type { Profile } from './types'
 import type { Session } from '@supabase/supabase-js'
 
@@ -559,8 +560,14 @@ export default function App() {
   // app. Demo users are exempt. The flags live on the profile so the
   // flow runs once per account and survives reloads/new devices.
   const gateProfile = demoMode ? null : profile
-  const needsTerms = isAuth && !!gateProfile && !gateProfile.terms_accepted_at
-  const needsPlan = isAuth && !!gateProfile && !!gateProfile.terms_accepted_at && !gateProfile.plan_acked_at
+  // "Done" if EITHER the DB flag is set OR the device-local fallback is
+  // set. The fallback covers legacy accounts whose profiles.id != auth.uid()
+  // (their self-update is RLS-blocked, so the DB flag never persisted and
+  // the gate used to re-open on every refresh).
+  const termsDone = !!gateProfile?.terms_accepted_at || hasAcceptedTermsLocal()
+  const planDone = !!gateProfile?.plan_acked_at || hasAckedPlanLocal()
+  const needsTerms = isAuth && !!gateProfile && !termsDone
+  const needsPlan = isAuth && !!gateProfile && termsDone && !planDone
 
   return (
     <div dir={dir} className="min-h-screen">

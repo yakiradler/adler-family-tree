@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
@@ -6,11 +6,12 @@ import { isAdmin } from '../lib/permissions'
 import { displayName } from '../lib/memberName'
 import { nextHebrewBirthday } from '../lib/hebrewDate'
 import { confirmDialog } from '../lib/confirm'
+import { uploadStatusMedia, type StatusMedia } from '../lib/photoUpload'
 
 interface Props { demoMode: boolean }
 
 type FeedItem =
-  | { kind: 'status'; id: string; author: string; body: string; at: number; mine: boolean; canDelete: boolean }
+  | { kind: 'status'; id: string; author: string; body: string; media: StatusMedia[]; at: number; mine: boolean; canDelete: boolean }
   | { kind: 'newMember'; id: string; name: string; at: number }
   | { kind: 'birthday'; id: string; name: string; at: number; inDays: number }
 
@@ -31,6 +32,9 @@ export default function FamilyFeedPage(_props: Props) {
   const treeId = activeTreeId ?? trees[0]?.id ?? null
   const [draft, setDraft] = useState('')
   const [posting, setPosting] = useState(false)
+  const [media, setMedia] = useState<StatusMedia[]>([])
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   // Snapshot "now" once (lazy initializer keeps the memo below pure).
   const [now] = useState(() => Date.now())
 
@@ -49,6 +53,7 @@ export default function FamilyFeedPage(_props: Props) {
     for (const s of statuses) {
       out.push({
         kind: 'status', id: s.id, author: s.author_name || '—', body: s.body,
+        media: s.media ?? [],
         at: new Date(s.created_at).getTime(),
         mine: !!profile && s.author_id === profile.id,
         canDelete: (!!profile && s.author_id === profile.id) || isAdmin(profile),
@@ -78,12 +83,29 @@ export default function FamilyFeedPage(_props: Props) {
     return out.sort((a, b) => b.at - a.at)
   }, [statuses, treeMembers, profile, lang, now])
 
+  const pickMedia = async (files: FileList | null) => {
+    if (!files || files.length === 0 || !treeId) return
+    setUploading(true)
+    try {
+      const picked: StatusMedia[] = []
+      for (const file of Array.from(files).slice(0, 4)) {
+        const m = await uploadStatusMedia(file, treeId)
+        if (m) picked.push(m)
+        else if (file.type.startsWith('video/')) await confirmDialog({ message: t.feedVideoTooBig, danger: false })
+      }
+      if (picked.length) setMedia((prev) => [...prev, ...picked].slice(0, 4))
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
   const post = async () => {
-    if (!draft.trim() || posting || !treeId) return
+    if ((!draft.trim() && media.length === 0) || posting || !treeId) return
     setPosting(true)
     try {
-      const ok = await addStatus(treeId, draft)
-      if (ok) setDraft('')
+      const ok = await addStatus(treeId, draft, media)
+      if (ok) { setDraft(''); setMedia([]) }
     } finally { setPosting(false) }
   }
 
@@ -114,8 +136,35 @@ export default function FamilyFeedPage(_props: Props) {
                 rows={2}
                 className="w-full bg-[#F2F2F7] rounded-2xl px-3.5 py-2.5 text-[13px] text-[#1C1C1E] placeholder:text-[#8E8E93] outline-none focus:ring-2 focus:ring-[#007AFF]/40 resize-none"
               />
-              <div className="flex justify-end mt-2">
-                <button type="button" onClick={post} disabled={!draft.trim() || posting}
+              {/* Picked media previews */}
+              {media.length > 0 && (
+                <div className="grid grid-cols-4 gap-1.5 mt-2">
+                  {media.map((m, i) => (
+                    <div key={i} className="relative aspect-square rounded-xl overflow-hidden bg-black/5">
+                      {m.type === 'video'
+                        ? <video src={m.url} className="w-full h-full object-cover" muted />
+                        : <img src={m.url} alt="" className="w-full h-full object-cover" />}
+                      <button type="button" onClick={() => setMedia((p) => p.filter((_, j) => j !== i))}
+                        className="absolute top-0.5 end-0.5 w-5 h-5 rounded-full bg-black/60 text-white text-[11px] flex items-center justify-center">×</button>
+                      {m.type === 'video' && <span className="absolute bottom-0.5 start-0.5 text-[10px]">🎬</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                className="hidden"
+                onChange={(e) => void pickMedia(e.target.files)}
+              />
+              <div className="flex items-center justify-between mt-2">
+                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading || media.length >= 4}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-[#F2F2F7] text-[#1C1C1E] text-[13px] font-semibold disabled:opacity-40 active:scale-95 transition">
+                  <span aria-hidden>🖼️</span> {uploading ? t.feedUploading : t.feedAddMedia}
+                </button>
+                <button type="button" onClick={post} disabled={(!draft.trim() && media.length === 0) || posting || uploading}
                   className="px-5 py-2 rounded-2xl bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white text-[13px] font-bold disabled:opacity-40 active:scale-[0.98] transition">
                   {posting ? '…' : t.feedPost}
                 </button>
@@ -135,18 +184,40 @@ export default function FamilyFeedPage(_props: Props) {
                       key={it.id}
                       layout
                       initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                      className="glass-strong rounded-2xl p-3.5 shadow-glass-sm"
+                      className="glass-strong rounded-2xl p-3.5 shadow-glass-sm overflow-hidden"
                     >
                       {it.kind === 'status' ? (
                         <>
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-[13px] font-bold text-[#1C1C1E]">{it.author}</span>
-                            <span className="text-[10px] text-[#8E8E93]">{timeAgo(it.at, lang)}</span>
+                          {/* Instagram-style header */}
+                          <div className="flex items-center gap-2.5">
+                            <span className="w-8 h-8 rounded-full bg-gradient-to-br from-[#007AFF] to-[#5AC8FA] text-white flex items-center justify-center text-[13px] font-bold flex-shrink-0">
+                              {it.author.trim().charAt(0) || '·'}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[13px] font-bold text-[#1C1C1E] truncate leading-tight">{it.author}</p>
+                              <p className="text-[10px] text-[#8E8E93] leading-tight">{timeAgo(it.at, lang)}</p>
+                            </div>
+                            {it.canDelete && (
+                              <button type="button" onClick={() => remove(it.id)}
+                                className="text-[11px] text-[#FF3B30] font-semibold flex-shrink-0">{t.feedDelete}</button>
+                            )}
                           </div>
-                          <p className="text-[13px] text-[#3C3C43] mt-1 whitespace-pre-wrap leading-relaxed">{it.body}</p>
-                          {it.canDelete && (
-                            <button type="button" onClick={() => remove(it.id)}
-                              className="text-[11px] text-[#FF3B30] font-semibold mt-1.5">{t.feedDelete}</button>
+                          {/* Media — edge-to-edge within the card */}
+                          {it.media.length > 0 && (
+                            <div className={`-mx-3.5 mt-2.5 ${it.media.length > 1 ? 'grid grid-cols-2 gap-0.5' : ''} bg-black/5`}>
+                              {it.media.map((m, i) => (
+                                m.type === 'video' ? (
+                                  <video key={i} src={m.url} controls playsInline
+                                    className={`w-full ${it.media.length === 1 ? 'max-h-[70vh]' : 'aspect-square'} object-cover bg-black`} />
+                                ) : (
+                                  <img key={i} src={m.url} alt=""
+                                    className={`w-full ${it.media.length === 1 ? 'max-h-[70vh]' : 'aspect-square'} object-cover`} />
+                                )
+                              ))}
+                            </div>
+                          )}
+                          {it.body && (
+                            <p className="text-[13px] text-[#3C3C43] mt-2 whitespace-pre-wrap leading-relaxed">{it.body}</p>
                           )}
                         </>
                       ) : it.kind === 'newMember' ? (

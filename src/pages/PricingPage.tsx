@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL, type Translations } from '../i18n/useT'
 import { PLANS, effectivePlan, trialDaysLeft } from '../lib/plans'
+import { markPlanAckedLocal } from '../lib/firstRunGate'
 import type { PlanId } from '../types'
 
 /**
@@ -38,6 +39,7 @@ export default function PricingPage({ isAuth, forced = false }: { isAuth: boolea
     if (busy) return
     setBusy(true)
     try {
+      markPlanAckedLocal()
       if (profile) await updateProfileById(profile.id, { plan_acked_at: new Date().toISOString() })
       navigate('/home', { replace: true })
     } finally {
