@@ -307,6 +307,18 @@ export interface FamilyStatus {
   /** Attached photos / videos (migration 030). */
   media?: { url: string; type: 'image' | 'video' }[]
   created_at: string
+  /** Extra trees approved to see this post (migration 032). */
+  sharedTreeIds?: string[]
+  /** Members this post is hidden from (migration 032). */
+  hiddenMemberIds?: string[]
+}
+
+/** Per-status audience controls, chosen at upload time and editable after. */
+export interface StatusVisibility {
+  /** Extra trees approved to see the post (beyond its own tree). */
+  sharedTreeIds?: string[]
+  /** Members the post is hidden from. */
+  hiddenMemberIds?: string[]
 }
 
 /**

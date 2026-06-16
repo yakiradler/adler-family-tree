@@ -9,11 +9,14 @@ import { confirmDialog } from '../lib/confirm'
 import { uploadStatusMedia, type StatusMedia } from '../lib/photoUpload'
 import { downloadStatusMedia } from '../lib/downloadMedia'
 import ActionsMenu, { type ActionItem } from '../components/ui/ActionsMenu'
+import StatusVisibilityModal from '../components/feed/StatusVisibilityModal'
+import { scopePersonalTrees } from '../lib/treeScope'
+import { isSupabaseConfigured } from '../lib/supabase'
 
 interface Props { demoMode: boolean }
 
 type FeedItem =
-  | { kind: 'status'; id: string; author: string; body: string; media: StatusMedia[]; at: number; mine: boolean; canDelete: boolean }
+  | { kind: 'status'; id: string; author: string; body: string; media: StatusMedia[]; at: number; mine: boolean; canDelete: boolean; sharedCount: number }
   | { kind: 'newMember'; id: string; name: string; at: number }
   | { kind: 'birthday'; id: string; name: string; at: number; inDays: number }
 
@@ -27,8 +30,8 @@ export default function FamilyFeedPage(_props: Props) {
   const { t, lang } = useLang()
   const rtl = isRTL(lang)
   const {
-    profile, members, trees, activeTreeId, myTreeRoles,
-    statuses, fetchStatuses, addStatus, deleteStatus,
+    profile, members, trees, activeTreeId, myTreeRoles, myTreeAccessIds,
+    statuses, fetchStatuses, addStatus, updateStatus, updateStatusVisibility, deleteStatus,
   } = useFamilyStore()
 
   const treeId = activeTreeId ?? trees[0]?.id ?? null
@@ -37,6 +40,14 @@ export default function FamilyFeedPage(_props: Props) {
   const [media, setMedia] = useState<StatusMedia[]>([])
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Audience chosen in the composer (applied on post; reset after).
+  const [composeShared, setComposeShared] = useState<string[]>([])
+  const [composeHidden, setComposeHidden] = useState<string[]>([])
+  // The audience/edit modal: compose (new post), or edit/audience of an
+  // existing post (looked up by id).
+  const [vizModal, setVizModal] = useState<
+    { kind: 'compose' } | { kind: 'edit' | 'audience'; statusId: string } | null
+  >(null)
   // Snapshot "now" once (lazy initializer keeps the memo below pure).
   const [now] = useState(() => Date.now())
 
@@ -62,6 +73,7 @@ export default function FamilyFeedPage(_props: Props) {
         canDelete: (!!profile && s.author_id === profile.id)
           || myTreeRoles[s.tree_id] === 'owner'
           || isAdmin(profile),
+        sharedCount: s.sharedTreeIds?.length ?? 0,
       })
     }
     // 2. Recently added relatives (last 30 days).
@@ -109,10 +121,22 @@ export default function FamilyFeedPage(_props: Props) {
     if ((!draft.trim() && media.length === 0) || posting || !treeId) return
     setPosting(true)
     try {
-      const ok = await addStatus(treeId, draft, media)
-      if (ok) { setDraft(''); setMedia([]) }
+      const ok = await addStatus(treeId, draft, media, { sharedTreeIds: composeShared, hiddenMemberIds: composeHidden })
+      if (ok) { setDraft(''); setMedia([]); setComposeShared([]); setComposeHidden([]) }
     } finally { setPosting(false) }
   }
+
+  // Trees the user may approve for a given post (its own tree excluded).
+  const approvableTrees = (ownTreeId: string | null) =>
+    scopePersonalTrees(trees, profile, myTreeAccessIds, !isSupabaseConfigured)
+      .filter((tt) => tt.id !== ownTreeId)
+      .map((tt) => ({ id: tt.id, name: tt.name, color: tt.color }))
+
+  // People in a post's tree who can be hidden from.
+  const hideCandidates = (ownTreeId: string | null) =>
+    members
+      .filter((m) => m.tree_id === ownTreeId)
+      .map((m) => ({ id: m.id, label: displayName(m, lang) }))
 
   const remove = async (id: string) => {
     if (await confirmDialog({ message: t.feedDeleteConfirm, danger: true })) await deleteStatus(id)
@@ -123,6 +147,20 @@ export default function FamilyFeedPage(_props: Props) {
   // "who can view" / "hide from" items here.
   const statusMenuItems = (it: Extract<FeedItem, { kind: 'status' }>): ActionItem[] => {
     const out: ActionItem[] = []
+    if (it.canDelete) {
+      out.push({
+        key: 'edit',
+        label: t.feedEdit,
+        icon: <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M9.5 2.5l3 3M2.5 12.5l.7-2.6 6.6-6.6 1.9 1.9-6.6 6.6-2.6.7Z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>,
+        onSelect: () => setVizModal({ kind: 'edit', statusId: it.id }),
+      })
+      out.push({
+        key: 'audience',
+        label: t.feedAudience,
+        icon: <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M1 7.5S3.5 3 7.5 3 14 7.5 14 7.5 11.5 12 7.5 12 1 7.5 1 7.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /><circle cx="7.5" cy="7.5" r="1.8" stroke="currentColor" strokeWidth="1.3" /></svg>,
+        onSelect: () => setVizModal({ kind: 'audience', statusId: it.id }),
+      })
+    }
     if (it.media.length > 0) {
       out.push({
         key: 'download',
@@ -189,13 +227,21 @@ export default function FamilyFeedPage(_props: Props) {
                 className="hidden"
                 onChange={(e) => void pickMedia(e.target.files)}
               />
-              <div className="flex items-center justify-between mt-2">
-                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading || media.length >= 4}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-[#F2F2F7] text-[#1C1C1E] text-[13px] font-semibold disabled:opacity-40 active:scale-95 transition">
-                  <span aria-hidden>🖼️</span> {uploading ? t.feedUploading : t.feedAddMedia}
-                </button>
+              <div className="flex items-center justify-between mt-2 gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading || media.length >= 4}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-[#F2F2F7] text-[#1C1C1E] text-[13px] font-semibold disabled:opacity-40 active:scale-95 transition flex-shrink-0">
+                    <span aria-hidden>🖼️</span> {uploading ? t.feedUploading : t.feedAddMedia}
+                  </button>
+                  <button type="button" onClick={() => setVizModal({ kind: 'compose' })}
+                    aria-label={t.feedAudience}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-[#F2F2F7] text-[#1C1C1E] text-[13px] font-semibold active:scale-95 transition flex-shrink-0">
+                    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden><path d="M1 7.5S3.5 3 7.5 3 14 7.5 14 7.5 11.5 12 7.5 12 1 7.5 1 7.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /><circle cx="7.5" cy="7.5" r="1.8" stroke="currentColor" strokeWidth="1.3" /></svg>
+                    {composeShared.length > 0 && <span className="text-[11px] text-[#007AFF]">· {composeShared.length}</span>}
+                  </button>
+                </div>
                 <button type="button" onClick={post} disabled={(!draft.trim() && media.length === 0) || posting || uploading}
-                  className="px-5 py-2 rounded-2xl bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white text-[13px] font-bold disabled:opacity-40 active:scale-[0.98] transition">
+                  className="px-5 py-2 rounded-2xl bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white text-[13px] font-bold disabled:opacity-40 active:scale-[0.98] transition flex-shrink-0">
                   {posting ? '…' : t.feedPost}
                 </button>
               </div>
@@ -246,6 +292,12 @@ export default function FamilyFeedPage(_props: Props) {
                           {it.body && (
                             <p className="text-[13px] text-[#3C3C43] mt-2 whitespace-pre-wrap leading-relaxed">{it.body}</p>
                           )}
+                          {it.sharedCount > 0 && (
+                            <p className="text-[10px] text-[#8E8E93] mt-1.5 flex items-center gap-1">
+                              <svg width="11" height="11" viewBox="0 0 15 15" fill="none" aria-hidden><path d="M1 7.5S3.5 3 7.5 3 14 7.5 14 7.5 11.5 12 7.5 12 1 7.5 1 7.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /><circle cx="7.5" cy="7.5" r="1.8" stroke="currentColor" strokeWidth="1.3" /></svg>
+                              {t.feedSharedWith.replace('{n}', String(it.sharedCount))}
+                            </p>
+                          )}
                           <StatusCommentThread statusId={it.id} canModerate={it.canDelete} />
                         </>
                       ) : it.kind === 'newMember' ? (
@@ -269,6 +321,34 @@ export default function FamilyFeedPage(_props: Props) {
           </>
         )}
       </div>
+
+      {vizModal && (() => {
+        const isCompose = vizModal.kind === 'compose'
+        const status = isCompose ? null : statuses.find((s) => s.id === vizModal.statusId)
+        if (!isCompose && !status) return null
+        const ownTreeId = isCompose ? treeId : (status?.tree_id ?? null)
+        return (
+          <StatusVisibilityModal
+            open
+            onClose={() => setVizModal(null)}
+            withBody={vizModal.kind === 'edit'}
+            initialBody={status?.body ?? ''}
+            initialSharedTreeIds={isCompose ? composeShared : (status?.sharedTreeIds ?? [])}
+            initialHiddenMemberIds={isCompose ? composeHidden : (status?.hiddenMemberIds ?? [])}
+            trees={approvableTrees(ownTreeId)}
+            members={hideCandidates(ownTreeId)}
+            onSave={(v) => {
+              if (isCompose) {
+                setComposeShared(v.sharedTreeIds)
+                setComposeHidden(v.hiddenMemberIds)
+              } else if (vizModal.kind === 'edit' || vizModal.kind === 'audience') {
+                if (vizModal.kind === 'edit' && v.body !== undefined) void updateStatus(vizModal.statusId, v.body)
+                void updateStatusVisibility(vizModal.statusId, { sharedTreeIds: v.sharedTreeIds, hiddenMemberIds: v.hiddenMemberIds })
+              }
+            }}
+          />
+        )
+      })()}
     </div>
   )
 }
