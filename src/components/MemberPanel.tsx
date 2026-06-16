@@ -18,6 +18,8 @@ import { getParentMap, resolveLineage } from '../lib/lineage'
 import { uploadMemberPhoto } from '../lib/photoUpload'
 import { alertDialog } from '../lib/confirm'
 import { notifySaved } from '../lib/saved'
+import { gregorianToHebrew } from '../lib/hebrewDate'
+import { displayName, displayFirst } from '../lib/memberName'
 import type { Member, SpouseStatus } from '../types'
 
 interface Props {
@@ -456,7 +458,7 @@ export default function MemberPanel({ onClose }: Props) {
         <div className="px-4 pt-2 flex flex-col items-center text-center">
           <div className="w-full">
             <h2 className="text-sf-headline font-bold text-[#1C1C1E] leading-tight">
-              {member.first_name} {member.last_name}
+              {displayName(member, lang)}
             </h2>
             {/* "לבית X" — surfaces the maiden name right under the
                 official name. The user asked for a way to see this in
@@ -579,10 +581,10 @@ export default function MemberPanel({ onClose }: Props) {
                 className="space-y-2.5"
               >
                 {member.birth_date && (
-                  <InfoRow icon="🎂" label={t.bornLabel} value={formatDate(member.birth_date, lang)} sub={member.hebrew_birth_date} />
+                  <InfoRow icon="🎂" label={t.bornLabel} value={formatDate(member.birth_date, lang)} sub={gregorianToHebrew(member.birth_date) || member.hebrew_birth_date} />
                 )}
                 {member.death_date && (
-                  <InfoRow icon="🕯️" label={t.diedLabel} value={formatDate(member.death_date, lang)} sub={member.hebrew_death_date} />
+                  <InfoRow icon="🕯️" label={t.diedLabel} value={formatDate(member.death_date, lang)} sub={gregorianToHebrew(member.death_date) || member.hebrew_death_date} />
                 )}
                 {member.bio && (
                   <div className="bg-[#F2F2F7] rounded-2xl p-3">
@@ -813,24 +815,25 @@ export default function MemberPanel({ onClose }: Props) {
                 className="space-y-4"
               >
                 {currentSpouses.length > 0 && (
-                  <FamilySection title={t.relSpouse} members={currentSpouses} onMemberClick={setSelectedMemberId} />
+                  <FamilySection title={t.relSpouse} members={currentSpouses} lang={lang} onMemberClick={setSelectedMemberId} />
                 )}
                 {formerSpouses.length > 0 && (
                   <FormerSpouseSection
                     title={t.formerSpousesLabel}
                     items={formerSpouses}
                     t={t}
+                    lang={lang}
                     onMemberClick={setSelectedMemberId}
                   />
                 )}
                 {parents.length > 0 && (
-                  <FamilySection title={t.panelParents} members={parents} onMemberClick={setSelectedMemberId} />
+                  <FamilySection title={t.panelParents} members={parents} lang={lang} onMemberClick={setSelectedMemberId} />
                 )}
                 {children.length > 0 && (
-                  <ChildrenShowcase title={`${t.genChildren} (${children.length})`} members={children} onMemberClick={setSelectedMemberId} />
+                  <ChildrenShowcase title={`${t.genChildren} (${children.length})`} members={children} lang={lang} onMemberClick={setSelectedMemberId} />
                 )}
                 {siblings.length > 0 && (
-                  <FamilySection title={t.relSibling} members={siblings} onMemberClick={setSelectedMemberId} />
+                  <FamilySection title={t.relSibling} members={siblings} lang={lang} onMemberClick={setSelectedMemberId} />
                 )}
                 {relationCount === 0 && <EmptyTab icon="👥" text={t.panelNoFamily} />}
               </motion.div>
@@ -1144,7 +1147,7 @@ export default function MemberPanel({ onClose }: Props) {
                 </div>
                 <div>
                   <p className="text-sf-subhead font-bold text-[#1C1C1E]">{t.panelCopyToTreeTitle}</p>
-                  <p className="text-[11px] text-[#636366] font-semibold mt-0.5">{member.first_name} {member.last_name}</p>
+                  <p className="text-[11px] text-[#636366] font-semibold mt-0.5">{displayName(member, lang)}</p>
                 </div>
               </div>
               <p className="text-sf-footnote text-[#636366] leading-relaxed">{t.panelCopyToTreeNote}</p>
@@ -1232,7 +1235,7 @@ export default function MemberPanel({ onClose }: Props) {
                 <div>
                   <p className="text-sf-subhead font-bold text-[#1C1C1E]">{t.panelDeleteConfirmTitle}</p>
                   <p className="text-[11px] text-[#636366] font-semibold mt-0.5">
-                    {member.first_name} {member.last_name}
+                    {displayName(member, lang)}
                   </p>
                 </div>
               </div>
@@ -1350,10 +1353,11 @@ function EmptyTab({ icon, text }: { icon: string; text: string }) {
 }
 
 function ChildrenShowcase({
-  title, members, onMemberClick,
+  title, members, lang, onMemberClick,
 }: {
   title: string
   members: Member[]
+  lang: 'he' | 'en'
   onMemberClick: (id: string) => void
 }) {
   return (
@@ -1386,11 +1390,11 @@ function ChildrenShowcase({
                 </div>
               </div>
               <p className="text-[11px] font-bold text-[#1C1C1E] leading-tight text-center truncate w-full mt-1">
-                {m.first_name}
+                {displayFirst(m, lang)}
               </p>
-              {m.last_name && (
+              {(lang === 'en' ? (m.last_name_en || m.last_name) : m.last_name) && (
                 <p className="text-[10px] text-[#636366] leading-tight text-center truncate w-full -mt-0.5">
-                  {m.last_name}
+                  {lang === 'en' ? (m.last_name_en || m.last_name) : m.last_name}
                 </p>
               )}
               {dateLabel && (
@@ -1411,11 +1415,12 @@ function ChildrenShowcase({
  * status pill ("גירושין" / "אלמן/ה") next to the name.
  */
 function FormerSpouseSection({
-  title, items, t, onMemberClick,
+  title, items, t, lang, onMemberClick,
 }: {
   title: string
   items: { member: Member; status: SpouseStatus }[]
   t: { statusDivorced: string; statusWidowed: string }
+  lang: 'he' | 'en'
   onMemberClick: (id: string) => void
 }) {
   return (
@@ -1445,7 +1450,7 @@ function FormerSpouseSection({
                 </div>
               </div>
               <p className="flex-1 text-start text-sf-footnote font-medium text-[#1C1C1E] truncate">
-                {m.first_name} {m.last_name}
+                {displayName(m, lang)}
               </p>
               <span
                 className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${
@@ -1465,10 +1470,11 @@ function FormerSpouseSection({
 }
 
 function FamilySection({
-  title, members, onMemberClick,
+  title, members, lang, onMemberClick,
 }: {
   title: string
   members: Member[]
+  lang: 'he' | 'en'
   onMemberClick: (id: string) => void
 }) {
   return (
@@ -1496,7 +1502,7 @@ function FamilySection({
               </div>
             </div>
             <p className="text-[10px] font-medium text-[#1C1C1E] text-center leading-tight truncate w-full">
-              {m.first_name}
+              {displayFirst(m, lang)}
             </p>
           </motion.button>
         ))}

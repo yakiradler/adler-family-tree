@@ -36,6 +36,7 @@ const BirthdayPage = lazy(() => import('./pages/BirthdayPage'))
 const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'))
 const OnboardingWizard = lazy(() => import('./components/onboarding/OnboardingWizard'))
 const PricingPage = lazy(() => import('./pages/PricingPage'))
+const TermsConsentPage = lazy(() => import('./pages/TermsConsentPage'))
 const JoinPage = lazy(() => import('./pages/JoinPage'))
 
 const SUPABASE_CONFIGURED =
@@ -551,6 +552,13 @@ export default function App() {
   // cleared by the wizard's submit handler. See the useState +
   // event-listener pair above for how this flips reactively.
   const needsOnboarding = isAuth && pendingOnboarding
+  // First-login flow (migration 028): real authed users must accept the
+  // terms (+email consent) and pass the pricing gate before reaching the
+  // app. Demo users are exempt. The flags live on the profile so the
+  // flow runs once per account and survives reloads/new devices.
+  const gateProfile = demoMode ? null : profile
+  const needsTerms = isAuth && !!gateProfile && !gateProfile.terms_accepted_at
+  const needsPlan = isAuth && !!gateProfile && !!gateProfile.terms_accepted_at && !gateProfile.plan_acked_at
 
   return (
     <div dir={dir} className="min-h-screen">
@@ -604,8 +612,26 @@ export default function App() {
             */}
             <Route path="/" element={<Landing />} />
             {/* Pricing is public — part of the marketing funnel. CTAs
-                inside route unauthenticated visitors to signup. */}
-            <Route path="/pricing" element={<PricingPage isAuth={isAuth} />} />
+                inside route unauthenticated visitors to signup. For a
+                first-login user it doubles as gate step 2 (forced); if
+                they haven't accepted terms yet, bounce to /terms first. */}
+            <Route
+              path="/pricing"
+              element={
+                isAuth && needsTerms
+                  ? <Navigate to="/terms" replace />
+                  : <PricingPage isAuth={isAuth} forced={needsPlan} />
+              }
+            />
+            {/* First-login gate step 1: terms + email consent. */}
+            <Route
+              path="/terms"
+              element={
+                !isAuth ? <Navigate to="/" replace />
+                : !needsTerms ? <Navigate to={needsPlan ? '/pricing' : '/home'} replace />
+                : <TermsConsentPage />
+              }
+            />
             <Route
               path="/login"
               element={
@@ -631,12 +657,19 @@ export default function App() {
             */}
             <Route
               path="/onboarding"
-              element={!isAuth ? <Navigate to="/" replace /> : <OnboardingWizard />}
+              element={
+                !isAuth ? <Navigate to="/" replace />
+                : needsTerms ? <Navigate to="/terms" replace />
+                : needsPlan ? <Navigate to="/pricing" replace />
+                : <OnboardingWizard />
+              }
             />
             <Route
               path="/home"
               element={
                 !isAuth ? <Navigate to="/" replace />
+                : needsTerms ? <Navigate to="/terms" replace />
+                : needsPlan ? <Navigate to="/pricing" replace />
                 : needsOnboarding ? <Navigate to="/onboarding" replace />
                 : <Dashboard demoMode={demoMode} />
               }
@@ -645,6 +678,8 @@ export default function App() {
               path="/tree"
               element={
                 !isAuth ? <Navigate to="/" replace />
+                : needsTerms ? <Navigate to="/terms" replace />
+                : needsPlan ? <Navigate to="/pricing" replace />
                 : needsOnboarding ? <Navigate to="/onboarding" replace />
                 : <TreePage demoMode={demoMode} />
               }
@@ -653,6 +688,8 @@ export default function App() {
               path="/birthdays"
               element={
                 !isAuth ? <Navigate to="/" replace />
+                : needsTerms ? <Navigate to="/terms" replace />
+                : needsPlan ? <Navigate to="/pricing" replace />
                 : needsOnboarding ? <Navigate to="/onboarding" replace />
                 : <BirthdayPage demoMode={demoMode} />
               }
@@ -661,6 +698,8 @@ export default function App() {
               path="/admin"
               element={
                 !isAuth ? <Navigate to="/" replace />
+                : needsTerms ? <Navigate to="/terms" replace />
+                : needsPlan ? <Navigate to="/pricing" replace />
                 : needsOnboarding ? <Navigate to="/onboarding" replace />
                 // Platform super-admin only. Previously ANY authenticated
                 // user could render the dashboard (RLS blocked mutations but
@@ -673,6 +712,8 @@ export default function App() {
               path="/scan"
               element={
                 !isAuth ? <Navigate to="/" replace />
+                : needsTerms ? <Navigate to="/terms" replace />
+                : needsPlan ? <Navigate to="/pricing" replace />
                 : needsOnboarding ? <Navigate to="/onboarding" replace />
                 : <Navigate to="/home" replace />
               }

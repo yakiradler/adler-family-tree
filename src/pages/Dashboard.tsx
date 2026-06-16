@@ -11,17 +11,15 @@ import AccessRequestStatusToast from '../components/AccessRequestStatusToast'
 import NotificationBell from '../components/notifications/NotificationBell'
 import { PersonAvatarIcon } from '../components/MemberNode'
 import { getRingGradient, getFallbackGradient } from '../components/memberVisuals'
-import AIScanModal from '../components/ai/AIScanModal'
-import BuildFromTextModal from '../components/BuildFromTextModal'
+import ComingSoonModal from '../components/ComingSoonModal'
 import BrandMark from '../components/BrandMark'
 import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
 import { shouldAutoStartTutorial, markTutorialAutoStarted } from '../lib/firstRunTutorial'
-import { downloadMyData } from '../lib/exportMyData'
+import { nextHebrewBirthday } from '../lib/hebrewDate'
+import { displayName } from '../lib/memberName'
 import JoinTreeModal from '../components/JoinTreeModal'
-import SecuritySettingsModal from '../components/security/SecuritySettingsModal'
+import SettingsModal from '../components/settings/SettingsModal'
 import PlanCard, { LeafIcon } from '../components/plan/PlanCard'
-import { LEAF_COSTS } from '../lib/plans'
-import { confirmDialog, alertDialog } from '../lib/confirm'
 import TreeCardActionMenu from '../components/TreeCardActionMenu'
 import TreeManagePanel from '../components/tree/TreeManagePanel'
 import type { Member, Relationship } from '../types'
@@ -30,17 +28,34 @@ interface Props { demoMode: boolean }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function getUpcomingBirthdays(members: Member[], days = 60) {
+interface UpcomingBirthday {
+  member: Member
+  daysUntil: number
+  nextDate: Date
+  calendar: 'gregorian' | 'hebrew'
+  hebrewLabel?: string
+}
+
+function getUpcomingBirthdays(members: Member[], days = 60): UpcomingBirthday[] {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   return members
     .filter(m => m.birth_date && !m.death_date)
-    .map(m => {
+    .map((m): UpcomingBirthday => {
+      // Gregorian anniversary.
       const bd = new Date(m.birth_date!)
-      const next = new Date(today.getFullYear(), bd.getMonth(), bd.getDate())
-      if (next < today) next.setFullYear(today.getFullYear() + 1)
-      const diff = Math.round((next.getTime() - today.getTime()) / 86400000)
-      return { member: m, daysUntil: diff, nextDate: next }
+      const greg = new Date(today.getFullYear(), bd.getMonth(), bd.getDate())
+      if (greg < today) greg.setFullYear(today.getFullYear() + 1)
+      const gregDiff = Math.round((greg.getTime() - today.getTime()) / 86400000)
+      // Real Hebrew-calendar anniversary (lib/hebrewDate, @hebcal/core).
+      const heb = nextHebrewBirthday(m.birth_date, today)
+      const hebDiff = heb ? Math.round((heb.nextDate.getTime() - today.getTime()) / 86400000) : Infinity
+      // Surface whichever celebration comes sooner so a member's Hebrew
+      // birthday alerts correctly even when its civil date differs.
+      if (heb && hebDiff < gregDiff) {
+        return { member: m, daysUntil: hebDiff, nextDate: heb.nextDate, calendar: 'hebrew', hebrewLabel: heb.hebrewLabel }
+      }
+      return { member: m, daysUntil: gregDiff, nextDate: greg, calendar: 'gregorian' }
     })
     .filter(x => x.daysUntil <= days)
     .sort((a, b) => a.daysUntil - b.daysUntil)
@@ -140,11 +155,12 @@ export default function Dashboard({ demoMode }: Props) {
   const { t, lang, toggleLang } = useLang()
   const dir = isRTL(lang) ? 'rtl' : 'ltr'
   const navigate = useNavigate()
-  const [aiScanOpen, setAiScanOpen] = useState(false)
-  // Two "coming soon" placeholder features the user wants visible in
-  // the UI now so the affordance exists; the modal explains what's
-  // coming and when. Wired to actual backends in a follow-up.
-  const [aiTreeFromTextOpen, setAiTreeFromTextOpen] = useState(false)
+  // AI tools (photo scan, build-from-text, photo enhancement) are
+  // consolidated behind ONE "כלי AI" tile that opens a coming-soon
+  // modal. The real tools (AIScanModal / BuildFromTextModal) still
+  // live in the codebase, just unwired, until they're ready for
+  // everyone. See ComingSoonModal at the page root below.
+  const [aiToolsOpen, setAiToolsOpen] = useState(false)
   // Long-press / right-click → tree-card context menu. `null` when
   // closed; otherwise carries the tree summary the user invoked on
   // so we can show its name in the sheet title.
@@ -172,28 +188,11 @@ export default function Dashboard({ demoMode }: Props) {
   // Join-tree-by-code modal — reachable from both the QuickAccessMenu
   // and the new "🔑" tile in the Apps grid below.
   const [joinTreeOpen, setJoinTreeOpen] = useState(false)
-  // Account-security modal (opt-in two-factor) — real backend only.
-  const [securityOpen, setSecurityOpen] = useState(false)
+  // Settings hub (language, theme, name, password, 2-factor).
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
-  // AI actions cost leaves (subscription Phase A; admins exempt):
-  // confirm the price → atomic charge → open the tool. A failed charge
-  // means an empty balance, surfaced inline.
-  const spendLeaves = useFamilyStore((s) => s.spendLeaves)
+  // Leaf balance for the header pill (subscription Phase A).
   const myPlan = useFamilyStore((s) => s.myPlan)
-  const openAiAction = async (kind: 'scan' | 'treeFromText') => {
-    const cost = kind === 'scan' ? LEAF_COSTS.aiScan : LEAF_COSTS.aiTreeFromText
-    const open = () => (kind === 'scan' ? setAiScanOpen(true) : setAiTreeFromTextOpen(true))
-    if (isAdmin(profile)) {
-      open()
-      return
-    }
-    if (!(await confirmDialog({ message: t.aiCostConfirm.replace('{n}', String(cost)) }))) return
-    if (await spendLeaves(cost, kind === 'scan' ? 'ai-scan' : 'ai-tree-from-text')) {
-      open()
-    } else {
-      await alertDialog({ message: t.aiNoLeaves.replace('{n}', String(cost)) })
-    }
-  }
   // The tutorial no longer auto-launches on first paint — it stacked on top
   // of the install prompt + version modal and overwhelmed new users. It stays
   // one tap away via the "🎓" tile and the help menu.
@@ -208,13 +207,13 @@ export default function Dashboard({ demoMode }: Props) {
           {
             selector: 'dash-hero',
             title: '👋 ברוכים הבאים!',
-            body: 'כאן המרכז של המשפחה שלכם. נעבור ביחד על המסכים והכפתורים החשובים — ב-7 שלבים קצרים.',
+            body: 'כאן המרכז של המשפחה שלכם. נעבור ביחד על המסכים והכפתורים החשובים — ב-6 שלבים קצרים.',
             side: 'bottom',
           },
           {
             selector: 'dash-stats',
             title: 'תמונת מצב מהירה',
-            body: 'מספר החברים, הדורות והענפים — נטען אוטומטית מהעץ שלכם.',
+            body: 'מספר החברים, הדורות, הענפים והעצים — נטען אוטומטית מהנתונים שלכם.',
             side: 'bottom',
           },
           {
@@ -232,7 +231,7 @@ export default function Dashboard({ demoMode }: Props) {
           {
             selector: 'dash-apps',
             title: '🚀 אפליקציות נוספות',
-            body: 'מכאן ניגשים לעץ עצמו, לימי הולדת, ולפיצ\'רי ה-AI (סריקה, בניית עץ מטקסט, שיפור תמונות).',
+            body: 'מכאן ניגשים לעץ עצמו, לימי הולדת, וכלי ה-AI (בקרוב). וזהו — מוכנים להתחיל לבנות!',
             side: 'top',
           },
           {
@@ -241,21 +240,14 @@ export default function Dashboard({ demoMode }: Props) {
             body: 'תוכלו לחזור על המדריך הזה בכל זמן מהכפתור הזה. אנחנו ממליצים לעבור שוב אחרי שתוסיפו חברי משפחה.',
             side: 'top',
           },
-          {
-            selector: 'dash-about',
-            title: '📖 על המשפחה',
-            body: 'הסיפור של המשפחה שלכם. תוכלו לערוך אותו דרך מסך הניהול. וזהו — מוכנים להתחיל לבנות!',
-            side: 'bottom',
-          },
         ]
       : [
-          { selector: 'dash-hero', title: '👋 Welcome!', body: 'This is your family hub. We\'ll walk you through the key screens in 7 short steps.', side: 'bottom' },
-          { selector: 'dash-stats', title: 'Quick snapshot', body: 'Member count, generations and branches — auto-derived from your tree.', side: 'bottom' },
+          { selector: 'dash-hero', title: '👋 Welcome!', body: 'This is your family hub. We\'ll walk you through the key screens in 6 short steps.', side: 'bottom' },
+          { selector: 'dash-stats', title: 'Quick snapshot', body: 'Members, generations, branches and trees — auto-derived from your data.', side: 'bottom' },
           { selector: 'dash-trees', title: '🌿 Family trees', body: 'Every tree you belong to shows up here as a card. Tap one to open it.', side: 'top' },
           { selector: 'dash-birthdays', title: '🎂 Upcoming birthdays', body: 'Who\'s celebrating soon — computed from each member\'s birth date.', side: 'top' },
-          { selector: 'dash-apps', title: '🚀 Apps', body: 'Jump into the tree itself, birthdays view, and the AI features.', side: 'top' },
+          { selector: 'dash-apps', title: '🚀 Apps', body: 'Jump into the tree itself, birthdays view, and the AI tools (coming soon). That\'s it — let\'s start building!', side: 'top' },
           { selector: 'dash-tutorial-tile', title: '✨ This tutorial', body: 'You can replay this walkthrough any time from this button.', side: 'top' },
-          { selector: 'dash-about', title: '📖 About the family', body: 'Your family story. Editable from Admin. That\'s it — let\'s start building!', side: 'bottom' },
         ]
   ), [lang])
 
@@ -430,16 +422,18 @@ export default function Dashboard({ demoMode }: Props) {
             {/* Persistent notification inbox — approvals, requests,
                 reports. Hidden in demo mode (no backend rows). */}
             {!demoMode && <NotificationBell />}
+            {/* Settings hub — language, theme, name, password, 2-factor.
+                Replaced the standalone shield (2FA moved inside settings). */}
             {!demoMode && (
               <button
-                onClick={() => setSecurityOpen(true)}
-                title={t.securityTitle}
-                aria-label={t.securityTitle}
+                onClick={() => setSettingsOpen(true)}
+                title={t.settingsTitle}
+                aria-label={t.settingsTitle}
                 className="w-8 h-8 bg-white/70 backdrop-blur border border-white/50 rounded-xl flex items-center justify-center hover:bg-white/90 transition"
               >
-                <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
-                  <path d="M7.5 1.5l5 2v3.6c0 3-2.1 5.6-5 6.4-2.9-.8-5-3.4-5-6.4V3.5l5-2z" stroke="#636366" strokeWidth="1.3" strokeLinejoin="round" />
-                  <path d="M5.3 7.5l1.5 1.5 2.9-3" stroke="#636366" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" stroke="#636366" strokeWidth="1.2" />
+                  <path d="M8 1.5l1 1.8 2-.6.4 2 2 .8-1.1 1.7 1.1 1.7-2 .8-.4 2-2-.6-1 1.8-1-1.8-2 .6-.4-2-2-.8 1.1-1.7L1.6 6.3l2-.8.4-2 2 .6 1-1.8z" stroke="#636366" strokeWidth="1.2" strokeLinejoin="round" />
                 </svg>
               </button>
             )}
@@ -454,7 +448,7 @@ export default function Dashboard({ demoMode }: Props) {
                 </svg>
               </button>
             )}
-            <SecuritySettingsModal open={securityOpen} onClose={() => setSecurityOpen(false)} />
+            <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
           </div>
         </div>
 
@@ -487,19 +481,20 @@ export default function Dashboard({ demoMode }: Props) {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.06 }}
-          className="mt-6 grid grid-cols-3 gap-2"
+          className="mt-6 grid grid-cols-4 gap-2"
         >
           {[
             { value: visibleMembers.length, label: t.dashMembers, color: '#007AFF', bg: 'from-[#007AFF]/10 to-[#32ADE6]/10' },
             { value: generations, label: t.dashGenerations, color: '#32ADE6', bg: 'from-[#32ADE6]/10 to-[#5AC8FA]/10' },
             { value: founders.length, label: t.dashBranches, color: '#5AC8FA', bg: 'from-[#5AC8FA]/10 to-[#64D2FF]/10' },
+            { value: treeSummaries.length, label: t.dashTrees, color: '#30D158', bg: 'from-[#34C759]/10 to-[#30D158]/10' },
           ].map((s, i) => (
             <div
               key={i}
-              className={`rounded-3xl p-3 text-center bg-gradient-to-br ${s.bg} border border-white/60 backdrop-blur-xl shadow-glass-sm`}
+              className={`rounded-2xl p-2.5 text-center bg-gradient-to-br ${s.bg} border border-white/60 backdrop-blur-xl shadow-glass-sm`}
             >
-              <p className="text-2xl font-bold leading-none" style={{ color: s.color }}>{s.value}</p>
-              <p className="text-[11px] text-[#636366] font-medium mt-1">{s.label}</p>
+              <p className="text-xl font-bold leading-none" style={{ color: s.color }}>{s.value}</p>
+              <p className="text-[10px] text-[#636366] font-medium mt-1">{s.label}</p>
             </div>
           ))}
         </motion.div>
@@ -532,47 +527,9 @@ export default function Dashboard({ demoMode }: Props) {
           </motion.button>
         )}
 
-        {/* ─── ABOUT (now ABOVE the branches per user request) ───
-            Reframed as a small "hero card" with an animated decorative
-            glow + a floating book icon so it carries the Landing-page
-            vibe. Sits at the top of the secondary stack so a returning
-            visitor reads the family description before scanning the
-            tree rail below. */}
-        <motion.section
-          data-tour="dash-about"
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.55, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
-          className="relative overflow-hidden rounded-3xl p-4 shadow-glass border border-white/60"
-          style={{
-            background:
-              'linear-gradient(135deg, rgba(0,122,255,0.10), rgba(94,92,230,0.10) 55%, rgba(255,45,146,0.08))',
-            backdropFilter: 'blur(18px) saturate(160%)',
-            WebkitBackdropFilter: 'blur(18px) saturate(160%)',
-          }}
-        >
-          {/* Soft radial glows — same palette as Landing's TreeBackdrop
-              so the two screens feel like the same family of pages.
-              pointer-events-none keeps them out of the click path. */}
-          <div className="pointer-events-none absolute -top-16 -start-16 w-44 h-44 rounded-full bg-[#5E5CE6]/25 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-14 -end-12 w-44 h-44 rounded-full bg-[#FF2D92]/18 blur-3xl" />
-          <div className="pointer-events-none absolute top-8 end-8 w-24 h-24 rounded-full bg-[#32ADE6]/20 blur-2xl" />
-
-          <div className="relative flex items-start gap-3">
-            <motion.div
-              initial={{ scale: 0.6, rotate: -10, opacity: 0 }}
-              animate={{ scale: 1, rotate: 0, opacity: 1 }}
-              transition={{ delay: 0.18, type: 'spring', stiffness: 260, damping: 18 }}
-              className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#5AC8FA] to-[#007AFF] flex items-center justify-center flex-shrink-0 shadow-md shadow-blue-300/40"
-            >
-              <span className="text-lg">📖</span>
-            </motion.div>
-            <div>
-              <h3 className="text-sf-subhead font-bold text-[#1C1C1E] mb-1">{t.dashAbout}</h3>
-              <p className="text-sf-footnote text-[#3A3A3C] leading-relaxed">{t.dashAboutText}</p>
-            </div>
-          </div>
-        </motion.section>
+        {/* The standalone "About the family" card was removed per owner
+            request — its message is already the concise tagline shown
+            under the family name in the hero above. */}
 
         {/* ─── FAMILY TREES RAIL ───
             Used to show individual founders by photo; per a user
@@ -581,7 +538,10 @@ export default function Dashboard({ demoMode }: Props) {
             name ("עץ משפחת אדלר") + a member count, NO faces. The
             row scrolls horizontally so multi-tree households fit
             without redesigning the page. */}
-        {treeSummaries.length > 0 && (
+        {/* Always render the branches section — even a brand-new user with
+            no trees yet sees it (with a sample "demo" card) so the feature
+            is discoverable from the very first login. */}
+        {(
           <motion.section
             data-tour="dash-trees"
             initial={{ opacity: 0, y: 12 }}
@@ -598,10 +558,43 @@ export default function Dashboard({ demoMode }: Props) {
                 <span className="text-base">🌿</span>
                 <h3 className="text-sf-subhead font-bold text-[#1C1C1E]">{t.dashBranchesTitle}</h3>
               </div>
-              <button onClick={() => navigate('/tree')} className="text-[12px] text-[#007AFF] font-semibold">
-                {t.dashSeeAll}
+              {/* "Join a tree with a code" lives right here in the branches
+                  header (replaced the old "See all" link, which only ever
+                  opened the first tree). */}
+              <button
+                onClick={() => setJoinTreeOpen(true)}
+                className="flex items-center gap-1 text-[12px] text-[#007AFF] font-semibold"
+              >
+                <span aria-hidden>🔑</span>
+                {t.quickAccessJoinTree}
               </button>
             </div>
+            {treeSummaries.length === 0 && (
+              <div className="relative flex items-center gap-3 rounded-2xl bg-white/50 border border-dashed border-[#C7C7CC] p-3 mb-1">
+                {/* Sample "demo" tree card so the section is never empty on
+                    first login — communicates what a real tree will look
+                    like and points to the actions below. Non-interactive. */}
+                <div className="flex-shrink-0 flex flex-col items-center gap-1.5 opacity-90" style={{ width: 84 }}>
+                  <div className="rounded-2xl shadow-md flex items-center justify-center w-[56px] h-[56px] relative bg-gradient-to-br from-[#34C759] to-[#30D158]">
+                    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden>
+                      <circle cx="16" cy="9" r="3.4" fill="white" opacity="0.95" />
+                      <circle cx="8" cy="20" r="3" fill="white" opacity="0.78" />
+                      <circle cx="24" cy="20" r="3" fill="white" opacity="0.78" />
+                      <line x1="16" y1="12.4" x2="8" y2="17" stroke="white" strokeWidth="1.4" strokeOpacity="0.7" strokeLinecap="round" />
+                      <line x1="16" y1="12.4" x2="24" y2="17" stroke="white" strokeWidth="1.4" strokeOpacity="0.7" strokeLinecap="round" />
+                    </svg>
+                    <span className="absolute -top-1.5 -end-1.5 bg-[#8E8E93] text-white rounded-full px-1.5 py-0.5 text-[8px] font-bold shadow-sm">
+                      {t.dashDemoTag}
+                    </span>
+                  </div>
+                  <p className="text-[10.5px] font-semibold text-[#1C1C1E] text-center leading-tight">{t.dashDemoTreeName}</p>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sf-footnote font-semibold text-[#1C1C1E]">{t.dashNoTreesTitle}</p>
+                  <p className="text-[11px] text-[#636366] mt-0.5 leading-snug">{t.dashNoTreesHint}</p>
+                </div>
+              </div>
+            )}
             <div
               className="relative flex gap-3 overflow-x-auto pb-1 -mx-1 px-1"
               style={{ scrollbarWidth: 'none' }}
@@ -798,7 +791,7 @@ export default function Dashboard({ demoMode }: Props) {
             </div>
           ) : (
             <div className="space-y-1.5">
-              {upcoming.map(({ member, daysUntil, nextDate }) => (
+              {upcoming.map(({ member, daysUntil, nextDate, calendar, hebrewLabel }) => (
                 <button
                   key={member.id}
                   onClick={() => openMember(member.id)}
@@ -807,10 +800,12 @@ export default function Dashboard({ demoMode }: Props) {
                   <MiniAvatar member={member} />
                   <div className="flex-1 min-w-0 text-start">
                     <p className="text-sf-subhead font-semibold text-[#1C1C1E] truncate">
-                      {member.first_name} {member.last_name}
+                      {displayName(member, lang)}
                     </p>
-                    <p className="text-sf-caption text-[#8E8E93]">
-                      {nextDate.toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-US', { month: 'long', day: 'numeric' })}
+                    <p className="text-sf-caption text-[#8E8E93] truncate">
+                      {calendar === 'hebrew' && hebrewLabel
+                        ? `${hebrewLabel} · ${nextDate.toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-US', { month: 'long', day: 'numeric' })}`
+                        : nextDate.toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-US', { month: 'long', day: 'numeric' })}
                     </p>
                   </div>
                   <span className={`text-[11px] font-bold rounded-full px-2.5 py-1 ${
@@ -855,18 +850,11 @@ export default function Dashboard({ demoMode }: Props) {
             />
             <AppTile
               index={2}
-              icon="✨"
-              label={t.aiScanTitle}
+              icon="🧰"
+              label={t.aiToolsLabel}
               gradient="from-[#5E5CE6] to-[#BF5AF2]"
-              onClick={() => openAiAction('scan')}
-            />
-            <AppTile
-              index={3}
-              icon="📝"
-              label={t.aiTreeFromTextLabel}
-              gradient="from-[#FF9F0A] to-[#FF375F]"
-              onClick={() => openAiAction('treeFromText')}
-              tooltip={t.btfSubtitle}
+              onClick={() => setAiToolsOpen(true)}
+              tooltip={t.aiToolsComingSoon}
             />
             <div data-tour="dash-tutorial-tile">
               <AppTile
@@ -890,16 +878,6 @@ export default function Dashboard({ demoMode }: Props) {
               onClick={() => setJoinTreeOpen(true)}
               tooltip={t.quickAccessJoinTreeHint}
             />
-            {/* Every user can download their own data — a personal
-                backup in their hands. Pure client-side export. */}
-            <AppTile
-              index={7}
-              icon="💾"
-              label={t.myDataTile}
-              gradient="from-[#34C759] to-[#30D158]"
-              onClick={() => downloadMyData()}
-              tooltip={t.myDataTileHint}
-            />
             {isAdmin(profile) && (
               <AppTile
                 index={8}
@@ -921,27 +899,18 @@ export default function Dashboard({ demoMode }: Props) {
             getting buried below the fold. */}
       </div>
 
-      {/* AI Scan modal — mounted at the page root so backdrop covers everything. */}
-      <AIScanModal
-        open={aiScanOpen}
-        onClose={() => setAiScanOpen(false)}
-        onAdded={(count) => {
-          void alertDialog({ message: `${count} ${t.aiScanAddedCount} ✓` })
-        }}
-      />
-
-      {/* Build-from-text — local parser modal (no API, ships in main
-          bundle). The matching tile launches this directly; the older
-          "Coming Soon" placeholder lives on only for the photo-enhance
-          tile below, which is still pending an API. */}
-      <BuildFromTextModal
-        open={aiTreeFromTextOpen}
-        onClose={() => setAiTreeFromTextOpen(false)}
-        onAdded={(count) => {
-          if (count > 0) {
-            void alertDialog({ message: `${count} ${lang === 'he' ? 'אנשים נוספו לעץ ✓' : 'people added to the tree ✓'}` })
-          }
-        }}
+      {/* "כלי AI" — one tile for all the AI features (photo scan,
+          build-from-text, photo enhancement). They're not ready for
+          everyone yet, so the tile pops a friendly "in development"
+          modal. The real modals still live in the codebase (unwired)
+          and get re-attached here once they go live. */}
+      <ComingSoonModal
+        open={aiToolsOpen}
+        onClose={() => setAiToolsOpen(false)}
+        icon="🧰"
+        title={t.aiToolsLabel}
+        description={t.aiToolsComingSoon}
+        bullets={[t.aiToolsBulletScan, t.aiToolsBulletText, t.aiToolsBulletEnhance]}
       />
 
       {/* Interactive tutorial. Launches automatically on first visit

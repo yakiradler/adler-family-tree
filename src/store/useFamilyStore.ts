@@ -350,7 +350,7 @@ interface FamilyState {
   fetchFeedback: () => Promise<void>
   addFeedback: (
     item: Pick<FeedbackItem, 'author_id' | 'author_name' | 'category' | 'body' | 'context'>,
-  ) => Promise<FeedbackItem | null>
+  ) => Promise<boolean>
   updateFeedback: (id: string, patch: Partial<FeedbackItem>) => Promise<void>
   deleteFeedback: (id: string) => Promise<void>
 }
@@ -1735,7 +1735,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       created_at: new Date().toISOString(),
     }
     set((s) => ({ feedback: [optimistic, ...s.feedback] }))
-    if (!isSupabaseConfigured) return optimistic
+    if (!isSupabaseConfigured) return true   // demo — optimistic row is the source of truth
     try {
       const { data, error } = await supabase
         .from('feedback')
@@ -1748,15 +1748,25 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
         })
         .select()
         .single()
-      if (error) reportSupabaseFailure('addFeedback', error)
+      if (error) {
+        // A report is a public form, NOT a profile edit — never fire the
+        // scary "no edit access" rejection toast here. Roll back the
+        // optimistic row and let the form surface a neutral retry message.
+        console.warn('[addFeedback]', error)
+        set((s) => ({ feedback: s.feedback.filter((f) => f.id !== localId) }))
+        return false
+      }
       if (data) {
         set((s) => ({
           feedback: s.feedback.map((f) => (f.id === localId ? (data as FeedbackItem) : f)),
         }))
-        return data as FeedbackItem
       }
-    } catch (err) { reportSupabaseFailure('addFeedback', err) }
-    return optimistic
+      return true
+    } catch (err) {
+      console.warn('[addFeedback]', err)
+      set((s) => ({ feedback: s.feedback.filter((f) => f.id !== localId) }))
+      return false
+    }
   },
   updateFeedback: async (id, patch) => {
     set((s) => ({

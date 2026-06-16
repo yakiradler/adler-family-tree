@@ -20,17 +20,30 @@ interface TierView {
   highlight?: boolean
 }
 
-export default function PricingPage({ isAuth }: { isAuth: boolean }) {
+export default function PricingPage({ isAuth, forced = false }: { isAuth: boolean; forced?: boolean }) {
   const navigate = useNavigate()
   const { t, lang } = useLang()
   const rtl = isRTL(lang)
-  const { myPlan, fetchMyPlan, startFamilyTrial, profile, addFeedback } = useFamilyStore()
+  const { myPlan, fetchMyPlan, startFamilyTrial, profile, addFeedback, updateProfileById } = useFamilyStore()
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     if (isAuth) fetchMyPlan()
   }, [isAuth, fetchMyPlan])
+
+  // First-login gate step 2: mark the plan step done and enter the app
+  // (home → learning mode). Any plan choice is fine — free included.
+  const proceed = async () => {
+    if (busy) return
+    setBusy(true)
+    try {
+      if (profile) await updateProfileById(profile.id, { plan_acked_at: new Date().toISOString() })
+      navigate('/home', { replace: true })
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const current = effectivePlan(myPlan).id
   const daysLeft = trialDaysLeft(myPlan)
@@ -71,7 +84,7 @@ export default function PricingPage({ isAuth }: { isAuth: boolean }) {
       // Paid upgrade (or trial already used): lands in the admin's
       // reports tab — he applies the plan manually in Phase A.
       await addFeedback({
-        author_id: profile?.id ?? 'anonymous',
+        author_id: profile?.id ?? null,
         author_name: profile?.full_name ?? 'אנונימי',
         category: 'question',
         body: `בקשת שדרוג למסלול ${tier === 'family' ? t.planFamily : t.planPremium}`,
@@ -86,15 +99,20 @@ export default function PricingPage({ isAuth }: { isAuth: boolean }) {
   return (
     <div dir={rtl ? 'rtl' : 'ltr'} className="min-h-screen bg-mesh-gradient pb-16">
       <div className="max-w-3xl mx-auto px-4 pt-6">
-        <button
-          type="button"
-          onClick={() => navigate(isAuth ? '/home' : '/')}
-          className="glass px-3 py-1.5 rounded-xl text-sf-caption font-semibold text-[#636366] hover:text-[#1C1C1E] transition mb-6"
-        >
-          {rtl ? '→ ' : '← '}{t.pricingBack}
-        </button>
+        {/* In the forced first-login step there's no "back" — the only
+            way forward is to pick a plan and continue into the app. */}
+        {!forced && (
+          <button
+            type="button"
+            onClick={() => navigate(isAuth ? '/home' : '/')}
+            className="glass px-3 py-1.5 rounded-xl text-sf-caption font-semibold text-[#636366] hover:text-[#1C1C1E] transition mb-6"
+          >
+            {rtl ? '→ ' : '← '}{t.pricingBack}
+          </button>
+        )}
 
         <div className="text-center mb-8">
+          {forced && <p className="text-[12px] font-bold text-[#007AFF] mb-1">{t.pricingStep2}</p>}
           <h1 className="text-sf-title1 text-[#1C1C1E]" style={{ fontSize: 30 }}>{t.pricingTitle}</h1>
           <p className="text-sf-subhead text-[#636366] mt-1">{t.pricingSubtitle}</p>
           {daysLeft != null && (
@@ -140,6 +158,20 @@ export default function PricingPage({ isAuth }: { isAuth: boolean }) {
         <p className="text-center text-[11.5px] text-[#8E8E93] mt-6 leading-relaxed">
           {t.pricingFootnote}
         </p>
+
+        {/* Forced first-login step: a prominent "continue into the app"
+            button. The free plan is the default — the user can always
+            upgrade later from here. Marks the plan gate done. */}
+        {forced && (
+          <button
+            type="button"
+            onClick={proceed}
+            disabled={busy}
+            className="mt-6 w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white text-sf-headline font-bold disabled:opacity-50 active:scale-[0.98] transition shadow-md"
+          >
+            {busy ? '…' : t.pricingContinueFree}
+          </button>
+        )}
       </div>
     </div>
   )

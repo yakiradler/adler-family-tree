@@ -4,6 +4,7 @@ import type { LineageInfo } from '../lib/lineage'
 import { CARD, CARD_BODY_H, type SecondaryPartner } from '../layout'
 import LineageBadge from './LineageBadge'
 import { useLang } from '../i18n/useT'
+import { displayFirst } from '../lib/memberName'
 import { getFallbackGradient, getRingGradient, getRingShadow } from './memberVisuals'
 // `t` flows through useLang() (which also exposes `lang`); used for the
 // deceased badge so the "ז״ל" / "RIP" label flips with the active locale.
@@ -118,7 +119,7 @@ export default function MemberNode({
     }
   const displaySurname = effLineage.byAdlerRule
     ? (lang === 'he' ? 'אדלר (כהנא)' : 'Adler (Kahane)')
-    : member.last_name
+    : (lang === 'en' ? (member.last_name_en || member.last_name) : member.last_name)
 
   const compact = variant === 'compact'
   const ringThickness = CARD.RING
@@ -234,9 +235,9 @@ export default function MemberNode({
         <p
           className="font-bold text-[#1C1C1E] leading-tight text-center truncate"
           style={{ fontSize: compact ? 11 : 13 }}
-          title={`${member.first_name} ${displaySurname}`}
+          title={`${displayFirst(member, lang)} ${displaySurname}`}
         >
-          <span className="truncate">{member.first_name}</span>
+          <span className="truncate">{displayFirst(member, lang)}</span>
         </p>
         {displaySurname && (
           <p

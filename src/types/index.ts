@@ -45,6 +45,12 @@ export interface Profile {
   bio?: string
   /** ISO timestamp; absent ⇒ user has not completed onboarding. */
   onboarded_at?: string | null
+  /** First-login gate (migration 028): when terms were accepted. */
+  terms_accepted_at?: string | null
+  /** Opted in to email marketing (email only — never SMS). */
+  marketing_consent?: boolean
+  /** When the user passed the plans/pricing gate on first login. */
+  plan_acked_at?: string | null
   /** Tier the user requested during onboarding (admin grants the actual role). */
   requested_role?: UserRole | null
   /** Granular per-feature flags managed by admin for `master` users. */
@@ -112,8 +118,13 @@ export interface MemberContact {
 
 export interface Member {
   id: string
+  /** Primary (Hebrew) name. */
   first_name: string
   last_name: string
+  /** Optional English name (for relatives abroad). The UI shows the name
+   * matching the active language, falling back to the Hebrew one. */
+  first_name_en?: string
+  last_name_en?: string
   /** Previous family name (e.g. maiden name). Surfaces only inside the
    * profile panel; never on the tree, so the tree stays compact. */
   maiden_name?: string
@@ -268,7 +279,8 @@ export type FeedbackStatus = 'open' | 'resolved'
 
 export interface FeedbackItem {
   id: string
-  author_id: string
+  /** Profiles row of the reporter; null if unresolved (FK is ON DELETE SET NULL). */
+  author_id: string | null
   author_name: string
   category: FeedbackCategory
   body: string

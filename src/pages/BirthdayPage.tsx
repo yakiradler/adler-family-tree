@@ -5,6 +5,8 @@ import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL, type Translations } from '../i18n/useT'
 import { PersonAvatarIcon } from '../components/MemberNode'
 import { getRingGradient, getFallbackGradient } from '../components/memberVisuals'
+import { nextHebrewBirthday } from '../lib/hebrewDate'
+import { displayName } from '../lib/memberName'
 import type { Member } from '../types'
 
 interface Props { demoMode: boolean }
@@ -17,6 +19,8 @@ interface BirthdayEntry {
   nextDate: Date
   calendar: 'gregorian' | 'hebrew'
   turning: number | null
+  /** For Hebrew entries: the computed Hebrew date label (gematriya). */
+  hebrewLabel?: string
 }
 
 function getUpcomingBirthdays(members: Member[], mode: CalMode): BirthdayEntry[] {
@@ -36,26 +40,19 @@ function getUpcomingBirthdays(members: Member[], mode: CalMode): BirthdayEntry[]
         calendar: 'gregorian', turning: next.getFullYear() - bd.getFullYear(),
       })
     }
-    if ((mode === 'hebrew' || mode === 'both') && m.hebrew_birth_date && m.birth_date) {
-      // hebrew_birth_date is a free-text Hebrew date string (e.g.
-      // "כ״ג בניסן תשפ״ד") with no ISO machine-readable counterpart yet,
-      // so we can't compute the *actual* next-occurrence in the Hebrew
-      // calendar without bundling a hebcal library. As a best-effort
-      // approximation we use the Gregorian birth_date to schedule the
-      // entry (sort + days-until) and surface the hebrew_birth_date
-      // text as the row label. `turning` is left null because computing
-      // a Hebrew age from a Gregorian anchor is wrong by ±1 year
-      // depending on whether the user's Hebrew birthday has passed.
-      // TODO: add hebrew_birth_date_iso column + use @hebcal/core to
-      // compute next.
-      const bd = new Date(m.birth_date)
-      const next = new Date(today.getFullYear(), bd.getMonth(), bd.getDate())
-      if (next < today) next.setFullYear(today.getFullYear() + 1)
-      const diff = Math.round((next.getTime() - today.getTime()) / 86400000)
-      entries.push({
-        member: m, daysUntil: diff, nextDate: next,
-        calendar: 'hebrew', turning: null,
-      })
+    if ((mode === 'hebrew' || mode === 'both') && m.birth_date) {
+      // Real Hebrew-calendar anniversary, computed from the Gregorian
+      // birth date via @hebcal/core (see lib/hebrewDate). This fires the
+      // alert on the correct civil day each year and gives the correct
+      // Hebrew age — no more free-text approximation.
+      const heb = nextHebrewBirthday(m.birth_date, today)
+      if (heb) {
+        const diff = Math.round((heb.nextDate.getTime() - today.getTime()) / 86400000)
+        entries.push({
+          member: m, daysUntil: diff, nextDate: heb.nextDate,
+          calendar: 'hebrew', turning: heb.turning, hebrewLabel: heb.hebrewLabel,
+        })
+      }
     }
   }
   return entries.sort((a, b) => a.daysUntil - b.daysUntil)
@@ -240,10 +237,12 @@ function BirthdayRow({
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sf-subhead font-semibold text-[#1C1C1E] truncate">
-          {member.first_name} {member.last_name}
+          {displayName(member, lang)}
         </p>
         <p className="text-[11px] text-[#8E8E93] truncate">
-          {calendar === 'hebrew' && member.hebrew_birth_date ? member.hebrew_birth_date : dateLabel}
+          {calendar === 'hebrew' && entry.hebrewLabel
+            ? `${entry.hebrewLabel} · ${dateLabel}`
+            : dateLabel}
           {turning !== null && ` · ${t.birthdaysTurning} ${turning}`}
         </p>
       </div>
