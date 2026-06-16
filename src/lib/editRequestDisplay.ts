@@ -16,6 +16,8 @@ import type { Translations } from '../i18n/useT'
 const FIELD_LABEL_KEY: Record<string, keyof Translations> = {
   first_name: 'firstName',
   last_name: 'lastName',
+  first_name_en: 'firstNameEn',
+  last_name_en: 'lastNameEn',
   maiden_name: 'maidenNameLabel',
   nickname: 'editNickname',
   birth_date: 'birthDate',
