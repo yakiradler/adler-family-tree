@@ -22,6 +22,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
   const [theme, setThemeState] = useState<ThemeId>(getTheme())
   const [name, setName] = useState(profile?.full_name ?? '')
   const [nameSaved, setNameSaved] = useState(false)
+  const [curPwd, setCurPwd] = useState('')
   const [pwd, setPwd] = useState('')
   const [pwdMsg, setPwdMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -47,13 +48,21 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
 
   const changePassword = async () => {
     setPwdMsg(null)
+    if (!curPwd.trim()) { setPwdMsg({ ok: false, text: t.settingsCurrentPasswordNeeded }); return }
     if (pwd.trim().length < 6) { setPwdMsg({ ok: false, text: t.settingsPasswordTooShort }); return }
     if (!isSupabaseConfigured) { setPwdMsg({ ok: false, text: t.securityDemoNote }); return }
     setBusy(true)
     try {
+      // Verify the CURRENT password by re-authenticating before changing it
+      // (Supabase's updateUser doesn't check the old password on its own).
+      const { data: u } = await supabase.auth.getUser()
+      const email = u.user?.email
+      if (!email) { setPwdMsg({ ok: false, text: t.settingsPasswordError }); return }
+      const { error: signErr } = await supabase.auth.signInWithPassword({ email, password: curPwd.trim() })
+      if (signErr) { setPwdMsg({ ok: false, text: t.settingsCurrentPasswordWrong }); return }
       const { error } = await supabase.auth.updateUser({ password: pwd.trim() })
       if (error) { setPwdMsg({ ok: false, text: t.settingsPasswordError }); return }
-      setPwd('')
+      setCurPwd(''); setPwd('')
       setPwdMsg({ ok: true, text: t.settingsPasswordChanged })
     } catch {
       setPwdMsg({ ok: false, text: t.settingsPasswordError })
@@ -109,11 +118,13 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                 <div className="grid grid-cols-2 gap-2">
                   {THEMES.map((th) => {
                     const active = theme === th.id
-                    const swatch = th.id === 'green' ? 'from-[#34C759] to-[#30D158]' : 'from-[#007AFF] to-[#32ADE6]'
+                    const swatch = th.id === 'dark'
+                      ? 'bg-gradient-to-br from-[#1C1C1E] to-[#3A3A3C]'
+                      : 'bg-gradient-to-br from-[#FFFFFF] to-[#E5E5EA] border border-[#E5E5EA]'
                     return (
                       <button key={th.id} type="button" onClick={() => pickTheme(th.id)}
                         className={`flex items-center gap-2 rounded-2xl border p-2.5 transition ${active ? 'border-[#007AFF] bg-[#007AFF]/5' : 'border-[#E5E5EA] bg-white'}`}>
-                        <span className={`w-7 h-7 rounded-full bg-gradient-to-br ${swatch} shadow-sm`} aria-hidden />
+                        <span className={`w-7 h-7 rounded-full ${swatch} shadow-sm flex items-center justify-center text-[13px]`} aria-hidden>{th.icon}</span>
                         <span className="text-[13px] font-semibold text-[#1C1C1E]">{t[th.labelKey]}</span>
                         {active && <span className="ms-auto text-[#007AFF] text-sm">✓</span>}
                       </button>
@@ -142,19 +153,29 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
               {isSupabaseConfigured && (
                 <section>
                   <p className="text-[11px] font-bold text-[#8E8E93] uppercase tracking-wide mb-2">{t.settingsPassword}</p>
-                  <div className="flex gap-2">
+                  <div className="space-y-2">
                     <input
                       type="password"
-                      value={pwd}
-                      onChange={(e) => setPwd(e.target.value)}
-                      placeholder={t.settingsNewPassword}
-                      autoComplete="new-password"
-                      className="flex-1 bg-[#F2F2F7] rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] outline-none focus:ring-2 focus:ring-[#007AFF]/40"
+                      value={curPwd}
+                      onChange={(e) => setCurPwd(e.target.value)}
+                      placeholder={t.settingsCurrentPassword}
+                      autoComplete="current-password"
+                      className="w-full bg-[#F2F2F7] rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] outline-none focus:ring-2 focus:ring-[#007AFF]/40"
                     />
-                    <button type="button" onClick={changePassword} disabled={busy || pwd.trim().length < 6}
-                      className="px-4 rounded-xl bg-[#007AFF] text-white text-[13px] font-bold disabled:opacity-40">
-                      {t.settingsSave}
-                    </button>
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        value={pwd}
+                        onChange={(e) => setPwd(e.target.value)}
+                        placeholder={t.settingsNewPassword}
+                        autoComplete="new-password"
+                        className="flex-1 bg-[#F2F2F7] rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] outline-none focus:ring-2 focus:ring-[#007AFF]/40"
+                      />
+                      <button type="button" onClick={changePassword} disabled={busy || !curPwd.trim() || pwd.trim().length < 6}
+                        className="px-4 rounded-xl bg-[#007AFF] text-white text-[13px] font-bold disabled:opacity-40">
+                        {t.settingsChangePassword}
+                      </button>
+                    </div>
                   </div>
                   {pwdMsg && (
                     <p className={`text-[12px] mt-1.5 ${pwdMsg.ok ? 'text-[#1F7A3A]' : 'text-[#FF3B30]'}`}>{pwdMsg.text}</p>

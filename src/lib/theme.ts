@@ -1,17 +1,19 @@
 /**
- * Basic app color theme (owner request: "system colors — 2 colors,
- * basic for now"). A theme only re-tints the page background mesh
- * gradient — it deliberately does NOT touch component colors, so it
- * can never make text unreadable. Persisted per-device in localStorage
- * and applied as `data-theme` on <html>; index.css carries the
- * per-theme background override.
+ * App appearance: Light (default) or Dark (night) mode.
+ *
+ * Implemented as a `dark` class on <html> + a dark-mode CSS layer in
+ * index.css that re-tints the shared surfaces (page background, glass
+ * cards, white panels, primary/secondary text, light chips). Brand
+ * gradients and emoji are intentionally left as-is so the app keeps its
+ * identity at night. Persisted per-device in localStorage and applied
+ * before first paint (main.tsx) to avoid a flash.
  */
 
-export type ThemeId = 'blue' | 'green'
+export type ThemeId = 'light' | 'dark'
 
-export const THEMES: { id: ThemeId; labelKey: 'themeBlue' | 'themeGreen' }[] = [
-  { id: 'blue', labelKey: 'themeBlue' },
-  { id: 'green', labelKey: 'themeGreen' },
+export const THEMES: { id: ThemeId; labelKey: 'themeLight' | 'themeDark'; icon: string }[] = [
+  { id: 'light', labelKey: 'themeLight', icon: '☀️' },
+  { id: 'dark', labelKey: 'themeDark', icon: '🌙' },
 ]
 
 const KEY = 'ft-theme'
@@ -19,9 +21,9 @@ const KEY = 'ft-theme'
 export function getTheme(): ThemeId {
   try {
     const v = localStorage.getItem(KEY)
-    if (v === 'blue' || v === 'green') return v
+    if (v === 'light' || v === 'dark') return v
   } catch { /* SSR / privacy mode */ }
-  return 'blue'
+  return 'light'
 }
 
 export function setTheme(theme: ThemeId): void {
@@ -31,9 +33,7 @@ export function setTheme(theme: ThemeId): void {
 
 export function applyTheme(theme: ThemeId): void {
   if (typeof document === 'undefined') return
-  // Default (blue) needs no attribute — index.css only overrides for green.
-  if (theme === 'blue') document.documentElement.removeAttribute('data-theme')
-  else document.documentElement.setAttribute('data-theme', theme)
+  document.documentElement.classList.toggle('dark', theme === 'dark')
 }
 
 /** Call once at startup to apply the saved theme before first paint. */

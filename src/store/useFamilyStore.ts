@@ -49,7 +49,7 @@ import { shareInviteDraft, pickReusableShareInvite, generateCode } from '../lib/
 import type {
   Member, Relationship, EditRequest, ViewMode, Profile,
   AccessRequest, UserRole, FamilyTree, MemberNote, FeedbackItem, UserPlan,
-  NotificationItem, TreeInvite, TreeRole, MemberReaction,
+  NotificationItem, TreeInvite, TreeRole, MemberReaction, FamilyStatus,
 } from '../types'
 
 // Surface Supabase failures to the UI. The "נשמר מקומית — סנכרון
@@ -353,6 +353,12 @@ interface FamilyState {
   ) => Promise<boolean>
   updateFeedback: (id: string, patch: Partial<FeedbackItem>) => Promise<void>
   deleteFeedback: (id: string) => Promise<void>
+
+  /** Family "network" feed — short statuses scoped to a tree (migration 029). */
+  statuses: FamilyStatus[]
+  fetchStatuses: (treeId: string) => Promise<void>
+  addStatus: (treeId: string, body: string) => Promise<boolean>
+  deleteStatus: (id: string) => Promise<void>
 }
 
 export const useFamilyStore = create<FamilyState>((set, get) => ({
@@ -1707,6 +1713,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   // is the source of truth and the App.tsx localStorage subscriber
   // persists it, so the demo admin sees their own test reports too.
   feedback: [],
+  statuses: [],
   fetchFeedback: async () => {
     if (!isSupabaseConfigured) return
     const { data, error } = await supabase
@@ -1737,7 +1744,13 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     set((s) => ({ feedback: [optimistic, ...s.feedback] }))
     if (!isSupabaseConfigured) return true   // demo — optimistic row is the source of truth
     try {
-      const { data, error } = await supabase
+      // IMPORTANT: do NOT chain .select() here. The feedback SELECT policy
+      // is admin-only (fb_select_admin), so a non-admin reporter cannot
+      // read the row back — `.select().single()` would error with 0 rows
+      // even though the INSERT succeeded, making every report look failed.
+      // The insert is all that matters; the admin re-fetches via
+      // fetchFeedback. Keep the optimistic row for the reporter's session.
+      const { error } = await supabase
         .from('feedback')
         .insert({
           author_id: item.author_id,
@@ -1746,8 +1759,6 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
           body: item.body,
           context: item.context ?? null,
         })
-        .select()
-        .single()
       if (error) {
         // A report is a public form, NOT a profile edit — never fire the
         // scary "no edit access" rejection toast here. Roll back the
@@ -1755,11 +1766,6 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
         console.warn('[addFeedback]', error)
         set((s) => ({ feedback: s.feedback.filter((f) => f.id !== localId) }))
         return false
-      }
-      if (data) {
-        set((s) => ({
-          feedback: s.feedback.map((f) => (f.id === localId ? (data as FeedbackItem) : f)),
-        }))
       }
       return true
     } catch (err) {
@@ -1785,6 +1791,63 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       const { error } = await supabase.from('feedback').delete().eq('id', id)
       if (error) reportSupabaseFailure('deleteFeedback', error)
     } catch (err) { reportSupabaseFailure('deleteFeedback', err) }
+  },
+
+  // ── Family statuses (the "family network" feed) ────────────────────
+  // Tree-scoped short posts. Defensive: if migration 029 isn't applied
+  // yet the table is missing — we log and degrade to an empty feed
+  // rather than throwing, so the page still renders its auto-activity.
+  fetchStatuses: async (treeId) => {
+    if (!isSupabaseConfigured || !treeId) { set({ statuses: [] }); return }
+    try {
+      const { data, error } = await supabase
+        .from('family_statuses')
+        .select('*')
+        .eq('tree_id', treeId)
+        .order('created_at', { ascending: false })
+        .limit(100)
+      if (error) { reportSupabaseFailure('fetchStatuses', error, 'read'); return }
+      set({ statuses: (data ?? []) as FamilyStatus[] })
+    } catch (err) { reportSupabaseFailure('fetchStatuses', err, 'read') }
+  },
+  addStatus: async (treeId, body) => {
+    const text = body.trim()
+    const me = get().profile
+    if (!text || !treeId) return false
+    const localId = `st-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    const optimistic: FamilyStatus = {
+      id: localId, tree_id: treeId,
+      author_id: me?.id ?? null, author_name: me?.full_name ?? '',
+      body: text, created_at: new Date().toISOString(),
+    }
+    set((s) => ({ statuses: [optimistic, ...s.statuses] }))
+    if (!isSupabaseConfigured) return true
+    try {
+      // No .select() readback — keep the optimistic row; a refetch picks
+      // up the server id. (Same lesson as feedback.)
+      const { error } = await supabase.from('family_statuses').insert({
+        tree_id: treeId, author_id: me?.id ?? null,
+        author_name: me?.full_name ?? '', body: text,
+      })
+      if (error) {
+        console.warn('[addStatus]', error)
+        set((s) => ({ statuses: s.statuses.filter((x) => x.id !== localId) }))
+        return false
+      }
+      return true
+    } catch (err) {
+      console.warn('[addStatus]', err)
+      set((s) => ({ statuses: s.statuses.filter((x) => x.id !== localId) }))
+      return false
+    }
+  },
+  deleteStatus: async (id) => {
+    set((s) => ({ statuses: s.statuses.filter((x) => x.id !== id) }))
+    if (!isSupabaseConfigured) return
+    try {
+      const { error } = await supabase.from('family_statuses').delete().eq('id', id)
+      if (error) reportSupabaseFailure('deleteStatus', error)
+    } catch (err) { reportSupabaseFailure('deleteStatus', err) }
   },
 
   // ── Tree-view floating-controls visibility ─────────────────────────

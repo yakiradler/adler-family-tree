@@ -20,6 +20,7 @@ import DevEnvBanner from './components/DevEnvBanner'
 import MfaChallengeGate from './components/security/MfaChallengeGate'
 import NewPasswordScreen from './components/security/NewPasswordScreen'
 import PlanGateToast from './components/plan/PlanGateToast'
+import BottomNav from './components/BottomNav'
 import { ADLER_MEMBERS, ADLER_RELATIONSHIPS, ADLER_TREES } from './data/adlerFamily'
 import { isPendingOnboarding, clearPendingOnboarding, markPendingOnboarding } from './lib/pendingOnboarding'
 import { useNotificationPolling } from './hooks/useNotificationPolling'
@@ -37,6 +38,7 @@ const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'))
 const OnboardingWizard = lazy(() => import('./components/onboarding/OnboardingWizard'))
 const PricingPage = lazy(() => import('./pages/PricingPage'))
 const TermsConsentPage = lazy(() => import('./pages/TermsConsentPage'))
+const FamilyFeedPage = lazy(() => import('./pages/FamilyFeedPage'))
 const JoinPage = lazy(() => import('./pages/JoinPage'))
 
 const SUPABASE_CONFIGURED =
@@ -685,6 +687,16 @@ export default function App() {
               }
             />
             <Route
+              path="/feed"
+              element={
+                !isAuth ? <Navigate to="/" replace />
+                : needsTerms ? <Navigate to="/terms" replace />
+                : needsPlan ? <Navigate to="/pricing" replace />
+                : needsOnboarding ? <Navigate to="/onboarding" replace />
+                : <FamilyFeedPage demoMode={demoMode} />
+              }
+            />
+            <Route
               path="/birthdays"
               element={
                 !isAuth ? <Navigate to="/" replace />
@@ -721,6 +733,8 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           </Suspense>
+          {/* Instagram-style bottom nav — self-gates to the 3 main tabs. */}
+          <BottomNav isAuth={isAuth} />
         </ThemeShell>
       </HashRouter>
     </div>
