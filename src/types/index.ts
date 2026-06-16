@@ -310,6 +310,20 @@ export interface FamilyStatus {
 }
 
 /**
+ * A flat comment on a family-feed status (migration 031). Scoped to the
+ * status's tree; author_name is denormalised so the thread survives a
+ * rename, same as FamilyStatus / MemberNote.
+ */
+export interface FamilyStatusComment {
+  id: string
+  status_id: string
+  author_id: string | null
+  author_name: string
+  body: string
+  created_at: string
+}
+
+/**
  * Note left on a member's profile by a family-tree user — short
  * `comment` (a few sentences) or longer `memory` (anecdote / story).
  * Both render in the same Notes tab; `kind` only changes the visual

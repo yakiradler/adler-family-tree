@@ -49,7 +49,7 @@ import { shareInviteDraft, pickReusableShareInvite, generateCode } from '../lib/
 import type {
   Member, Relationship, EditRequest, ViewMode, Profile,
   AccessRequest, UserRole, FamilyTree, MemberNote, FeedbackItem, UserPlan,
-  NotificationItem, TreeInvite, TreeRole, MemberReaction, FamilyStatus,
+  NotificationItem, TreeInvite, TreeRole, MemberReaction, FamilyStatus, FamilyStatusComment,
 } from '../types'
 
 // Surface Supabase failures to the UI. The "נשמר מקומית — סנכרון
@@ -359,6 +359,12 @@ interface FamilyState {
   fetchStatuses: (treeId: string) => Promise<void>
   addStatus: (treeId: string, body: string, media?: FamilyStatus['media']) => Promise<boolean>
   deleteStatus: (id: string) => Promise<void>
+
+  /** Comments on feed statuses, keyed by status id (migration 031). */
+  statusComments: Record<string, FamilyStatusComment[]>
+  fetchComments: (statusId: string) => Promise<void>
+  addComment: (statusId: string, body: string) => Promise<boolean>
+  deleteComment: (id: string, statusId: string) => Promise<void>
 }
 
 export const useFamilyStore = create<FamilyState>((set, get) => ({
@@ -1714,6 +1720,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   // persists it, so the demo admin sees their own test reports too.
   feedback: [],
   statuses: [],
+  statusComments: {},
   fetchFeedback: async () => {
     if (!isSupabaseConfigured) return
     const { data, error } = await supabase
@@ -1849,6 +1856,69 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       const { error } = await supabase.from('family_statuses').delete().eq('id', id)
       if (error) reportSupabaseFailure('deleteStatus', error)
     } catch (err) { reportSupabaseFailure('deleteStatus', err) }
+  },
+
+  // ── Status comments (migration 031) ────────────────────────────────
+  // Same optimistic + demo-safe shape as the statuses above. Defensive:
+  // if migration 031 isn't applied the table is missing — we log and keep
+  // an empty thread rather than throwing, so the feed still renders.
+  fetchComments: async (statusId) => {
+    if (!isSupabaseConfigured || !statusId) return
+    try {
+      const { data, error } = await supabase
+        .from('family_status_comments')
+        .select('*')
+        .eq('status_id', statusId)
+        .order('created_at', { ascending: true })
+        .limit(200)
+      if (error) { reportSupabaseFailure('fetchComments', error, 'read'); return }
+      set((s) => ({ statusComments: { ...s.statusComments, [statusId]: (data ?? []) as FamilyStatusComment[] } }))
+    } catch (err) { reportSupabaseFailure('fetchComments', err, 'read') }
+  },
+  addComment: async (statusId, body) => {
+    const text = body.trim()
+    const me = get().profile
+    if (!text || !statusId) return false
+    const localId = `sc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    const optimistic: FamilyStatusComment = {
+      id: localId, status_id: statusId,
+      author_id: me?.id ?? null, author_name: me?.full_name ?? '',
+      body: text, created_at: new Date().toISOString(),
+    }
+    set((s) => ({
+      statusComments: { ...s.statusComments, [statusId]: [...(s.statusComments[statusId] ?? []), optimistic] },
+    }))
+    if (!isSupabaseConfigured) return true
+    try {
+      const { error } = await supabase.from('family_status_comments').insert({
+        status_id: statusId, author_id: me?.id ?? null,
+        author_name: me?.full_name ?? '', body: text,
+      })
+      if (error) {
+        console.warn('[addComment]', error)
+        set((s) => ({
+          statusComments: { ...s.statusComments, [statusId]: (s.statusComments[statusId] ?? []).filter((x) => x.id !== localId) },
+        }))
+        return false
+      }
+      return true
+    } catch (err) {
+      console.warn('[addComment]', err)
+      set((s) => ({
+        statusComments: { ...s.statusComments, [statusId]: (s.statusComments[statusId] ?? []).filter((x) => x.id !== localId) },
+      }))
+      return false
+    }
+  },
+  deleteComment: async (id, statusId) => {
+    set((s) => ({
+      statusComments: { ...s.statusComments, [statusId]: (s.statusComments[statusId] ?? []).filter((x) => x.id !== id) },
+    }))
+    if (!isSupabaseConfigured) return
+    try {
+      const { error } = await supabase.from('family_status_comments').delete().eq('id', id)
+      if (error) reportSupabaseFailure('deleteComment', error)
+    } catch (err) { reportSupabaseFailure('deleteComment', err) }
   },
 
   // ── Tree-view floating-controls visibility ─────────────────────────

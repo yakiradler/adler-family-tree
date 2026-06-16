@@ -7,6 +7,8 @@ import { displayName } from '../lib/memberName'
 import { nextHebrewBirthday } from '../lib/hebrewDate'
 import { confirmDialog } from '../lib/confirm'
 import { uploadStatusMedia, type StatusMedia } from '../lib/photoUpload'
+import { downloadStatusMedia } from '../lib/downloadMedia'
+import ActionsMenu, { type ActionItem } from '../components/ui/ActionsMenu'
 
 interface Props { demoMode: boolean }
 
@@ -25,7 +27,7 @@ export default function FamilyFeedPage(_props: Props) {
   const { t, lang } = useLang()
   const rtl = isRTL(lang)
   const {
-    profile, members, trees, activeTreeId,
+    profile, members, trees, activeTreeId, myTreeRoles,
     statuses, fetchStatuses, addStatus, deleteStatus,
   } = useFamilyStore()
 
@@ -56,7 +58,10 @@ export default function FamilyFeedPage(_props: Props) {
         media: s.media ?? [],
         at: new Date(s.created_at).getTime(),
         mine: !!profile && s.author_id === profile.id,
-        canDelete: (!!profile && s.author_id === profile.id) || isAdmin(profile),
+        // Only the uploader, the tree owner, or an admin may remove a post.
+        canDelete: (!!profile && s.author_id === profile.id)
+          || myTreeRoles[s.tree_id] === 'owner'
+          || isAdmin(profile),
       })
     }
     // 2. Recently added relatives (last 30 days).
@@ -81,7 +86,7 @@ export default function FamilyFeedPage(_props: Props) {
     // Newest first; birthdays sort by soonest (their `at` is a future date,
     // so they naturally float to the top — fine for a "what's coming" feel).
     return out.sort((a, b) => b.at - a.at)
-  }, [statuses, treeMembers, profile, lang, now])
+  }, [statuses, treeMembers, profile, lang, now, myTreeRoles])
 
   const pickMedia = async (files: FileList | null) => {
     if (!files || files.length === 0 || !treeId) return
@@ -111,6 +116,31 @@ export default function FamilyFeedPage(_props: Props) {
 
   const remove = async (id: string) => {
     if (await confirmDialog({ message: t.feedDeleteConfirm, danger: true })) await deleteStatus(id)
+  }
+
+  // Build the ⋯ menu for a status: download (when it has media) + delete
+  // (only for the uploader / tree owner / admin). Phase 3 adds the
+  // "who can view" / "hide from" items here.
+  const statusMenuItems = (it: Extract<FeedItem, { kind: 'status' }>): ActionItem[] => {
+    const out: ActionItem[] = []
+    if (it.media.length > 0) {
+      out.push({
+        key: 'download',
+        label: t.feedDownload,
+        icon: <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M7.5 2v8M4 7l3.5 3.5L11 7M3 12.5h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>,
+        onSelect: () => void downloadStatusMedia(it.media),
+      })
+    }
+    if (it.canDelete) {
+      out.push({
+        key: 'delete',
+        label: t.feedDelete,
+        danger: true,
+        icon: <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M3 4h9M5.5 4V2.5h4V4M4.5 4v8h6V4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>,
+        onSelect: () => void remove(it.id),
+      })
+    }
+    return out
   }
 
   return (
@@ -197,10 +227,7 @@ export default function FamilyFeedPage(_props: Props) {
                               <p className="text-[13px] font-bold text-[#1C1C1E] truncate leading-tight">{it.author}</p>
                               <p className="text-[10px] text-[#8E8E93] leading-tight">{timeAgo(it.at, lang)}</p>
                             </div>
-                            {it.canDelete && (
-                              <button type="button" onClick={() => remove(it.id)}
-                                className="text-[11px] text-[#FF3B30] font-semibold flex-shrink-0">{t.feedDelete}</button>
-                            )}
+                            <ActionsMenu ariaLabel={t.feedActions} items={statusMenuItems(it)} />
                           </div>
                           {/* Media — edge-to-edge within the card */}
                           {it.media.length > 0 && (
@@ -219,6 +246,7 @@ export default function FamilyFeedPage(_props: Props) {
                           {it.body && (
                             <p className="text-[13px] text-[#3C3C43] mt-2 whitespace-pre-wrap leading-relaxed">{it.body}</p>
                           )}
+                          <StatusCommentThread statusId={it.id} canModerate={it.canDelete} />
                         </>
                       ) : it.kind === 'newMember' ? (
                         <p className="text-[13px] text-[#1C1C1E]">
@@ -253,4 +281,102 @@ function timeAgo(ms: number, lang: 'he' | 'en'): string {
   const d = Math.floor(diff / day)
   if (d <= 30) return lang === 'he' ? `לפני ${d} ימים` : `${d}d ago`
   return new Date(ms).toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-US', { day: 'numeric', month: 'short' })
+}
+
+/**
+ * Collapsible comment thread under a status. Comments are fetched lazily
+ * on first expand (keeps the feed light). Anyone with tree access can
+ * comment; a comment can be removed by its author or by whoever can
+ * moderate the post (tree owner / admin — passed in as `canModerate`).
+ */
+function StatusCommentThread({ statusId, canModerate }: { statusId: string; canModerate: boolean }) {
+  const { t, lang } = useLang()
+  const rtl = isRTL(lang)
+  const profile = useFamilyStore((s) => s.profile)
+  const comments = useFamilyStore((s) => s.statusComments[statusId])
+  const { fetchComments, addComment, deleteComment } = useFamilyStore()
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const list = comments ?? []
+  const count = list.length
+
+  const toggle = () => {
+    const next = !open
+    setOpen(next)
+    if (next && comments === undefined) void fetchComments(statusId)
+  }
+
+  const submit = async () => {
+    const text = draft.trim()
+    if (!text || busy) return
+    setBusy(true)
+    try { if (await addComment(statusId, text)) setDraft('') }
+    finally { setBusy(false) }
+  }
+
+  const removeComment = async (id: string) => {
+    if (await confirmDialog({ message: t.feedCommentDeleteConfirm, danger: true })) await deleteComment(id, statusId)
+  }
+
+  return (
+    <div className="mt-2.5 pt-2 border-t border-black/5">
+      <button type="button" onClick={toggle}
+        className="flex items-center gap-1 text-[11px] font-semibold text-[#8E8E93] active:scale-95 transition">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+          <path d="M2 3.5h10v6H6l-2.5 2v-2H2v-6Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+        </svg>
+        {t.feedCommentsToggle}{count > 0 ? ` · ${count}` : ''}
+      </button>
+
+      {open && (
+        <div className="mt-2 space-y-2">
+          {count === 0 ? (
+            <p className="text-[11px] text-[#8E8E93]">{t.feedCommentsNone}</p>
+          ) : (
+            list.map((c) => {
+              const canDel = (!!profile && c.author_id === profile.id) || canModerate
+              return (
+                <div key={c.id} className="flex items-start gap-2">
+                  <span className="w-6 h-6 rounded-full bg-gradient-to-br from-[#8E8E93] to-[#AEAEB2] text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                    {(c.author_name.trim().charAt(0)) || '·'}
+                  </span>
+                  <div className="flex-1 min-w-0 bg-[#F2F2F7] rounded-2xl px-3 py-1.5">
+                    <p className="text-[11px] font-bold text-[#1C1C1E] leading-tight">
+                      {c.author_name || '—'}
+                      <span className="ms-1.5 text-[9px] text-[#8E8E93] font-medium">{timeAgo(new Date(c.created_at).getTime(), lang)}</span>
+                    </p>
+                    <p className="text-[12px] text-[#3C3C43] whitespace-pre-wrap leading-snug">{c.body}</p>
+                  </div>
+                  {canDel && (
+                    <button type="button" onClick={() => void removeComment(c.id)}
+                      aria-label={t.feedDelete}
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-[#8E8E93] hover:text-[#FF3B30] hover:bg-[#FF3B30]/8 transition flex-shrink-0 text-[14px] leading-none">×</button>
+                  )}
+                </div>
+              )
+            })
+          )}
+
+          {profile && (
+            <div className="flex items-center gap-2 pt-0.5">
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submit() } }}
+                placeholder={t.feedCommentPlaceholder}
+                dir={rtl ? 'rtl' : 'ltr'}
+                className="flex-1 min-w-0 bg-[#F2F2F7] rounded-2xl px-3 py-2 text-[12px] text-[#1C1C1E] placeholder:text-[#8E8E93] outline-none focus:ring-2 focus:ring-[#007AFF]/40"
+              />
+              <button type="button" onClick={() => void submit()} disabled={!draft.trim() || busy}
+                className="px-3 py-2 rounded-2xl bg-[#007AFF] text-white text-[12px] font-bold disabled:opacity-40 active:scale-95 transition flex-shrink-0">
+                {busy ? '…' : t.feedComment}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
