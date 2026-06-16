@@ -374,7 +374,7 @@ export default function Dashboard({ demoMode }: Props) {
   }
 
   return (
-    <div dir={dir} className="min-h-screen bg-mesh-gradient pb-10">
+    <div dir={dir} className="min-h-screen bg-mesh-gradient pb-24">
       {/* Demo banner hidden — the setup hint surfaces only on /login when relevant. */}
       {/* One-shot "your access request was approved/declined" banner. */}
       {!demoMode && <AccessRequestStatusToast />}
@@ -483,11 +483,13 @@ export default function Dashboard({ demoMode }: Props) {
           transition={{ duration: 0.45, delay: 0.06 }}
           className="mt-6 grid grid-cols-4 gap-2"
         >
+          {/* Order: trees → branches → generations → members. In the RTL
+              layout the first item sits on the RIGHT, so trees lead. */}
           {[
-            { value: visibleMembers.length, label: t.dashMembers, color: '#007AFF', bg: 'from-[#007AFF]/10 to-[#32ADE6]/10' },
-            { value: generations, label: t.dashGenerations, color: '#32ADE6', bg: 'from-[#32ADE6]/10 to-[#5AC8FA]/10' },
-            { value: founders.length, label: t.dashBranches, color: '#5AC8FA', bg: 'from-[#5AC8FA]/10 to-[#64D2FF]/10' },
             { value: treeSummaries.length, label: t.dashTrees, color: '#30D158', bg: 'from-[#34C759]/10 to-[#30D158]/10' },
+            { value: founders.length, label: t.dashBranches, color: '#5AC8FA', bg: 'from-[#5AC8FA]/10 to-[#64D2FF]/10' },
+            { value: generations, label: t.dashGenerations, color: '#32ADE6', bg: 'from-[#32ADE6]/10 to-[#5AC8FA]/10' },
+            { value: visibleMembers.length, label: t.dashMembers, color: '#007AFF', bg: 'from-[#007AFF]/10 to-[#32ADE6]/10' },
           ].map((s, i) => (
             <div
               key={i}

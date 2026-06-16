@@ -85,7 +85,7 @@ export default function BirthdayPage(_props: Props) {
   const totalCelebrants = entries.length
 
   return (
-    <div dir={dir} className="min-h-screen bg-mesh-gradient pb-10">
+    <div dir={dir} className="min-h-screen bg-mesh-gradient pb-24">
       {/* Demo banner hidden for clean UX */}
 
       {/* Top bar */}

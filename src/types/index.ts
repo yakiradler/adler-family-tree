@@ -170,6 +170,9 @@ export interface Member {
    */
   tree_id?: string | null
   created_by: string
+  /** Row creation timestamp (DB default now()). Used by the family feed
+   *  to surface recently-added relatives. */
+  created_at?: string
 }
 
 /**
@@ -287,6 +290,20 @@ export interface FeedbackItem {
   /** Where the report was sent from (route hash) — helps reproduce. */
   context?: string | null
   status: FeedbackStatus
+  created_at: string
+}
+
+/**
+ * A short status / update a member posts to their family tree — the
+ * content of the "family network" feed (migration 029). Tree-scoped:
+ * everyone with access to the tree sees it.
+ */
+export interface FamilyStatus {
+  id: string
+  tree_id: string
+  author_id: string | null
+  author_name: string
+  body: string
   created_at: string
 }
 
