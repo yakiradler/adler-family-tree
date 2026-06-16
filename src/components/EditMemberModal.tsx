@@ -196,7 +196,12 @@ export default function EditMemberModal({ open, onClose, member, suggestMode = f
       onClose()
       return
     }
-    await updateMember(member.id, changes)
+    // Optimistic close: updateMember applies the change to local state
+    // SYNCHRONOUSLY (before its first await), so the UI already reflects
+    // the edit. Don't block the modal on the network round-trip — that
+    // was the "saving takes time" lag. The server write continues in the
+    // background; an RLS rejection rolls the row back + shows a toast.
+    void updateMember(member.id, changes)
     notifySaved()
     setSaving(false)
     onClose()

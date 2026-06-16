@@ -74,25 +74,26 @@ export default function TutorialOverlay({ open, steps, onClose }: Props) {
   const [rect, setRect] = useState<TargetRect | null>(null)
   const [captionPos, setCaptionPos] = useState<{ top: number; left: number; width: number } | null>(null)
   const captionRef = useRef<HTMLDivElement>(null)
+  // Which step we've already auto-scrolled into view. Scrolling on EVERY
+  // re-measure (the interval + capturing scroll listener) created a
+  // smooth-scroll⇄scroll-event feedback loop that made the tour jitter
+  // on iPhone — we now scroll exactly once per step.
+  const scrolledForStep = useRef<number>(-1)
 
-  // Reset to step 0 every time we open (or the steps array changes) —
-  // adjusted during render; the onEnter side effect stays in the effect
-  // below with the exact same trigger.
-  const [prevReset, setPrevReset] = useState({ open, steps })
-  if (prevReset.open !== open || prevReset.steps !== steps) {
-    setPrevReset({ open, steps })
+  // Reset to step 0 on each OPEN transition. Keyed on the `open` BOOLEAN
+  // only — the original compared the steps ARRAY REFERENCE, so any parent
+  // re-render that produced a fresh steps array snapped stepIndex back to 0
+  // ("Next" appeared to do nothing). Render-phase state-from-props is the
+  // React-sanctioned pattern and avoids the effect-setState lint rule.
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
     if (open) setStepIndex(0)
   }
 
-  // Fire onEnter for step 0 on each open.
+  // Fire the active step's onEnter — covers step 0 on open and every change.
   useEffect(() => {
-    if (open) steps[0]?.onEnter?.()
-  }, [open, steps])
-
-  // Fire onEnter when stepIndex changes (after the initial open).
-  useEffect(() => {
-    if (!open) return
-    steps[stepIndex]?.onEnter?.()
+    if (open) steps[stepIndex]?.onEnter?.()
   }, [stepIndex, open, steps])
 
   // Resolve the current step's target rect.
@@ -117,17 +118,26 @@ export default function TutorialOverlay({ open, steps, onClose }: Props) {
         return
       }
       setRect({ top: r.top, left: r.left, width: r.width, height: r.height })
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      // Scroll the target into view ONCE per step. Re-scrolling on every
+      // measure fed the scroll listener back into itself (jitter on iOS).
+      if (scrolledForStep.current !== stepIndex) {
+        scrolledForStep.current = stepIndex
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      }
     }
 
     measure()
     window.addEventListener('resize', measure)
     window.addEventListener('scroll', measure, true)
-    const t = window.setInterval(measure, 500) // catch async target appearance
+    // A few one-shot re-measures catch a target that appears/animates in
+    // late (route just changed, layout settling). The previous forever
+    // setInterval(500) re-rendered the overlay twice a second for the whole
+    // tour — needless work that janked the step transitions on iPhone.
+    const timers = [120, 350, 700, 1200].map((d) => window.setTimeout(measure, d))
     return () => {
       window.removeEventListener('resize', measure)
       window.removeEventListener('scroll', measure, true)
-      window.clearInterval(t)
+      timers.forEach((tm) => window.clearTimeout(tm))
     }
   }, [open, stepIndex, steps])
 
@@ -142,8 +152,16 @@ export default function TutorialOverlay({ open, steps, onClose }: Props) {
       if (!bubble) return
       const bw = bubble.offsetWidth
       const bh = bubble.offsetHeight
-      const vw = window.innerWidth
-      const vh = window.innerHeight
+      // Use the VISUAL viewport (excludes the iOS Safari toolbars) so the
+      // caption + its Next button never land behind the bottom toolbar —
+      // the bug where Next was only tappable after rotating to landscape.
+      const vv = window.visualViewport
+      // `||` (not `??`) so a transient 0 from visualViewport falls back to
+      // a real dimension instead of collapsing the layout.
+      const vw = vv?.width || window.innerWidth || document.documentElement.clientWidth
+      const vh = vv?.height || window.innerHeight || document.documentElement.clientHeight
+      // Keep clear of the home-indicator / bottom toolbar zone.
+      const BOTTOM_SAFE = EDGE_PAD + 28
 
       const step = steps[stepIndex]
       const preferred = step?.side ?? 'bottom'
@@ -151,9 +169,9 @@ export default function TutorialOverlay({ open, steps, onClose }: Props) {
       const clampLeft = (raw: number) =>
         Math.max(EDGE_PAD, Math.min(vw - bw - EDGE_PAD, raw))
       const clampTop = (raw: number) =>
-        Math.max(EDGE_PAD, Math.min(vh - bh - EDGE_PAD, raw))
+        Math.max(EDGE_PAD, Math.min(vh - bh - BOTTOM_SAFE, raw))
       const fits = (top: number, left: number) =>
-        top >= EDGE_PAD && top + bh <= vh - EDGE_PAD
+        top >= EDGE_PAD && top + bh <= vh - BOTTOM_SAFE
         && left >= EDGE_PAD && left + bw <= vw - EDGE_PAD
 
       // No target → centred on viewport.
@@ -188,7 +206,7 @@ export default function TutorialOverlay({ open, steps, onClose }: Props) {
       // it's fully visible.
       const dockedTop = rect.top > vh / 2
         ? clampTop(EDGE_PAD)                        // target near bottom → caption at top
-        : clampTop(vh - bh - EDGE_PAD)              // target near top → caption at bottom
+        : clampTop(vh - bh - BOTTOM_SAFE)           // target near top → caption at bottom
       setCaptionPos({
         top: dockedTop,
         left: clampLeft(vw / 2 - bw / 2),
@@ -201,10 +219,16 @@ export default function TutorialOverlay({ open, steps, onClose }: Props) {
     const raf = requestAnimationFrame(compute)
     const raf2 = requestAnimationFrame(() => requestAnimationFrame(compute))
     window.addEventListener('resize', compute)
+    // iOS: the visual viewport changes as the Safari toolbar shows/hides;
+    // reposition so the caption tracks the real visible area.
+    window.visualViewport?.addEventListener('resize', compute)
+    window.visualViewport?.addEventListener('scroll', compute)
     return () => {
       cancelAnimationFrame(raf)
       cancelAnimationFrame(raf2)
       window.removeEventListener('resize', compute)
+      window.visualViewport?.removeEventListener('resize', compute)
+      window.visualViewport?.removeEventListener('scroll', compute)
     }
   }, [open, stepIndex, rect, steps])
 
@@ -280,8 +304,12 @@ export default function TutorialOverlay({ open, steps, onClose }: Props) {
       </svg>
 
       {/* Caption bubble. position: fixed so it's anchored to the
-          viewport and the computed top/left match what we measured. */}
-      <AnimatePresence mode="wait">
+          viewport and the computed top/left match what we measured.
+          NOTE: deliberately NO mode="wait" — the caption re-renders as it
+          repositions, and mode="wait" would interrupt its own exit cycle
+          so the next step never mounted (tour stuck, couldn't advance).
+          A plain crossfade is smoother and always advances. */}
+      <AnimatePresence>
         <motion.div
           key={stepIndex}
           ref={captionRef}
@@ -365,6 +393,7 @@ export default function TutorialOverlay({ open, steps, onClose }: Props) {
                 )}
                 <button
                   type="button"
+                  data-tour-next
                   onClick={next}
                   className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white text-[12px] font-bold active:scale-95 transition shadow-md"
                 >
