@@ -25,6 +25,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
 
   const [theme, setThemeState] = useState<ThemeId>(getTheme())
   const [showPwd, setShowPwd] = useState(false)
+  const [emailBusy, setEmailBusy] = useState(false)
   const [name, setName] = useState(profile?.full_name ?? '')
   const [nameSaved, setNameSaved] = useState(false)
   const [curPwd, setCurPwd] = useState('')
@@ -101,6 +102,30 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
     onClose()
     try { if (isSupabaseConfigured) await supabase.auth.signOut() } catch { /* best-effort */ }
     navigate('/')
+  }
+
+  // Email-verified password change: send the same reset link the "forgot
+  // password" flow uses (Auth.tsx) — proven path, lands on NewPasswordScreen.
+  // This is the email-confirmation option; the in-app change above stays
+  // instant (after verifying the current password).
+  const sendResetEmail = async () => {
+    setPwdMsg(null)
+    if (!isSupabaseConfigured) { setPwdMsg({ ok: false, text: t.securityDemoNote }); return }
+    setEmailBusy(true)
+    try {
+      const { data: u } = await supabase.auth.getUser()
+      const email = u.user?.email
+      if (!email) { setPwdMsg({ ok: false, text: t.settingsPasswordError }); return }
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/`,
+      })
+      if (error) { setPwdMsg({ ok: false, text: t.settingsPasswordError }); return }
+      setPwdMsg({ ok: true, text: t.settingsPwdEmailSent })
+    } catch {
+      setPwdMsg({ ok: false, text: t.settingsPasswordError })
+    } finally {
+      setEmailBusy(false)
+    }
   }
 
   return (
@@ -244,6 +269,15 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                         {t.settingsChangePassword}
                       </button>
                     </div>
+                    {/* Email-verified alternative: sends a secure reset link. */}
+                    <button type="button" onClick={sendResetEmail} disabled={emailBusy}
+                      className="flex items-center gap-1.5 text-[12px] text-[#007AFF] font-semibold disabled:opacity-50">
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+                        <rect x="1.5" y="3" width="13" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
+                        <path d="M2 4l6 4.5L14 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      {emailBusy ? '…' : t.settingsPwdEmailReset}
+                    </button>
                   </div>
                   {pwdMsg && (
                     <p className={`text-[12px] mt-1.5 ${pwdMsg.ok ? 'text-[#1F7A3A]' : 'text-[#FF3B30]'}`}>{pwdMsg.text}</p>
