@@ -45,6 +45,12 @@ export interface Profile {
   bio?: string
   /** ISO timestamp; absent ⇒ user has not completed onboarding. */
   onboarded_at?: string | null
+  /** First-login gate (migration 028): when terms were accepted. */
+  terms_accepted_at?: string | null
+  /** Opted in to email marketing (email only — never SMS). */
+  marketing_consent?: boolean
+  /** When the user passed the plans/pricing gate on first login. */
+  plan_acked_at?: string | null
   /** Tier the user requested during onboarding (admin grants the actual role). */
   requested_role?: UserRole | null
   /** Granular per-feature flags managed by admin for `master` users. */
