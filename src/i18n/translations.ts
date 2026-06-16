@@ -657,6 +657,10 @@ export const translations = {
     adminInvitesExpiresOn: 'פג בתאריך',
     adminInvitesNoExpiry: 'אינו פג',
     adminInvitesUnlimited: 'ללא הגבלה',
+    adminInvitesJoined: 'הצטרפו',
+    adminInvitesWhoJoined: 'מי הצטרף',
+    adminInvitesNoneJoined: 'עדיין אף אחד לא הצטרף דרך הקוד הזה',
+    adminInvitesJoinedLoading: 'טוען…',
     adminInvitesGenerated: 'נוצר',
 
     // Special admin controls (Phase E)
@@ -1650,6 +1654,10 @@ export const translations = {
     adminInvitesExpiresOn: 'expires',
     adminInvitesNoExpiry: 'no expiry',
     adminInvitesUnlimited: 'unlimited',
+    adminInvitesJoined: 'joined',
+    adminInvitesWhoJoined: 'Who joined',
+    adminInvitesNoneJoined: 'No one has joined via this code yet',
+    adminInvitesJoinedLoading: 'Loading…',
     adminInvitesGenerated: 'generated',
 
     // Special admin controls

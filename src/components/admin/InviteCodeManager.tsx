@@ -5,7 +5,7 @@ import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang, type Translations } from '../../i18n/useT'
 import { confirmDialog, alertDialog } from '../../lib/confirm'
 import { generateCode, expiryToIso, type ExpiryChoice } from '../../lib/invites'
-import type { TreeInvite } from '../../types'
+import type { TreeInvite, InviteRedemption } from '../../types'
 
 /**
  * Admin tool — generate and manage `tree_invites` codes.
@@ -286,10 +286,38 @@ function InviteRow({
   const expired = inv.expires_at != null && new Date(inv.expires_at) < new Date()
   const exhausted = inv.uses_left != null && inv.uses_left <= 0
   const dead = expired || exhausted
+  const count = inv.redeem_count ?? 0
   const fmt = (iso: string) =>
     new Date(iso).toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-US', {
       year: 'numeric', month: 'short', day: 'numeric',
     })
+
+  // Lazy-load the "who joined" list only when expanded (keeps the list
+  // light even with thousands of codes — the count is denormalised so it
+  // shows without any extra query).
+  const [open, setOpen] = useState(false)
+  const [people, setPeople] = useState<InviteRedemption[] | null>(null)
+  const toggle = async () => {
+    const next = !open
+    setOpen(next)
+    if (!next || people !== null) return
+    if (!SUPABASE_CONFIGURED) { setPeople([]); return }
+    const { data } = await supabase
+      .from('invite_redemptions')
+      .select('user_id, redeemed_at')
+      .eq('invite_id', inv.id)
+      .order('redeemed_at', { ascending: true })
+    const rows = (data ?? []) as { user_id: string; redeemed_at: string }[]
+    let names: Record<string, string> = {}
+    if (rows.length) {
+      const { data: profs } = await supabase
+        .from('profiles').select('id, full_name').in('id', rows.map((r) => r.user_id))
+      names = Object.fromEntries(((profs ?? []) as { id: string; full_name: string | null }[])
+        .map((p) => [p.id, p.full_name || '—']))
+    }
+    setPeople(rows.map((r) => ({ user_id: r.user_id, full_name: names[r.user_id] || '—', redeemed_at: r.redeemed_at })))
+  }
+
   return (
     <motion.div
       layout
@@ -297,61 +325,92 @@ function InviteRow({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: -16, height: 0, marginBottom: 0 }}
       transition={{ duration: 0.25 }}
-      className={`glass-strong rounded-2xl p-3 shadow-glass-sm flex flex-col sm:flex-row sm:items-center gap-3 ${
-        dead ? 'opacity-60' : ''
-      }`}
+      className={`glass-strong rounded-2xl p-3 shadow-glass-sm ${dead ? 'opacity-60' : ''}`}
     >
-      <div className="flex-1 min-w-0">
-        <div className="flex items-baseline gap-2 flex-wrap">
-          <span
-            className="text-sf-headline font-mono font-bold tracking-wider text-[#1C1C1E]"
-            dir="ltr"
-          >
-            {inv.code}
-          </span>
-          {treeName && (
-            <span className="text-[11px] font-semibold text-[#5E5CE6]">🌳 {treeName}</span>
-          )}
-          {inv.note && (
-            <span className="text-[11px] text-[#636366]">— {inv.note}</span>
-          )}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span className="text-sf-headline font-mono font-bold tracking-wider text-[#1C1C1E]" dir="ltr">
+              {inv.code}
+            </span>
+            {treeName && (
+              <span className="text-[11px] font-semibold text-[#5E5CE6]">🌳 {treeName}</span>
+            )}
+            {/* How many joined via this code (denormalised counter). */}
+            <span className="text-[11px] font-semibold text-[#34C759] bg-[#34C759]/10 rounded-full px-2 py-0.5">
+              👥 {count} {t.adminInvitesJoined}
+            </span>
+            {inv.note && (
+              <span className="text-[11px] text-[#636366]">— {inv.note}</span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-[#8E8E93] mt-0.5">
+            <span>{t.adminInvitesGenerated}: {inv.created_at ? fmt(inv.created_at) : '—'}</span>
+            <span>
+              {t.adminInvitesExpiresOn}:{' '}
+              {inv.expires_at ? fmt(inv.expires_at) : t.adminInvitesNoExpiry}
+            </span>
+            <span>
+              {inv.uses_left == null
+                ? t.adminInvitesUnlimited
+                : `${inv.uses_left} ${t.adminInvitesUsesRemaining}`}
+            </span>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-[#8E8E93] mt-0.5">
-          <span>
-            {t.adminInvitesGenerated}: {inv.created_at ? fmt(inv.created_at) : '—'}
-          </span>
-          <span>
-            {t.adminInvitesExpiresOn}:{' '}
-            {inv.expires_at ? fmt(inv.expires_at) : t.adminInvitesNoExpiry}
-          </span>
-          <span>
-            {inv.uses_left == null
-              ? t.adminInvitesUnlimited
-              : `${inv.uses_left} ${t.adminInvitesUsesRemaining}`}
-          </span>
+
+        <div className="flex items-center gap-2">
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={onCopy}
+            className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold transition ${
+              copied ? 'bg-[#34C759] text-white' : 'bg-[#007AFF]/10 text-[#007AFF] hover:bg-[#007AFF]/20'
+            }`}
+          >
+            {copied ? t.adminInvitesCopied : t.adminInvitesCopyCode}
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={onRevoke}
+            className="px-3 py-1.5 rounded-xl text-[11px] font-semibold bg-[#FF3B30]/10 text-[#FF3B30] hover:bg-[#FF3B30]/20 transition"
+          >
+            {t.adminInvitesRevoke}
+          </motion.button>
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <motion.button
-          whileTap={{ scale: 0.95 }}
-          onClick={onCopy}
-          className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold transition ${
-            copied
-              ? 'bg-[#34C759] text-white'
-              : 'bg-[#007AFF]/10 text-[#007AFF] hover:bg-[#007AFF]/20'
-          }`}
-        >
-          {copied ? t.adminInvitesCopied : t.adminInvitesCopyCode}
-        </motion.button>
-        <motion.button
-          whileTap={{ scale: 0.95 }}
-          onClick={onRevoke}
-          className="px-3 py-1.5 rounded-xl text-[11px] font-semibold bg-[#FF3B30]/10 text-[#FF3B30] hover:bg-[#FF3B30]/20 transition"
-        >
-          {t.adminInvitesRevoke}
-        </motion.button>
-      </div>
+      {/* Who joined — expandable, lazy-loaded */}
+      <button
+        type="button"
+        onClick={() => void toggle()}
+        aria-expanded={open}
+        className="mt-2 flex items-center gap-1 text-[11px] font-semibold text-[#5E5CE6]"
+      >
+        <motion.span animate={{ rotate: open ? 90 : 0 }} className="leading-none" aria-hidden>›</motion.span>
+        {t.adminInvitesWhoJoined}
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-1.5 space-y-1">
+              {people === null ? (
+                <p className="text-[11px] text-[#8E8E93] py-1">{t.adminInvitesJoinedLoading}</p>
+              ) : people.length === 0 ? (
+                <p className="text-[11px] text-[#8E8E93] py-1">{t.adminInvitesNoneJoined}</p>
+              ) : (
+                people.map((p) => (
+                  <div key={p.user_id} className="flex items-center justify-between gap-2 bg-[#F2F2F7] rounded-xl px-2.5 py-1.5">
+                    <span className="text-[12px] font-semibold text-[#1C1C1E] truncate">{p.full_name}</span>
+                    <span className="text-[10px] text-[#8E8E93] flex-shrink-0">{fmt(p.redeemed_at)}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }

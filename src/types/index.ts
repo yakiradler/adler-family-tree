@@ -206,6 +206,15 @@ export interface TreeInvite {
   uses_left: number | null
   note?: string | null
   created_at?: string
+  /** How many people have joined via this code (denormalised, migration 034). */
+  redeem_count?: number
+}
+
+/** One person's redemption of an invite code (migration 034). */
+export interface InviteRedemption {
+  user_id: string
+  full_name: string
+  redeemed_at: string
 }
 
 /**
