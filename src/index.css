@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Basic color themes (see lib/theme.ts). A theme only re-tints the
+   page background mesh gradient — component colors are untouched so
+   text always stays readable. Default (blue) uses the Tailwind utility
+   as-is; the green theme overrides it here with a higher specificity. */
+html[data-theme="green"] .bg-mesh-gradient {
+  background-image:
+    radial-gradient(at 40% 20%, hsla(150, 70%, 95%, 1) 0px, transparent 50%),
+    radial-gradient(at 80% 0%, hsla(160, 70%, 93%, 1) 0px, transparent 50%),
+    radial-gradient(at 0% 50%, hsla(155, 70%, 94%, 1) 0px, transparent 50%),
+    radial-gradient(at 80% 50%, hsla(180, 65%, 95%, 1) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, hsla(140, 70%, 94%, 1) 0px, transparent 50%);
+}
+
 @layer base {
   * {
     -webkit-font-smoothing: antialiased;

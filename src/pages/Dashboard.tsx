@@ -18,7 +18,7 @@ import { shouldAutoStartTutorial, markTutorialAutoStarted } from '../lib/firstRu
 import { nextHebrewBirthday } from '../lib/hebrewDate'
 import { displayName } from '../lib/memberName'
 import JoinTreeModal from '../components/JoinTreeModal'
-import SecuritySettingsModal from '../components/security/SecuritySettingsModal'
+import SettingsModal from '../components/settings/SettingsModal'
 import PlanCard, { LeafIcon } from '../components/plan/PlanCard'
 import TreeCardActionMenu from '../components/TreeCardActionMenu'
 import TreeManagePanel from '../components/tree/TreeManagePanel'
@@ -188,8 +188,8 @@ export default function Dashboard({ demoMode }: Props) {
   // Join-tree-by-code modal — reachable from both the QuickAccessMenu
   // and the new "🔑" tile in the Apps grid below.
   const [joinTreeOpen, setJoinTreeOpen] = useState(false)
-  // Account-security modal (opt-in two-factor) — real backend only.
-  const [securityOpen, setSecurityOpen] = useState(false)
+  // Settings hub (language, theme, name, password, 2-factor).
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   // Leaf balance for the header pill (subscription Phase A).
   const myPlan = useFamilyStore((s) => s.myPlan)
@@ -422,16 +422,18 @@ export default function Dashboard({ demoMode }: Props) {
             {/* Persistent notification inbox — approvals, requests,
                 reports. Hidden in demo mode (no backend rows). */}
             {!demoMode && <NotificationBell />}
+            {/* Settings hub — language, theme, name, password, 2-factor.
+                Replaced the standalone shield (2FA moved inside settings). */}
             {!demoMode && (
               <button
-                onClick={() => setSecurityOpen(true)}
-                title={t.securityTitle}
-                aria-label={t.securityTitle}
+                onClick={() => setSettingsOpen(true)}
+                title={t.settingsTitle}
+                aria-label={t.settingsTitle}
                 className="w-8 h-8 bg-white/70 backdrop-blur border border-white/50 rounded-xl flex items-center justify-center hover:bg-white/90 transition"
               >
-                <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
-                  <path d="M7.5 1.5l5 2v3.6c0 3-2.1 5.6-5 6.4-2.9-.8-5-3.4-5-6.4V3.5l5-2z" stroke="#636366" strokeWidth="1.3" strokeLinejoin="round" />
-                  <path d="M5.3 7.5l1.5 1.5 2.9-3" stroke="#636366" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" stroke="#636366" strokeWidth="1.2" />
+                  <path d="M8 1.5l1 1.8 2-.6.4 2 2 .8-1.1 1.7 1.1 1.7-2 .8-.4 2-2-.6-1 1.8-1-1.8-2 .6-.4-2-2-.8 1.1-1.7L1.6 6.3l2-.8.4-2 2 .6 1-1.8z" stroke="#636366" strokeWidth="1.2" strokeLinejoin="round" />
                 </svg>
               </button>
             )}
@@ -446,7 +448,7 @@ export default function Dashboard({ demoMode }: Props) {
                 </svg>
               </button>
             )}
-            <SecuritySettingsModal open={securityOpen} onClose={() => setSecurityOpen(false)} />
+            <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
           </div>
         </div>
 
