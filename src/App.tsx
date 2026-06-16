@@ -323,6 +323,22 @@ export default function App() {
       }
     }
 
+    // PERF: the snapshot above stringifies the WHOLE dataset (all members,
+    // relationships, notes…). Doing that synchronously on every state change
+    // janks the UI and made saving feel slow — badly so on iPhone. We
+    // DEBOUNCE it: rapid successive changes (typing, bulk adds, data loads)
+    // coalesce into a single write ~700ms after activity settles. A flush()
+    // runs the pending write immediately on unload/cleanup so nothing is lost.
+    let writeTimer: number | null = null
+    const flush = () => {
+      if (writeTimer != null) { window.clearTimeout(writeTimer); writeTimer = null }
+      write()
+    }
+    const scheduleWrite = () => {
+      if (writeTimer != null) window.clearTimeout(writeTimer)
+      writeTimer = window.setTimeout(() => { writeTimer = null; write() }, 700)
+    }
+
     const unsubscribe = useFamilyStore.subscribe((state, prev) => {
       if (
         state.members === prev.members &&
@@ -332,16 +348,17 @@ export default function App() {
         state.feedback === prev.feedback &&
         state.myPlan === prev.myPlan
       ) return
-      write()
+      scheduleWrite()
     })
 
-    // Safety net: write to localStorage whenever the user navigates away
-    // or closes the tab. This catches any mutation that escaped the
-    // subscribe callback (e.g. a rapid succession of updates where the
-    // subscriber fired between two flushes and the last state wasn't
-    // written yet).
-    const onUnload = () => write()
+    // Safety net: flush to localStorage whenever the user navigates away,
+    // closes the tab, or backgrounds the app (iOS Safari fires pagehide /
+    // visibilitychange but often NOT beforeunload, so we listen to all).
+    const onUnload = () => flush()
     window.addEventListener('beforeunload', onUnload)
+    window.addEventListener('pagehide', onUnload)
+    const onVisibility = () => { if (document.visibilityState === 'hidden') flush() }
+    document.addEventListener('visibilitychange', onVisibility)
 
     // ALWAYS write once after the effect sets up — this serves two
     // purposes:
@@ -353,7 +370,10 @@ export default function App() {
     write()
     return () => {
       unsubscribe()
+      flush() // persist any pending debounced change before tearing down
       window.removeEventListener('beforeunload', onUnload)
+      window.removeEventListener('pagehide', onUnload)
+      document.removeEventListener('visibilitychange', onVisibility)
     }
     // Re-run on user-id change so a sign-out/sign-in into a different
     // account re-keys localStorage and hydrates THAT user's data
