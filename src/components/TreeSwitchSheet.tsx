@@ -106,6 +106,7 @@ export default function TreeSwitchSheet({
                   label={tt.name}
                   hint={tt.description}
                   color={tt.color ?? '#5E5CE6'}
+                  iconUrl={tt.icon_url ?? null}
                   active={activeTreeId === tt.id}
                   onClick={() => pick(tt.id)}
                 />
@@ -161,11 +162,12 @@ export default function TreeSwitchSheet({
 }
 
 function SheetRow({
-  label, hint, color, active, onClick,
+  label, hint, color, iconUrl, active, onClick,
 }: {
   label: string
   hint?: string
   color: string
+  iconUrl?: string | null
   active: boolean
   onClick: () => void
 }) {
@@ -178,16 +180,20 @@ function SheetRow({
         active ? 'bg-[#5E5CE6]/8' : 'hover:bg-[#F2F2F7]'
       }`}
     >
-      {/* IG-style circular avatar; the active tree gets a colored ring. */}
+      {/* IG-style circular avatar — the tree's own photo if it has one
+          (same icon_url as the dashboard tree cards), else a colored
+          initial. The active tree gets a colored ring. */}
       <span
-        className="w-10 h-10 rounded-full flex items-center justify-center text-white text-[15px] font-bold flex-shrink-0"
+        className="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden text-white text-[15px] font-bold flex-shrink-0"
         style={{
           background: color,
           boxShadow: active ? `0 0 0 2px #fff, 0 0 0 4px ${color}` : undefined,
         }}
         aria-hidden
       >
-        {label.trim().charAt(0) || '·'}
+        {iconUrl
+          ? <img src={iconUrl} alt="" className="w-full h-full object-cover" />
+          : (label.trim().charAt(0) || '·')}
       </span>
       <span className="flex-1 min-w-0">
         <span className="block text-[14px] font-semibold text-[#1C1C1E] truncate">{label}</span>

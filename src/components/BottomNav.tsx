@@ -84,11 +84,15 @@ export default function BottomNav({ isAuth }: { isAuth: boolean }) {
             className="flex-1 flex flex-col items-center gap-0.5 py-2 active:scale-95 transition select-none"
           >
             <span
-              className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[11px] font-bold"
+              className="w-6 h-6 rounded-full flex items-center justify-center overflow-hidden text-white text-[11px] font-bold"
               style={{ background: myTreeColor, boxShadow: `0 0 0 1.5px #fff, 0 0 0 3px ${myTreeColor}55` }}
               aria-hidden
             >
-              {(activeTree?.name ?? '·').trim().charAt(0) || '·'}
+              {/* The tree's own photo if it has one (matches the dashboard
+                  tree cards); the colored initial is the fallback. */}
+              {activeTree?.icon_url
+                ? <img src={activeTree.icon_url} alt="" className="w-full h-full object-cover" />
+                : ((activeTree?.name ?? '·').trim().charAt(0) || '·')}
             </span>
             <span className="text-[10.5px] font-semibold text-[#8E8E93]">
               {t.navMyTree}
