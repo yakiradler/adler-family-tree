@@ -1,11 +1,13 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLang, isRTL } from '../../i18n/useT'
 import { useFamilyStore } from '../../store/useFamilyStore'
 import { useCloseOnBack } from '../../hooks/useCloseOnBack'
 import { supabase, isSupabaseConfigured } from '../../lib/supabase'
 import { THEMES, getTheme, setTheme, type ThemeId } from '../../lib/theme'
+import { uploadMemberPhoto } from '../../lib/photoUpload'
 import SecuritySettingsModal from '../security/SecuritySettingsModal'
+import EditMemberModal from '../EditMemberModal'
 
 /**
  * Per-user "Settings" hub (owner request). One place for the basics:
@@ -17,7 +19,7 @@ import SecuritySettingsModal from '../security/SecuritySettingsModal'
 export default function SettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t, lang, toggleLang } = useLang()
   const rtl = isRTL(lang)
-  const { profile, setProfile, updateProfileById } = useFamilyStore()
+  const { profile, setProfile, updateProfileById, members, activeTreeId } = useFamilyStore()
 
   const [theme, setThemeState] = useState<ThemeId>(getTheme())
   const [name, setName] = useState(profile?.full_name ?? '')
@@ -27,10 +29,31 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
   const [pwdMsg, setPwdMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [securityOpen, setSecurityOpen] = useState(false)
+  const [avatarBusy, setAvatarBusy] = useState(false)
+  const [editMyCardOpen, setEditMyCardOpen] = useState(false)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+
+  // The member row that represents this user (their "own card"), if linked.
+  const myMember = profile?.linked_member_id
+    ? members.find((m) => m.id === profile.linked_member_id) ?? null
+    : null
 
   useCloseOnBack(open, onClose)
 
   const pickTheme = (id: ThemeId) => { setThemeState(id); setTheme(id) }
+
+  const pickAvatar = async (file: File | null) => {
+    if (!file || !profile) return
+    setAvatarBusy(true)
+    try {
+      const url = await uploadMemberPhoto(file, activeTreeId)
+      await updateProfileById(profile.id, { avatar_url: url })
+      setProfile({ ...profile, avatar_url: url })
+    } finally {
+      setAvatarBusy(false)
+      if (avatarInputRef.current) avatarInputRef.current.value = ''
+    }
+  }
 
   const saveName = async () => {
     const next = name.trim()
@@ -98,6 +121,36 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
             </div>
 
             <div className="p-4 space-y-5">
+              {/* My profile — avatar (profile picture) + edit personal details. */}
+              <section>
+                <p className="text-[11px] font-bold text-[#8E8E93] uppercase tracking-wide mb-2">{t.settingsMyProfile}</p>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => avatarInputRef.current?.click()}
+                    disabled={avatarBusy}
+                    aria-label={t.settingsChangePhoto}
+                    className="relative w-16 h-16 rounded-full overflow-hidden bg-gradient-to-br from-[#007AFF] to-[#5AC8FA] text-white flex items-center justify-center text-xl font-bold flex-shrink-0 active:scale-95 transition"
+                  >
+                    {profile?.avatar_url
+                      ? <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
+                      : <span>{(profile?.full_name ?? '·').trim().charAt(0)}</span>}
+                    <span className="absolute bottom-0 inset-x-0 bg-black/45 text-[8px] py-0.5 leading-none">{avatarBusy ? '…' : '📷'}</span>
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-[#1C1C1E] truncate">{profile?.full_name}</p>
+                    <button type="button" onClick={() => avatarInputRef.current?.click()} disabled={avatarBusy}
+                      className="text-[12px] text-[#007AFF] font-semibold">{t.settingsChangePhoto}</button>
+                    {myMember && (
+                      <button type="button" onClick={() => setEditMyCardOpen(true)}
+                        className="block text-[12px] text-[#007AFF] font-semibold mt-0.5">{t.settingsEditMyDetails}</button>
+                    )}
+                  </div>
+                </div>
+                <input ref={avatarInputRef} type="file" accept="image/*" className="hidden"
+                  onChange={(e) => void pickAvatar(e.target.files?.[0] ?? null)} />
+              </section>
+
               {/* Language */}
               <section>
                 <p className="text-[11px] font-bold text-[#8E8E93] uppercase tracking-wide mb-2">{t.settingsLanguage}</p>
@@ -207,6 +260,9 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
           </motion.div>
 
           <SecuritySettingsModal open={securityOpen} onClose={() => setSecurityOpen(false)} />
+          {myMember && (
+            <EditMemberModal open={editMyCardOpen} onClose={() => setEditMyCardOpen(false)} member={myMember} />
+          )}
         </motion.div>
       )}
     </AnimatePresence>

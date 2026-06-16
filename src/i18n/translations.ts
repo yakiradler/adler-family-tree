@@ -875,6 +875,9 @@ export const translations = {
     // Account security / two-factor (TOTP)
     securityTitle: 'אבטחת חשבון',
     settingsTitle: 'הגדרות',
+    settingsMyProfile: 'הפרופיל שלי',
+    settingsChangePhoto: 'שנה תמונת פרופיל',
+    settingsEditMyDetails: 'ערוך פרטים אישיים',
     settingsLanguage: 'שפת המערכת',
     settingsTheme: 'מצב תצוגה',
     themeLight: 'בהיר',
@@ -1842,6 +1845,9 @@ export const translations = {
     // Account security / two-factor (TOTP)
     securityTitle: 'Account security',
     settingsTitle: 'Settings',
+    settingsMyProfile: 'My profile',
+    settingsChangePhoto: 'Change profile photo',
+    settingsEditMyDetails: 'Edit personal details',
     settingsLanguage: 'App language',
     settingsTheme: 'Appearance',
     themeLight: 'Light',
