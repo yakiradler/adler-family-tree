@@ -49,7 +49,7 @@ import { shareInviteDraft, pickReusableShareInvite, generateCode } from '../lib/
 import type {
   Member, Relationship, EditRequest, ViewMode, Profile,
   AccessRequest, UserRole, FamilyTree, MemberNote, FeedbackItem, UserPlan,
-  NotificationItem, TreeInvite, TreeRole, MemberReaction, FamilyStatus,
+  NotificationItem, TreeInvite, TreeRole, MemberReaction, FamilyStatus, FamilyStatusComment, StatusVisibility,
 } from '../types'
 
 // Surface Supabase failures to the UI. The "נשמר מקומית — סנכרון
@@ -357,8 +357,16 @@ interface FamilyState {
   /** Family "network" feed — short statuses scoped to a tree (migration 029). */
   statuses: FamilyStatus[]
   fetchStatuses: (treeId: string) => Promise<void>
-  addStatus: (treeId: string, body: string, media?: FamilyStatus['media']) => Promise<boolean>
+  addStatus: (treeId: string, body: string, media?: FamilyStatus['media'], visibility?: StatusVisibility) => Promise<boolean>
+  updateStatus: (id: string, body: string) => Promise<void>
+  updateStatusVisibility: (id: string, visibility: StatusVisibility) => Promise<void>
   deleteStatus: (id: string) => Promise<void>
+
+  /** Comments on feed statuses, keyed by status id (migration 031). */
+  statusComments: Record<string, FamilyStatusComment[]>
+  fetchComments: (statusId: string) => Promise<void>
+  addComment: (statusId: string, body: string) => Promise<boolean>
+  deleteComment: (id: string, statusId: string) => Promise<void>
 }
 
 export const useFamilyStore = create<FamilyState>((set, get) => ({
@@ -1714,6 +1722,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   // persists it, so the demo admin sees their own test reports too.
   feedback: [],
   statuses: [],
+  statusComments: {},
   fetchFeedback: async () => {
     if (!isSupabaseConfigured) return
     const { data, error } = await supabase
@@ -1800,40 +1809,105 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   fetchStatuses: async (treeId) => {
     if (!isSupabaseConfigured || !treeId) { set({ statuses: [] }); return }
     try {
-      const { data, error } = await supabase
+      // 1. Posts that belong to the active tree.
+      const own = await supabase
         .from('family_statuses')
         .select('*')
         .eq('tree_id', treeId)
         .order('created_at', { ascending: false })
         .limit(100)
-      if (error) { reportSupabaseFailure('fetchStatuses', error, 'read'); return }
-      set({ statuses: (data ?? []) as FamilyStatus[] })
+      if (own.error) { reportSupabaseFailure('fetchStatuses', own.error, 'read'); return }
+      let rows = (own.data ?? []) as FamilyStatus[]
+
+      // 2. Posts SHARED INTO this tree from other trees (migration 032).
+      //    Best-effort: if the shares table doesn't exist yet we silently
+      //    skip the merge — the own-tree feed still renders.
+      const sh = await supabase
+        .from('family_status_shares')
+        .select('status_id')
+        .eq('tree_id', treeId)
+      if (!sh.error && sh.data?.length) {
+        const extraIds = sh.data
+          .map((r) => (r as { status_id: string }).status_id)
+          .filter((id) => !rows.some((r) => r.id === id))
+        if (extraIds.length) {
+          const ins = await supabase.from('family_statuses').select('*').in('id', extraIds)
+          if (!ins.error) rows = [...rows, ...((ins.data ?? []) as FamilyStatus[])]
+        }
+      }
+
+      // 3. Decorate each post with its share / hide lists (for the audience
+      //    indicator + editor). RLS hides the block-list from non-managers,
+      //    so ordinary viewers just get empty arrays — also best-effort.
+      const ids = rows.map((r) => r.id)
+      if (ids.length) {
+        const [sh2, hd] = await Promise.all([
+          supabase.from('family_status_shares').select('status_id,tree_id').in('status_id', ids),
+          supabase.from('family_status_hidden').select('status_id,member_id').in('status_id', ids),
+        ])
+        const sharesBy: Record<string, string[]> = {}
+        for (const r of (sh2.data ?? []) as { status_id: string; tree_id: string }[]) {
+          if (!sharesBy[r.status_id]) sharesBy[r.status_id] = []
+          sharesBy[r.status_id].push(r.tree_id)
+        }
+        const hiddenBy: Record<string, string[]> = {}
+        for (const r of (hd.data ?? []) as { status_id: string; member_id: string }[]) {
+          if (!hiddenBy[r.status_id]) hiddenBy[r.status_id] = []
+          hiddenBy[r.status_id].push(r.member_id)
+        }
+        rows = rows.map((r) => ({
+          ...r,
+          sharedTreeIds: sharesBy[r.id] ?? [],
+          hiddenMemberIds: hiddenBy[r.id] ?? [],
+        }))
+      }
+
+      rows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      set({ statuses: rows.slice(0, 100) })
     } catch (err) { reportSupabaseFailure('fetchStatuses', err, 'read') }
   },
-  addStatus: async (treeId, body, media) => {
+  addStatus: async (treeId, body, media, visibility) => {
     const text = body.trim()
     const me = get().profile
     const mediaArr = media ?? []
     if ((!text && mediaArr.length === 0) || !treeId) return false
+    const sharedTreeIds = visibility?.sharedTreeIds ?? []
+    const hiddenMemberIds = visibility?.hiddenMemberIds ?? []
     const localId = `st-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     const optimistic: FamilyStatus = {
       id: localId, tree_id: treeId,
       author_id: me?.id ?? null, author_name: me?.full_name ?? '',
       body: text, media: mediaArr, created_at: new Date().toISOString(),
+      sharedTreeIds, hiddenMemberIds,
     }
     set((s) => ({ statuses: [optimistic, ...s.statuses] }))
     if (!isSupabaseConfigured) return true
     try {
-      // No .select() readback — keep the optimistic row; a refetch picks
-      // up the server id. (Same lesson as feedback.)
-      const { error } = await supabase.from('family_statuses').insert({
+      // Read the server id back so we can attach share/hide rows. We keep
+      // the optimistic row (don't insert a second one); a later refetch
+      // reconciles the id. (Same readback caution as elsewhere.)
+      const { data, error } = await supabase.from('family_statuses').insert({
         tree_id: treeId, author_id: me?.id ?? null,
         author_name: me?.full_name ?? '', body: text, media: mediaArr,
-      })
+      }).select('id').single()
       if (error) {
         console.warn('[addStatus]', error)
         set((s) => ({ statuses: s.statuses.filter((x) => x.id !== localId) }))
         return false
+      }
+      const newId = (data as { id: string } | null)?.id
+      // Attach visibility rows (best-effort; needs migration 032).
+      if (newId && (sharedTreeIds.length || hiddenMemberIds.length)) {
+        try {
+          if (sharedTreeIds.length) {
+            await supabase.from('family_status_shares')
+              .insert(sharedTreeIds.map((tid) => ({ status_id: newId, tree_id: tid })))
+          }
+          if (hiddenMemberIds.length) {
+            await supabase.from('family_status_hidden')
+              .insert(hiddenMemberIds.map((mid) => ({ status_id: newId, member_id: mid })))
+          }
+        } catch (err) { console.warn('[addStatus:visibility]', err) }
       }
       return true
     } catch (err) {
@@ -1842,6 +1916,37 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       return false
     }
   },
+  updateStatus: async (id, body) => {
+    const text = body.trim()
+    if (!text) return
+    set((s) => ({ statuses: s.statuses.map((x) => (x.id === id ? { ...x, body: text } : x)) }))
+    if (!isSupabaseConfigured) return
+    try {
+      const { error } = await supabase.from('family_statuses').update({ body: text }).eq('id', id)
+      if (error) reportSupabaseFailure('updateStatus', error)
+    } catch (err) { reportSupabaseFailure('updateStatus', err) }
+  },
+  updateStatusVisibility: async (id, visibility) => {
+    const sharedTreeIds = visibility.sharedTreeIds ?? []
+    const hiddenMemberIds = visibility.hiddenMemberIds ?? []
+    set((s) => ({
+      statuses: s.statuses.map((x) => (x.id === id ? { ...x, sharedTreeIds, hiddenMemberIds } : x)),
+    }))
+    if (!isSupabaseConfigured) return
+    try {
+      // Replace the full set: clear the old rows, then insert the new ones.
+      await supabase.from('family_status_shares').delete().eq('status_id', id)
+      await supabase.from('family_status_hidden').delete().eq('status_id', id)
+      if (sharedTreeIds.length) {
+        await supabase.from('family_status_shares')
+          .insert(sharedTreeIds.map((tid) => ({ status_id: id, tree_id: tid })))
+      }
+      if (hiddenMemberIds.length) {
+        await supabase.from('family_status_hidden')
+          .insert(hiddenMemberIds.map((mid) => ({ status_id: id, member_id: mid })))
+      }
+    } catch (err) { reportSupabaseFailure('updateStatusVisibility', err) }
+  },
   deleteStatus: async (id) => {
     set((s) => ({ statuses: s.statuses.filter((x) => x.id !== id) }))
     if (!isSupabaseConfigured) return
@@ -1849,6 +1954,69 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       const { error } = await supabase.from('family_statuses').delete().eq('id', id)
       if (error) reportSupabaseFailure('deleteStatus', error)
     } catch (err) { reportSupabaseFailure('deleteStatus', err) }
+  },
+
+  // ── Status comments (migration 031) ────────────────────────────────
+  // Same optimistic + demo-safe shape as the statuses above. Defensive:
+  // if migration 031 isn't applied the table is missing — we log and keep
+  // an empty thread rather than throwing, so the feed still renders.
+  fetchComments: async (statusId) => {
+    if (!isSupabaseConfigured || !statusId) return
+    try {
+      const { data, error } = await supabase
+        .from('family_status_comments')
+        .select('*')
+        .eq('status_id', statusId)
+        .order('created_at', { ascending: true })
+        .limit(200)
+      if (error) { reportSupabaseFailure('fetchComments', error, 'read'); return }
+      set((s) => ({ statusComments: { ...s.statusComments, [statusId]: (data ?? []) as FamilyStatusComment[] } }))
+    } catch (err) { reportSupabaseFailure('fetchComments', err, 'read') }
+  },
+  addComment: async (statusId, body) => {
+    const text = body.trim()
+    const me = get().profile
+    if (!text || !statusId) return false
+    const localId = `sc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    const optimistic: FamilyStatusComment = {
+      id: localId, status_id: statusId,
+      author_id: me?.id ?? null, author_name: me?.full_name ?? '',
+      body: text, created_at: new Date().toISOString(),
+    }
+    set((s) => ({
+      statusComments: { ...s.statusComments, [statusId]: [...(s.statusComments[statusId] ?? []), optimistic] },
+    }))
+    if (!isSupabaseConfigured) return true
+    try {
+      const { error } = await supabase.from('family_status_comments').insert({
+        status_id: statusId, author_id: me?.id ?? null,
+        author_name: me?.full_name ?? '', body: text,
+      })
+      if (error) {
+        console.warn('[addComment]', error)
+        set((s) => ({
+          statusComments: { ...s.statusComments, [statusId]: (s.statusComments[statusId] ?? []).filter((x) => x.id !== localId) },
+        }))
+        return false
+      }
+      return true
+    } catch (err) {
+      console.warn('[addComment]', err)
+      set((s) => ({
+        statusComments: { ...s.statusComments, [statusId]: (s.statusComments[statusId] ?? []).filter((x) => x.id !== localId) },
+      }))
+      return false
+    }
+  },
+  deleteComment: async (id, statusId) => {
+    set((s) => ({
+      statusComments: { ...s.statusComments, [statusId]: (s.statusComments[statusId] ?? []).filter((x) => x.id !== id) },
+    }))
+    if (!isSupabaseConfigured) return
+    try {
+      const { error } = await supabase.from('family_status_comments').delete().eq('id', id)
+      if (error) reportSupabaseFailure('deleteComment', error)
+    } catch (err) { reportSupabaseFailure('deleteComment', err) }
   },
 
   // ── Tree-view floating-controls visibility ─────────────────────────

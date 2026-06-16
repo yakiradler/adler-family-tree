@@ -7,11 +7,16 @@ import { displayName } from '../lib/memberName'
 import { nextHebrewBirthday } from '../lib/hebrewDate'
 import { confirmDialog } from '../lib/confirm'
 import { uploadStatusMedia, type StatusMedia } from '../lib/photoUpload'
+import { downloadStatusMedia } from '../lib/downloadMedia'
+import ActionsMenu, { type ActionItem } from '../components/ui/ActionsMenu'
+import StatusVisibilityModal from '../components/feed/StatusVisibilityModal'
+import { scopePersonalTrees } from '../lib/treeScope'
+import { isSupabaseConfigured } from '../lib/supabase'
 
 interface Props { demoMode: boolean }
 
 type FeedItem =
-  | { kind: 'status'; id: string; author: string; body: string; media: StatusMedia[]; at: number; mine: boolean; canDelete: boolean }
+  | { kind: 'status'; id: string; author: string; body: string; media: StatusMedia[]; at: number; mine: boolean; canDelete: boolean; sharedCount: number }
   | { kind: 'newMember'; id: string; name: string; at: number }
   | { kind: 'birthday'; id: string; name: string; at: number; inDays: number }
 
@@ -25,8 +30,8 @@ export default function FamilyFeedPage(_props: Props) {
   const { t, lang } = useLang()
   const rtl = isRTL(lang)
   const {
-    profile, members, trees, activeTreeId,
-    statuses, fetchStatuses, addStatus, deleteStatus,
+    profile, members, trees, activeTreeId, myTreeRoles, myTreeAccessIds,
+    statuses, fetchStatuses, addStatus, updateStatus, updateStatusVisibility, deleteStatus,
   } = useFamilyStore()
 
   const treeId = activeTreeId ?? trees[0]?.id ?? null
@@ -35,6 +40,14 @@ export default function FamilyFeedPage(_props: Props) {
   const [media, setMedia] = useState<StatusMedia[]>([])
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Audience chosen in the composer (applied on post; reset after).
+  const [composeShared, setComposeShared] = useState<string[]>([])
+  const [composeHidden, setComposeHidden] = useState<string[]>([])
+  // The audience/edit modal: compose (new post), or edit/audience of an
+  // existing post (looked up by id).
+  const [vizModal, setVizModal] = useState<
+    { kind: 'compose' } | { kind: 'edit' | 'audience'; statusId: string } | null
+  >(null)
   // Snapshot "now" once (lazy initializer keeps the memo below pure).
   const [now] = useState(() => Date.now())
 
@@ -56,7 +69,11 @@ export default function FamilyFeedPage(_props: Props) {
         media: s.media ?? [],
         at: new Date(s.created_at).getTime(),
         mine: !!profile && s.author_id === profile.id,
-        canDelete: (!!profile && s.author_id === profile.id) || isAdmin(profile),
+        // Only the uploader, the tree owner, or an admin may remove a post.
+        canDelete: (!!profile && s.author_id === profile.id)
+          || myTreeRoles[s.tree_id] === 'owner'
+          || isAdmin(profile),
+        sharedCount: s.sharedTreeIds?.length ?? 0,
       })
     }
     // 2. Recently added relatives (last 30 days).
@@ -81,7 +98,7 @@ export default function FamilyFeedPage(_props: Props) {
     // Newest first; birthdays sort by soonest (their `at` is a future date,
     // so they naturally float to the top — fine for a "what's coming" feel).
     return out.sort((a, b) => b.at - a.at)
-  }, [statuses, treeMembers, profile, lang, now])
+  }, [statuses, treeMembers, profile, lang, now, myTreeRoles])
 
   const pickMedia = async (files: FileList | null) => {
     if (!files || files.length === 0 || !treeId) return
@@ -104,13 +121,64 @@ export default function FamilyFeedPage(_props: Props) {
     if ((!draft.trim() && media.length === 0) || posting || !treeId) return
     setPosting(true)
     try {
-      const ok = await addStatus(treeId, draft, media)
-      if (ok) { setDraft(''); setMedia([]) }
+      const ok = await addStatus(treeId, draft, media, { sharedTreeIds: composeShared, hiddenMemberIds: composeHidden })
+      if (ok) { setDraft(''); setMedia([]); setComposeShared([]); setComposeHidden([]) }
     } finally { setPosting(false) }
   }
 
+  // Trees the user may approve for a given post (its own tree excluded).
+  const approvableTrees = (ownTreeId: string | null) =>
+    scopePersonalTrees(trees, profile, myTreeAccessIds, !isSupabaseConfigured)
+      .filter((tt) => tt.id !== ownTreeId)
+      .map((tt) => ({ id: tt.id, name: tt.name, color: tt.color }))
+
+  // People in a post's tree who can be hidden from.
+  const hideCandidates = (ownTreeId: string | null) =>
+    members
+      .filter((m) => m.tree_id === ownTreeId)
+      .map((m) => ({ id: m.id, label: displayName(m, lang) }))
+
   const remove = async (id: string) => {
     if (await confirmDialog({ message: t.feedDeleteConfirm, danger: true })) await deleteStatus(id)
+  }
+
+  // Build the ⋯ menu for a status: download (when it has media) + delete
+  // (only for the uploader / tree owner / admin). Phase 3 adds the
+  // "who can view" / "hide from" items here.
+  const statusMenuItems = (it: Extract<FeedItem, { kind: 'status' }>): ActionItem[] => {
+    const out: ActionItem[] = []
+    if (it.canDelete) {
+      out.push({
+        key: 'edit',
+        label: t.feedEdit,
+        icon: <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M9.5 2.5l3 3M2.5 12.5l.7-2.6 6.6-6.6 1.9 1.9-6.6 6.6-2.6.7Z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>,
+        onSelect: () => setVizModal({ kind: 'edit', statusId: it.id }),
+      })
+      out.push({
+        key: 'audience',
+        label: t.feedAudience,
+        icon: <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M1 7.5S3.5 3 7.5 3 14 7.5 14 7.5 11.5 12 7.5 12 1 7.5 1 7.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /><circle cx="7.5" cy="7.5" r="1.8" stroke="currentColor" strokeWidth="1.3" /></svg>,
+        onSelect: () => setVizModal({ kind: 'audience', statusId: it.id }),
+      })
+    }
+    if (it.media.length > 0) {
+      out.push({
+        key: 'download',
+        label: t.feedDownload,
+        icon: <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M7.5 2v8M4 7l3.5 3.5L11 7M3 12.5h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>,
+        onSelect: () => void downloadStatusMedia(it.media),
+      })
+    }
+    if (it.canDelete) {
+      out.push({
+        key: 'delete',
+        label: t.feedDelete,
+        danger: true,
+        icon: <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M3 4h9M5.5 4V2.5h4V4M4.5 4v8h6V4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>,
+        onSelect: () => void remove(it.id),
+      })
+    }
+    return out
   }
 
   return (
@@ -159,13 +227,21 @@ export default function FamilyFeedPage(_props: Props) {
                 className="hidden"
                 onChange={(e) => void pickMedia(e.target.files)}
               />
-              <div className="flex items-center justify-between mt-2">
-                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading || media.length >= 4}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-[#F2F2F7] text-[#1C1C1E] text-[13px] font-semibold disabled:opacity-40 active:scale-95 transition">
-                  <span aria-hidden>🖼️</span> {uploading ? t.feedUploading : t.feedAddMedia}
-                </button>
+              <div className="flex items-center justify-between mt-2 gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading || media.length >= 4}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-[#F2F2F7] text-[#1C1C1E] text-[13px] font-semibold disabled:opacity-40 active:scale-95 transition flex-shrink-0">
+                    <span aria-hidden>🖼️</span> {uploading ? t.feedUploading : t.feedAddMedia}
+                  </button>
+                  <button type="button" onClick={() => setVizModal({ kind: 'compose' })}
+                    aria-label={t.feedAudience}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-[#F2F2F7] text-[#1C1C1E] text-[13px] font-semibold active:scale-95 transition flex-shrink-0">
+                    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden><path d="M1 7.5S3.5 3 7.5 3 14 7.5 14 7.5 11.5 12 7.5 12 1 7.5 1 7.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /><circle cx="7.5" cy="7.5" r="1.8" stroke="currentColor" strokeWidth="1.3" /></svg>
+                    {composeShared.length > 0 && <span className="text-[11px] text-[#007AFF]">· {composeShared.length}</span>}
+                  </button>
+                </div>
                 <button type="button" onClick={post} disabled={(!draft.trim() && media.length === 0) || posting || uploading}
-                  className="px-5 py-2 rounded-2xl bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white text-[13px] font-bold disabled:opacity-40 active:scale-[0.98] transition">
+                  className="px-5 py-2 rounded-2xl bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white text-[13px] font-bold disabled:opacity-40 active:scale-[0.98] transition flex-shrink-0">
                   {posting ? '…' : t.feedPost}
                 </button>
               </div>
@@ -197,10 +273,7 @@ export default function FamilyFeedPage(_props: Props) {
                               <p className="text-[13px] font-bold text-[#1C1C1E] truncate leading-tight">{it.author}</p>
                               <p className="text-[10px] text-[#8E8E93] leading-tight">{timeAgo(it.at, lang)}</p>
                             </div>
-                            {it.canDelete && (
-                              <button type="button" onClick={() => remove(it.id)}
-                                className="text-[11px] text-[#FF3B30] font-semibold flex-shrink-0">{t.feedDelete}</button>
-                            )}
+                            <ActionsMenu ariaLabel={t.feedActions} items={statusMenuItems(it)} />
                           </div>
                           {/* Media — edge-to-edge within the card */}
                           {it.media.length > 0 && (
@@ -219,6 +292,13 @@ export default function FamilyFeedPage(_props: Props) {
                           {it.body && (
                             <p className="text-[13px] text-[#3C3C43] mt-2 whitespace-pre-wrap leading-relaxed">{it.body}</p>
                           )}
+                          {it.sharedCount > 0 && (
+                            <p className="text-[10px] text-[#8E8E93] mt-1.5 flex items-center gap-1">
+                              <svg width="11" height="11" viewBox="0 0 15 15" fill="none" aria-hidden><path d="M1 7.5S3.5 3 7.5 3 14 7.5 14 7.5 11.5 12 7.5 12 1 7.5 1 7.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /><circle cx="7.5" cy="7.5" r="1.8" stroke="currentColor" strokeWidth="1.3" /></svg>
+                              {t.feedSharedWith.replace('{n}', String(it.sharedCount))}
+                            </p>
+                          )}
+                          <StatusCommentThread statusId={it.id} canModerate={it.canDelete} />
                         </>
                       ) : it.kind === 'newMember' ? (
                         <p className="text-[13px] text-[#1C1C1E]">
@@ -241,6 +321,34 @@ export default function FamilyFeedPage(_props: Props) {
           </>
         )}
       </div>
+
+      {vizModal && (() => {
+        const isCompose = vizModal.kind === 'compose'
+        const status = isCompose ? null : statuses.find((s) => s.id === vizModal.statusId)
+        if (!isCompose && !status) return null
+        const ownTreeId = isCompose ? treeId : (status?.tree_id ?? null)
+        return (
+          <StatusVisibilityModal
+            open
+            onClose={() => setVizModal(null)}
+            withBody={vizModal.kind === 'edit'}
+            initialBody={status?.body ?? ''}
+            initialSharedTreeIds={isCompose ? composeShared : (status?.sharedTreeIds ?? [])}
+            initialHiddenMemberIds={isCompose ? composeHidden : (status?.hiddenMemberIds ?? [])}
+            trees={approvableTrees(ownTreeId)}
+            members={hideCandidates(ownTreeId)}
+            onSave={(v) => {
+              if (isCompose) {
+                setComposeShared(v.sharedTreeIds)
+                setComposeHidden(v.hiddenMemberIds)
+              } else if (vizModal.kind === 'edit' || vizModal.kind === 'audience') {
+                if (vizModal.kind === 'edit' && v.body !== undefined) void updateStatus(vizModal.statusId, v.body)
+                void updateStatusVisibility(vizModal.statusId, { sharedTreeIds: v.sharedTreeIds, hiddenMemberIds: v.hiddenMemberIds })
+              }
+            }}
+          />
+        )
+      })()}
     </div>
   )
 }
@@ -253,4 +361,102 @@ function timeAgo(ms: number, lang: 'he' | 'en'): string {
   const d = Math.floor(diff / day)
   if (d <= 30) return lang === 'he' ? `לפני ${d} ימים` : `${d}d ago`
   return new Date(ms).toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-US', { day: 'numeric', month: 'short' })
+}
+
+/**
+ * Collapsible comment thread under a status. Comments are fetched lazily
+ * on first expand (keeps the feed light). Anyone with tree access can
+ * comment; a comment can be removed by its author or by whoever can
+ * moderate the post (tree owner / admin — passed in as `canModerate`).
+ */
+function StatusCommentThread({ statusId, canModerate }: { statusId: string; canModerate: boolean }) {
+  const { t, lang } = useLang()
+  const rtl = isRTL(lang)
+  const profile = useFamilyStore((s) => s.profile)
+  const comments = useFamilyStore((s) => s.statusComments[statusId])
+  const { fetchComments, addComment, deleteComment } = useFamilyStore()
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const list = comments ?? []
+  const count = list.length
+
+  const toggle = () => {
+    const next = !open
+    setOpen(next)
+    if (next && comments === undefined) void fetchComments(statusId)
+  }
+
+  const submit = async () => {
+    const text = draft.trim()
+    if (!text || busy) return
+    setBusy(true)
+    try { if (await addComment(statusId, text)) setDraft('') }
+    finally { setBusy(false) }
+  }
+
+  const removeComment = async (id: string) => {
+    if (await confirmDialog({ message: t.feedCommentDeleteConfirm, danger: true })) await deleteComment(id, statusId)
+  }
+
+  return (
+    <div className="mt-2.5 pt-2 border-t border-black/5">
+      <button type="button" onClick={toggle}
+        className="flex items-center gap-1 text-[11px] font-semibold text-[#8E8E93] active:scale-95 transition">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+          <path d="M2 3.5h10v6H6l-2.5 2v-2H2v-6Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+        </svg>
+        {t.feedCommentsToggle}{count > 0 ? ` · ${count}` : ''}
+      </button>
+
+      {open && (
+        <div className="mt-2 space-y-2">
+          {count === 0 ? (
+            <p className="text-[11px] text-[#8E8E93]">{t.feedCommentsNone}</p>
+          ) : (
+            list.map((c) => {
+              const canDel = (!!profile && c.author_id === profile.id) || canModerate
+              return (
+                <div key={c.id} className="flex items-start gap-2">
+                  <span className="w-6 h-6 rounded-full bg-gradient-to-br from-[#8E8E93] to-[#AEAEB2] text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                    {(c.author_name.trim().charAt(0)) || '·'}
+                  </span>
+                  <div className="flex-1 min-w-0 bg-[#F2F2F7] rounded-2xl px-3 py-1.5">
+                    <p className="text-[11px] font-bold text-[#1C1C1E] leading-tight">
+                      {c.author_name || '—'}
+                      <span className="ms-1.5 text-[9px] text-[#8E8E93] font-medium">{timeAgo(new Date(c.created_at).getTime(), lang)}</span>
+                    </p>
+                    <p className="text-[12px] text-[#3C3C43] whitespace-pre-wrap leading-snug">{c.body}</p>
+                  </div>
+                  {canDel && (
+                    <button type="button" onClick={() => void removeComment(c.id)}
+                      aria-label={t.feedDelete}
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-[#8E8E93] hover:text-[#FF3B30] hover:bg-[#FF3B30]/8 transition flex-shrink-0 text-[14px] leading-none">×</button>
+                  )}
+                </div>
+              )
+            })
+          )}
+
+          {profile && (
+            <div className="flex items-center gap-2 pt-0.5">
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submit() } }}
+                placeholder={t.feedCommentPlaceholder}
+                dir={rtl ? 'rtl' : 'ltr'}
+                className="flex-1 min-w-0 bg-[#F2F2F7] rounded-2xl px-3 py-2 text-[12px] text-[#1C1C1E] placeholder:text-[#8E8E93] outline-none focus:ring-2 focus:ring-[#007AFF]/40"
+              />
+              <button type="button" onClick={() => void submit()} disabled={!draft.trim() || busy}
+                className="px-3 py-2 rounded-2xl bg-[#007AFF] text-white text-[12px] font-bold disabled:opacity-40 active:scale-95 transition flex-shrink-0">
+                {busy ? '…' : t.feedComment}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }

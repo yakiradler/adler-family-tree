@@ -307,6 +307,32 @@ export interface FamilyStatus {
   /** Attached photos / videos (migration 030). */
   media?: { url: string; type: 'image' | 'video' }[]
   created_at: string
+  /** Extra trees approved to see this post (migration 032). */
+  sharedTreeIds?: string[]
+  /** Members this post is hidden from (migration 032). */
+  hiddenMemberIds?: string[]
+}
+
+/** Per-status audience controls, chosen at upload time and editable after. */
+export interface StatusVisibility {
+  /** Extra trees approved to see the post (beyond its own tree). */
+  sharedTreeIds?: string[]
+  /** Members the post is hidden from. */
+  hiddenMemberIds?: string[]
+}
+
+/**
+ * A flat comment on a family-feed status (migration 031). Scoped to the
+ * status's tree; author_name is denormalised so the thread survives a
+ * rename, same as FamilyStatus / MemberNote.
+ */
+export interface FamilyStatusComment {
+  id: string
+  status_id: string
+  author_id: string | null
+  author_name: string
+  body: string
+  created_at: string
 }
 
 /**

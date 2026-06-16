@@ -23,6 +23,7 @@ import SettingsModal from '../components/settings/SettingsModal'
 import PlanCard, { LeafIcon } from '../components/plan/PlanCard'
 import TreeCardActionMenu from '../components/TreeCardActionMenu'
 import TreeManagePanel from '../components/tree/TreeManagePanel'
+import TreeSwitchSheet from '../components/TreeSwitchSheet'
 import type { Member, Relationship } from '../types'
 
 interface Props { demoMode: boolean }
@@ -191,6 +192,12 @@ export default function Dashboard({ demoMode }: Props) {
   const [joinTreeOpen, setJoinTreeOpen] = useState(false)
   // Settings hub (language, theme, name, password, 2-factor).
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // Instagram-style tree switcher sheet — opened from the hero chip (and
+  // from the bottom-nav "My tree" long-press). The tree CARDS keep their
+  // own long-press manage/delete menu; this is a separate, switch-only
+  // surface so the two don't collide.
+  const [treeSheetOpen, setTreeSheetOpen] = useState(false)
+  const activeTree = activeTreeId ? trees.find((tt) => tt.id === activeTreeId) : null
 
   // The emblem above the name in the hero is the LOGGED-IN USER's own
   // picture (profile.avatar_url) — a standalone personal photo, NOT the
@@ -471,6 +478,7 @@ export default function Dashboard({ demoMode }: Props) {
               </button>
             )}
             <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+            <TreeSwitchSheet open={treeSheetOpen} onClose={() => setTreeSheetOpen(false)} />
           </div>
         </div>
 
@@ -517,6 +525,20 @@ export default function Dashboard({ demoMode }: Props) {
             {profile?.full_name}
           </h1>
           <p className="text-sf-subhead text-[#636366] mt-1">{t.dashTagline}</p>
+          {/* Active-tree chip → opens the Instagram-style switcher. */}
+          <button
+            type="button"
+            onClick={() => setTreeSheetOpen(true)}
+            aria-haspopup="menu"
+            title={t.navMyTreeHint}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white/85 backdrop-blur border border-white/60 shadow-sm py-1.5 px-3 text-[12px] font-semibold text-[#1C1C1E] active:scale-95 transition"
+          >
+            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: activeTree?.color ?? '#007AFF' }} aria-hidden />
+            <span className="truncate max-w-[160px]">{activeTree?.name ?? t.treeSwitcherDefault}</span>
+            <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
+              <path d="M2 4l3.5 3L9 4" stroke="#636366" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
         </motion.div>
 
         {/* Stats strip */}
