@@ -17,7 +17,7 @@
  * inline blob. We never persist a multi-MB string into a DB column again.
  */
 import { supabase, isSupabaseConfigured } from './supabase'
-import { fileToDownscaledDataURL, fileToPhotoBlob, photoStoragePath } from './imageResize'
+import { fileToDownscaledDataURL, fileToPhotoBlob, photoStoragePath, fileToIconBlob, iconStoragePath } from './imageResize'
 
 export const MEMBER_PHOTO_BUCKET = 'member-photos'
 
@@ -84,5 +84,27 @@ export async function uploadStatusMedia(file: File, treeId?: string | null): Pro
   } catch (e) {
     console.warn('[status-media] video upload failed', e)
     return null
+  }
+}
+
+/**
+ * Upload a family/tree icon (the emblem above the family name on the
+ * home page + the tree cards). Downscales to a small square, uploads to
+ * the public `tree-icons` bucket, returns the URL; falls back to a small
+ * data URL in demo/offline mode. Caller persists via updateTree({icon_url}).
+ */
+export async function uploadTreeIcon(file: File, treeId: string): Promise<string> {
+  if (!isSupabaseConfigured || !treeId) return fileToDownscaledDataURL(file)
+  try {
+    const { blob, contentType, ext } = await fileToIconBlob(file)
+    const path = iconStoragePath(treeId, ext, Date.now())
+    const { error } = await supabase.storage.from('tree-icons').upload(path, blob, { contentType })
+    if (error) throw error
+    const { data: pub } = supabase.storage.from('tree-icons').getPublicUrl(path)
+    if (!pub?.publicUrl) throw new Error('no public url')
+    return pub.publicUrl
+  } catch (e) {
+    console.warn('[tree-icon] upload failed', e)
+    return fileToDownscaledDataURL(file)
   }
 }

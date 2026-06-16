@@ -334,6 +334,7 @@ export const translations = {
     // Dashboard
     dashWelcome: 'ברוכים הבאים',
     dashTagline: 'הסיפור המשפחתי, במקום אחד',
+    familyIconChange: 'שנה תמונה',
     dashMembers: 'חברים',
     dashGenerations: 'דורות',
     dashBranches: 'ענפים',
@@ -1300,6 +1301,7 @@ export const translations = {
     // Dashboard
     dashWelcome: 'Welcome',
     dashTagline: 'Your family story, in one place',
+    familyIconChange: 'Change photo',
     dashMembers: 'Members',
     dashGenerations: 'Generations',
     dashBranches: 'Branches',

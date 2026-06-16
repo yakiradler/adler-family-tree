@@ -17,6 +17,7 @@ import TutorialOverlay, { type TourStep } from '../components/TutorialOverlay'
 import { shouldAutoStartTutorial, markTutorialAutoStarted } from '../lib/firstRunTutorial'
 import { nextHebrewBirthday } from '../lib/hebrewDate'
 import { displayName } from '../lib/memberName'
+import { uploadTreeIcon } from '../lib/photoUpload'
 import JoinTreeModal from '../components/JoinTreeModal'
 import SettingsModal from '../components/settings/SettingsModal'
 import PlanCard, { LeafIcon } from '../components/plan/PlanCard'
@@ -128,7 +129,7 @@ function computeBranchFounders(members: Member[], relationships: Relationship[])
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function Dashboard({ demoMode }: Props) {
-  const { members, relationships, profile, setSelectedMemberId, trees, setActiveTreeId } = useFamilyStore()
+  const { members, relationships, profile, setSelectedMemberId, trees, setActiveTreeId, activeTreeId, myTreeRoles, updateTree } = useFamilyStore()
   const myTreeAccessIds = useFamilyStore((s) => s.myTreeAccessIds)
   const fetchMyTreeAccess = useFamilyStore((s) => s.fetchMyTreeAccess)
   const notifications = useFamilyStore((s) => s.notifications)
@@ -190,6 +191,26 @@ export default function Dashboard({ demoMode }: Props) {
   const [joinTreeOpen, setJoinTreeOpen] = useState(false)
   // Settings hub (language, theme, name, password, 2-factor).
   const [settingsOpen, setSettingsOpen] = useState(false)
+
+  // Family emblem shown above the name in the hero. Uses the active
+  // tree's custom icon (tree-icons bucket) if set, else the default
+  // family glyph. The tree owner / admin can tap it to upload a new one.
+  const activeTree = trees.find((tr) => tr.id === (activeTreeId ?? trees[0]?.id)) ?? trees[0] ?? null
+  const familyIconUrl = activeTree?.icon_url ?? null
+  const canEditFamilyIcon = !demoMode && !!activeTree && (isAdmin(profile) || myTreeRoles[activeTree.id] === 'owner')
+  const familyIconInputRef = useRef<HTMLInputElement>(null)
+  const [familyIconBusy, setFamilyIconBusy] = useState(false)
+  const pickFamilyIcon = async (file: File | null) => {
+    if (!file || !activeTree) return
+    setFamilyIconBusy(true)
+    try {
+      const url = await uploadTreeIcon(file, activeTree.id)
+      await updateTree(activeTree.id, { icon_url: url })
+    } finally {
+      setFamilyIconBusy(false)
+      if (familyIconInputRef.current) familyIconInputRef.current.value = ''
+    }
+  }
 
   // Leaf balance for the header pill (subscription Phase A).
   const myPlan = useFamilyStore((s) => s.myPlan)
@@ -465,9 +486,31 @@ export default function Dashboard({ demoMode }: Props) {
               className="absolute inset-0 rounded-full blur-2xl opacity-60"
               style={{ background: 'radial-gradient(circle, #007AFF 0%, transparent 70%)' }}
             />
-            <div className="relative w-20 h-20 rounded-3xl bg-gradient-to-br from-[#007AFF] via-[#32ADE6] to-[#5AC8FA] shadow-2xl flex items-center justify-center">
-              <span className="text-4xl">👨‍👩‍👧‍👦</span>
-            </div>
+            <button
+              type="button"
+              onClick={() => { if (canEditFamilyIcon) familyIconInputRef.current?.click() }}
+              disabled={!canEditFamilyIcon || familyIconBusy}
+              aria-label={t.familyIconChange}
+              className="relative w-20 h-20 rounded-3xl bg-gradient-to-br from-[#007AFF] via-[#32ADE6] to-[#5AC8FA] shadow-2xl flex items-center justify-center overflow-hidden disabled:cursor-default"
+            >
+              {familyIconUrl
+                ? <img src={familyIconUrl} alt="" className="w-full h-full object-cover" />
+                : <span className="text-4xl">👨‍👩‍👧‍👦</span>}
+              {canEditFamilyIcon && (
+                <span className="absolute bottom-0 inset-x-0 bg-black/45 text-white text-[9px] font-semibold py-0.5 leading-none flex items-center justify-center gap-0.5">
+                  {familyIconBusy ? '…' : `📷 ${t.familyIconChange}`}
+                </span>
+              )}
+            </button>
+            {canEditFamilyIcon && (
+              <input
+                ref={familyIconInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => void pickFamilyIcon(e.target.files?.[0] ?? null)}
+              />
+            )}
           </div>
           <h1 className="text-sf-title1 text-[#1C1C1E] leading-tight" style={{ fontSize: 30 }}>
             {profile?.full_name}
