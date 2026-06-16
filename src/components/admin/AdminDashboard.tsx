@@ -70,6 +70,8 @@ export default function AdminDashboard() {
   } | null>(null)
   const [editTarget, setEditTarget] = useState<Member | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [treeSearch, setTreeSearch] = useState('')
+  const [userSearch, setUserSearch] = useState('')
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteName, setInviteName] = useState('')
   const [inviting, setInviting] = useState(false)
@@ -466,6 +468,18 @@ export default function AdminDashboard() {
     )
   }, [members, searchTerm])
 
+  // Live name filters for the trees + users tabs (type-to-narrow).
+  const shownTrees = useMemo(() => {
+    const q = treeSearch.trim().toLowerCase()
+    if (!q) return trees
+    return trees.filter((tr) => (tr.name ?? '').toLowerCase().includes(q))
+  }, [trees, treeSearch])
+  const shownUsers = useMemo(() => {
+    const q = userSearch.trim().toLowerCase()
+    if (!q) return users
+    return users.filter((u) => (u.full_name ?? '').toLowerCase().includes(q))
+  }, [users, userSearch])
+
   // Unified inbox — every queue that can hold pending admin work, in
   // one place. The header badge, tab pills and the overview card all
   // read from this so the numbers can never disagree.
@@ -746,13 +760,17 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
                 <p className="text-[11px] text-[#636366] leading-relaxed">{t.adminPasswordNote}</p>
               </div>
 
+              <SearchBox value={userSearch} onChange={setUserSearch} placeholder={t.adminSearchUser} />
+
               {usersLoading ? (
                 <div className="text-center py-10 text-[#8E8E93]">...</div>
               ) : users.length === 0 ? (
                 <EmptyBlock icon="👤" text={t.adminNoUsers} />
+              ) : shownUsers.length === 0 ? (
+                <p className="text-center text-sf-footnote text-[#8E8E93] py-6">{t.adminSearchNoResults}</p>
               ) : (
                 <div className="space-y-2">
-                  {users.map(u => (
+                  {shownUsers.map(u => (
                     <div key={u.id} className="space-y-1">
                       <UserRow
                         user={u}
@@ -815,10 +833,13 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
               exit={{ opacity: 0, y: -8 }}
               className="space-y-2"
             >
+              <SearchBox value={treeSearch} onChange={setTreeSearch} placeholder={t.adminSearchTree} />
               {trees.length === 0 ? (
                 <p className="text-center text-sf-subhead text-[#8E8E93] py-8">—</p>
+              ) : shownTrees.length === 0 ? (
+                <p className="text-center text-sf-footnote text-[#8E8E93] py-6">{t.adminSearchNoResults}</p>
               ) : (
-                trees.map((tr) => {
+                shownTrees.map((tr) => {
                   const count = members.filter((m) => m.tree_id === tr.id).length
                   return (
                     <div key={tr.id} className="flex items-center gap-3 bg-[#F2F2F7] rounded-2xl p-3">
@@ -1093,6 +1114,29 @@ function SectionHeader({ title, desc }: { title: string; desc: string }) {
     <div className="px-1">
       <h2 className="text-sf-headline font-bold text-[#1C1C1E]">{title}</h2>
       <p className="text-[11px] text-[#8E8E93] mt-0.5">{desc}</p>
+    </div>
+  )
+}
+
+/** Live type-to-filter search box (RTL-aware via logical inset). */
+function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+  return (
+    <div className="relative">
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full bg-white/70 border border-white/60 rounded-2xl py-2.5 px-3 text-sf-subhead text-[#1C1C1E] placeholder:text-[#8E8E93] focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40 backdrop-blur"
+        style={{ paddingInlineStart: '2.5rem' }}
+      />
+      <svg
+        className="absolute top-1/2 -translate-y-1/2 text-[#8E8E93]"
+        style={{ insetInlineStart: 12 }}
+        width="16" height="16" viewBox="0 0 16 16" fill="none"
+      >
+        <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
     </div>
   )
 }
