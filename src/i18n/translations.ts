@@ -21,6 +21,8 @@ export const translations = {
     navChart: 'תרשים',
     navTimeline: 'ציר זמן',
     navAdmin: 'ניהול',
+    navMyTree: 'העץ שלי',
+    navMyTreeHint: 'החלפה בין עצים',
 
     // Auth
     authTitle: 'עץ משפחה',
@@ -375,7 +377,7 @@ export const translations = {
     panelNoPhotos: 'אין תמונות עדיין',
     panelParents: 'הורים',
     panelEdit: 'ערוך פרופיל',
-    panelActionsMenu: 'פעולות',
+    panelActionsMenu: 'עריכה ופעולות נוספות',
     panelAddRelative: 'הוסף קרוב משפחה',
     treeManageTitle: 'ניהול העץ',
     treeManageMembers: 'חברים ותפקידים',
@@ -1000,6 +1002,8 @@ export const translations = {
     navChart: 'Chart',
     navTimeline: 'Timeline',
     navAdmin: 'Admin',
+    navMyTree: 'My tree',
+    navMyTreeHint: 'Switch between trees',
 
     authTitle: 'Family Tree',
     authSubLogin: 'Sign in to your account',
@@ -1345,7 +1349,7 @@ export const translations = {
     panelNoPhotos: 'No photos yet',
     panelParents: 'Parents',
     panelEdit: 'Edit Profile',
-    panelActionsMenu: 'Actions',
+    panelActionsMenu: 'Edit & more actions',
     panelAddRelative: 'Add Relative',
     treeManageTitle: 'Manage tree',
     treeManageMembers: 'Members & roles',
