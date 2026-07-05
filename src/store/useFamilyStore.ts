@@ -238,6 +238,7 @@ interface FamilyState {
   ) => Promise<void>
   completeOnboarding: (patch: Partial<Profile>) => Promise<void>
   updateProfileById: (id: string, patch: Partial<Profile>) => Promise<void>
+  reconcileProfileWithLinkedMember: () => Promise<void>
 
   // ── Tree viewport (pan + zoom persistence) ─────────────────────────
   // Preserved across mounts so closing a member panel or re-entering
@@ -673,6 +674,12 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       } else if (!data || data.length === 0) {
         rollback()
         reportSupabaseRejection('updateMember')
+      } else if (get().profile?.linked_member_id === id) {
+        // The user's own card changed and the server confirmed it —
+        // mirror name/photo into the account profile immediately
+        // (member card = source of truth) instead of waiting for the
+        // next session load.
+        void get().reconcileProfileWithLinkedMember()
       }
     } catch (err) {
       rollback()
@@ -1293,6 +1300,35 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     } catch (err) {
       reportSupabaseFailure('updateProfileById', err)
     }
+  },
+
+  reconcileProfileWithLinkedMember: async () => {
+    // The member card on the tree is the single source of truth for the
+    // user's own name + photo (owner decision, 2026-07). On load — and
+    // right after the linked card is edited — mirror the card into the
+    // account profile so the two can never drift apart. Diff-guarded:
+    // identical values produce zero writes, so this is safe to call on
+    // every session start.
+    if (!isSupabaseConfigured) return
+    const { profile, members } = get()
+    if (!profile?.linked_member_id) return
+    const m = members.find((x) => x.id === profile.linked_member_id)
+    // Server-confirmed rows only — an optimistic `mem-` row may still
+    // be rejected by RLS, and we must not propagate it to the profile.
+    if (!m || m.id.startsWith('mem-')) return
+    const norm = (s: string | null | undefined) => (s ?? '').trim().replace(/\s+/g, ' ')
+    const expectedName = norm(`${m.first_name ?? ''} ${m.last_name ?? ''}`)
+    const patch: Partial<Profile> = {}
+    if (expectedName && norm(profile.full_name) !== expectedName) {
+      patch.full_name = expectedName
+    }
+    // Never mirror data-URL photos (demo-mode uploads) into avatar_url —
+    // profiles.avatar_url should only ever hold hosted URLs.
+    if (m.photo_url && !m.photo_url.startsWith('data:') && profile.avatar_url !== m.photo_url) {
+      patch.avatar_url = m.photo_url
+    }
+    if (Object.keys(patch).length === 0) return
+    await get().updateProfileById(profile.id, patch)
   },
 
   // ── Tree viewport implementation ──────────────────────────────────

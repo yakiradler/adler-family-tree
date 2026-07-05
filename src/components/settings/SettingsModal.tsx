@@ -20,7 +20,7 @@ import EditMemberModal from '../EditMemberModal'
 export default function SettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t, lang, toggleLang } = useLang()
   const rtl = isRTL(lang)
-  const { profile, setProfile, updateProfileById, members, activeTreeId } = useFamilyStore()
+  const { profile, setProfile, updateProfileById, updateMember, members, activeTreeId } = useFamilyStore()
   const navigate = useNavigate()
 
   const [theme, setThemeState] = useState<ThemeId>(getTheme())
@@ -50,9 +50,14 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
     if (!file || !profile) return
     setAvatarBusy(true)
     try {
-      const url = await uploadMemberPhoto(file, activeTreeId)
+      // Upload into the linked card's tree when there is one, so the
+      // single hosted URL can serve BOTH the profile and the tree card.
+      const url = await uploadMemberPhoto(file, myMember?.tree_id ?? activeTreeId)
       await updateProfileById(profile.id, { avatar_url: url })
       setProfile({ ...profile, avatar_url: url })
+      // Member card = source of truth: keep the linked card's photo in
+      // step so the tree shows the same picture as the account.
+      if (myMember) await updateMember(myMember.id, { photo_url: url })
     } finally {
       setAvatarBusy(false)
       if (avatarInputRef.current) avatarInputRef.current.value = ''
@@ -181,6 +186,9 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                     )}
                   </div>
                 </div>
+                {myMember && (
+                  <p className="text-[11px] text-[#8E8E93] mt-1.5">{t.settingsAvatarSyncedHint}</p>
+                )}
                 <input ref={avatarInputRef} type="file" accept="image/*" className="hidden"
                   onChange={(e) => void pickAvatar(e.target.files?.[0] ?? null)} />
               </section>
@@ -220,20 +228,34 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                 </div>
               </section>
 
-              {/* Display name */}
+              {/* Display name. When the account is linked to a member card,
+                  the card is the source of truth — the name is shown
+                  read-only here with a jump to edit it on the card. Unlinked
+                  accounts keep the free-text field. */}
               <section>
                 <p className="text-[11px] font-bold text-[#8E8E93] uppercase tracking-wide mb-2">{t.settingsDisplayName}</p>
-                <div className="flex gap-2">
-                  <input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="flex-1 bg-[#F2F2F7] rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] outline-none focus:ring-2 focus:ring-[#007AFF]/40"
-                  />
-                  <button type="button" onClick={saveName} disabled={busy || !name.trim() || name.trim() === profile?.full_name}
-                    className="px-4 rounded-xl bg-[#007AFF] text-white text-[13px] font-bold disabled:opacity-40">
-                    {nameSaved ? '✓' : t.settingsSave}
-                  </button>
-                </div>
+                {myMember ? (
+                  <div className="rounded-xl bg-[#F2F2F7] px-3 py-2.5">
+                    <p className="text-sf-subhead font-semibold text-[#1C1C1E]">{profile?.full_name}</p>
+                    <p className="text-[11px] text-[#8E8E93] mt-0.5 leading-snug">{t.settingsNameMirroredHint}</p>
+                    <button type="button" onClick={() => setEditMyCardOpen(true)}
+                      className="text-[12px] text-[#007AFF] font-semibold mt-1">
+                      {t.settingsEditOnCard}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="flex-1 bg-[#F2F2F7] rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] outline-none focus:ring-2 focus:ring-[#007AFF]/40"
+                    />
+                    <button type="button" onClick={saveName} disabled={busy || !name.trim() || name.trim() === profile?.full_name}
+                      className="px-4 rounded-xl bg-[#007AFF] text-white text-[13px] font-bold disabled:opacity-40">
+                      {nameSaved ? '✓' : t.settingsSave}
+                    </button>
+                  </div>
+                )}
               </section>
 
               {/* Password */}
