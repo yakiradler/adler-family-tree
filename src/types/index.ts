@@ -255,6 +255,19 @@ export interface Relationship {
   parent_type?: ParentType | null
 }
 
+/**
+ * "Same person across trees" (migration 036). Each row says two member
+ * rows in different trees are the same human. Canonical pair order:
+ * member_a_id < member_b_id (enforced by a DB CHECK).
+ */
+export interface MemberLink {
+  id: string
+  member_a_id: string
+  member_b_id: string
+  created_by?: string | null
+  created_at?: string
+}
+
 export interface EditRequest {
   id: string
   requester_id: string

@@ -462,6 +462,8 @@ export default function App() {
       // Which trees were shared with me — feeds the personal-dashboard
       // scoping (scopePersonalTrees) and the tree switcher.
       useFamilyStore.getState().fetchMyTreeAccess()
+      // Cross-tree person links (no-op until migration 036 is applied).
+      useFamilyStore.getState().fetchMemberLinks()
     }
     load()
     // The store actions are stable zustand references — listing them

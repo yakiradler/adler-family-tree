@@ -22,6 +22,8 @@ import { gregorianToHebrew } from '../lib/hebrewDate'
 import { displayName, displayFirst } from '../lib/memberName'
 import { countryName, isHeritageToken } from '../lib/countries'
 import FlagIcon from './FlagIcon'
+import { isSupabaseConfigured } from '../lib/supabase'
+import MemberLinksSection from './MemberLinksSection'
 import type { Member, SpouseStatus } from '../types'
 
 interface Props {
@@ -101,7 +103,7 @@ function formatDate(iso: string | undefined, lang: 'he' | 'en') {
 }
 
 export default function MemberPanel({ onClose }: Props) {
-  const { members, relationships, selectedMemberId, setSelectedMemberId, profile, deleteMember, deleteRelationship, updateMember, addMember, trees, myTreeRoles, fetchEditRequests, editRequests, approveEditRequest, rejectEditRequest } = useFamilyStore()
+  const { members, relationships, selectedMemberId, setSelectedMemberId, profile, deleteMember, deleteRelationship, updateMember, addMember, trees, myTreeRoles, fetchEditRequests, editRequests, approveEditRequest, rejectEditRequest, addMemberLink } = useFamilyStore()
   const { t, lang } = useLang()
   const [tab, setTab] = useState<'about' | 'family' | 'photos'>('about')
   // Direction of the last tab change (+1 = moved right, -1 = left) so
@@ -346,7 +348,15 @@ export default function MemberPanel({ onClose }: Props) {
     if (!member || copying) return
     setCopying(true)
     const { id: _id, ...fields } = member
-    await addMember({ ...fields, tree_id: targetTreeId ?? undefined, created_by: profile?.id ?? 'demo' })
+    const created = await addMember({ ...fields, tree_id: targetTreeId ?? undefined, created_by: profile?.id ?? 'demo' })
+    // The copy is the SAME PERSON in another tree — record that identity
+    // (migration 036) so both profiles carry a jump to each other. In live
+    // mode we only link a server-confirmed row (a still-optimistic `mem-`
+    // id would dangle if the insert gets rejected); in demo everything is
+    // local so the synthetic id is fine.
+    if (created && (!isSupabaseConfigured || !created.id.startsWith('mem-'))) {
+      void addMemberLink(member.id, created.id)
+    }
     setCopying(false)
     setCopyToTreeOpen(false)
     setCopyDone(true)
@@ -644,6 +654,11 @@ export default function MemberPanel({ onClose }: Props) {
                 {member.maiden_name && (
                   <InfoRow icon="🌸" label={t.maidenNameLabel} value={member.maiden_name} />
                 )}
+                {/* ── Same person in other trees (migration 036) —
+                    linked profiles + a jump between them. Renders
+                    nothing when there are no links and none can be
+                    created. ── */}
+                <MemberLinksSection member={member} />
                 {/* ── Contact + social links — ALWAYS shown so the
                     profile clearly invites contact details even before
                     any are entered. One tap to call / WhatsApp / email /

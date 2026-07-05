@@ -50,6 +50,7 @@ import type {
   Member, Relationship, EditRequest, ViewMode, Profile,
   AccessRequest, UserRole, FamilyTree, MemberNote, FeedbackItem, UserPlan,
   NotificationItem, TreeInvite, TreeRole, MemberReaction, FamilyStatus, FamilyStatusComment, StatusVisibility,
+  MemberLink,
 } from '../types'
 
 // Surface Supabase failures to the UI. The "נשמר מקומית — סנכרון
@@ -312,6 +313,15 @@ interface FamilyState {
   addNote: (note: Omit<MemberNote, 'id' | 'created_at'>) => Promise<MemberNote | null>
   updateNote: (id: string, patch: Partial<MemberNote>) => Promise<void>
   deleteNote: (id: string) => Promise<void>
+
+  // ── Cross-tree person links (migration 036) ─────────────────────────
+  // "These two member rows are the same human." Degrades to an empty
+  // list when the table doesn't exist yet.
+  memberLinks: MemberLink[]
+  fetchMemberLinks: () => Promise<void>
+  /** Link two member rows (order-agnostic). Returns false on refusal. */
+  addMemberLink: (idA: string, idB: string) => Promise<boolean>
+  deleteMemberLink: (id: string) => Promise<void>
 
   // ── Social reactions (migration 023) ────────────────────────────────
   reactions: MemberReaction[]
@@ -1585,6 +1595,82 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   // Defensive: every path is try/catch'd so a missing member_reactions
   // table (migration not yet applied) degrades to a silent no-op rather
   // than crashing the app.
+  // ── Cross-tree person links (migration 036) ─────────────────────────
+  memberLinks: [],
+  fetchMemberLinks: async () => {
+    if (!isSupabaseConfigured) return
+    try {
+      const { data, error } = await supabase.from('member_links').select('*')
+      if (error) {
+        // Pre-036 the table doesn't exist — degrade silently (no toast);
+        // the links UI simply stays hidden.
+        console.warn('[fetchMemberLinks] unavailable (migration 036 missing?):', error.message)
+        return
+      }
+      set({ memberLinks: (data ?? []) as MemberLink[] })
+    } catch (err) {
+      console.warn('[fetchMemberLinks] failed:', err)
+    }
+  },
+  addMemberLink: async (idA, idB) => {
+    const me = get().profile
+    if (!me || !idA || !idB || idA === idB) return false
+    // Canonical order matches the DB CHECK (member_a_id < member_b_id).
+    const [a, b] = idA < idB ? [idA, idB] : [idB, idA]
+    if (get().memberLinks.some((l) => l.member_a_id === a && l.member_b_id === b)) {
+      return true // already linked — treat as success
+    }
+    const localId = `ml-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    const optimistic: MemberLink = {
+      id: localId, member_a_id: a, member_b_id: b,
+      created_by: me.id, created_at: new Date().toISOString(),
+    }
+    set((s) => ({ memberLinks: [...s.memberLinks, optimistic] }))
+    if (!isSupabaseConfigured) return true
+    try {
+      const { data, error } = await supabase.from('member_links')
+        .insert({ member_a_id: a, member_b_id: b, created_by: me.id })
+        .select().single()
+      if (error) {
+        // 23505 = the pair was linked concurrently — that's success;
+        // refetch to swap the synthetic id for the real row.
+        if ((error as { code?: string }).code === '23505') {
+          void get().fetchMemberLinks()
+          return true
+        }
+        set((s) => ({ memberLinks: s.memberLinks.filter((l) => l.id !== localId) }))
+        reportSupabaseFailure('addMemberLink', error)
+        return false
+      }
+      if (data) {
+        set((s) => ({
+          memberLinks: s.memberLinks.map((l) => (l.id === localId ? (data as MemberLink) : l)),
+        }))
+      }
+      return true
+    } catch (err) {
+      set((s) => ({ memberLinks: s.memberLinks.filter((l) => l.id !== localId) }))
+      reportSupabaseFailure('addMemberLink', err)
+      return false
+    }
+  },
+  deleteMemberLink: async (id) => {
+    const prev = get().memberLinks
+    set((s) => ({ memberLinks: s.memberLinks.filter((l) => l.id !== id) }))
+    // Synthetic ids never reached the server; nothing to delete there.
+    if (!isSupabaseConfigured || id.startsWith('ml-')) return
+    try {
+      const { error } = await supabase.from('member_links').delete().eq('id', id)
+      if (error) {
+        set({ memberLinks: prev })
+        reportSupabaseFailure('deleteMemberLink', error)
+      }
+    } catch (err) {
+      set({ memberLinks: prev })
+      reportSupabaseFailure('deleteMemberLink', err)
+    }
+  },
+
   reactions: [],
   fetchReactions: async () => {
     if (!isSupabaseConfigured) return
