@@ -455,7 +455,10 @@ export default function App() {
       ) {
         markPendingOnboarding()
       }
-      fetchMembers(); fetchRelationships(); fetchEditRequests(); fetchTrees(); fetchMyPlan()
+      // After members land, mirror the user's linked card into their
+      // profile (member card = source of truth for own name/photo).
+      void fetchMembers().then(() => useFamilyStore.getState().reconcileProfileWithLinkedMember())
+      fetchRelationships(); fetchEditRequests(); fetchTrees(); fetchMyPlan()
       // Which trees were shared with me — feeds the personal-dashboard
       // scoping (scopePersonalTrees) and the tree switcher.
       useFamilyStore.getState().fetchMyTreeAccess()
