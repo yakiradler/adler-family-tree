@@ -46,7 +46,7 @@ function isIOS(): boolean {
 }
 
 export default function InstallPrompt() {
-  const { lang } = useLang()
+  const { t } = useLang()
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null)
   const [showIOSHint, setShowIOSHint] = useState(false)
   const [dismissed, setDismissed] = useState<boolean>(() => {
@@ -126,12 +126,10 @@ export default function InstallPrompt() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sf-subhead font-bold text-[#1C1C1E] leading-tight">
-                {lang === 'he' ? 'התקן כאפליקציה' : 'Install as an app'}
+                {t.installAsApp}
               </p>
               <p className="text-[11px] text-[#636366] leading-snug truncate">
-                {lang === 'he'
-                  ? 'גישה מהירה ממסך הבית, גם בלי חיבור'
-                  : 'Quick access from your home screen, even offline'}
+                {t.installQuickAccess}
               </p>
             </div>
             <button
@@ -139,12 +137,12 @@ export default function InstallPrompt() {
               onClick={install}
               className="px-3 py-1.5 rounded-xl bg-[#007AFF] text-white text-[12px] font-bold active:scale-95 transition"
             >
-              {lang === 'he' ? 'התקן' : 'Install'}
+              {t.installBtn}
             </button>
             <button
               type="button"
               onClick={dismiss}
-              aria-label={lang === 'he' ? 'סגור' : 'Dismiss'}
+              aria-label={t.closeBtn}
               className="w-7 h-7 rounded-full text-[#8E8E93] hover:bg-black/5 flex items-center justify-center flex-shrink-0"
             >
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -178,18 +176,16 @@ export default function InstallPrompt() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sf-subhead font-bold text-[#1C1C1E] leading-tight">
-                {lang === 'he' ? 'הוסף למסך הבית' : 'Add to Home Screen'}
+                {t.installA2HS}
               </p>
               <p className="text-[11px] text-[#636366] leading-snug">
-                {lang === 'he'
-                  ? 'לחץ על אייקון השיתוף ⬆ ובחר "הוסף למסך הבית"'
-                  : 'Tap the share icon ⬆ then "Add to Home Screen"'}
+                {t.installIOSHint}
               </p>
             </div>
             <button
               type="button"
               onClick={dismiss}
-              aria-label={lang === 'he' ? 'סגור' : 'Dismiss'}
+              aria-label={t.closeBtn}
               className="w-7 h-7 rounded-full text-[#8E8E93] hover:bg-black/5 flex items-center justify-center flex-shrink-0"
             >
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">

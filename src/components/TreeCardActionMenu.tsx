@@ -156,7 +156,7 @@ export default function TreeCardActionMenu({ open, onClose, target, onManage }: 
       }
       // 'shared' → the OS sheet gave its own confirmation; no toast needed.
     } catch {
-      setError(lang === 'he' ? 'יצירת הקישור נכשלה — נסו שוב' : 'Creating the link failed — try again')
+      setError(t.treeMenuLinkFailed)
     } finally {
       setLinkBusy(false)
     }
@@ -168,12 +168,11 @@ export default function TreeCardActionMenu({ open, onClose, target, onManage }: 
     setError(null)
     try {
       const invite = await mintShareCode(target.id)
-      if (!invite) {
-        throw new Error(lang === 'he' ? 'יצירת הקוד נכשלה — נסו שוב' : 'Creating the code failed — try again')
-      }
+      if (!invite) throw new Error('mint returned null')
       setMinted(invite)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      console.warn('[tree-menu] mint code failed:', e)
+      setError(t.treeMenuCodeFailed)
     } finally {
       setBusy(false)
     }
@@ -202,7 +201,8 @@ export default function TreeCardActionMenu({ open, onClose, target, onManage }: 
       setSent(true)
       window.setTimeout(close, 1500)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      console.warn('[tree-menu] share-code request failed:', e)
+      setError(t.genericErrorRetry)
     } finally {
       setBusy(false)
     }

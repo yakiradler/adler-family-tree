@@ -213,7 +213,7 @@ export default function TreeSwitcher({
                       onClick={() => { setCreating(false); setDraftName(''); setDraftDesc('') }}
                       className="flex-1 py-1.5 rounded-xl bg-[#F2F2F7] text-[#1C1C1E] text-[11.5px] font-semibold"
                     >
-                      {lang === 'he' ? 'ביטול' : 'Cancel'}
+                      {t.cancel}
                     </button>
                     <button
                       type="button"
@@ -221,7 +221,7 @@ export default function TreeSwitcher({
                       disabled={!draftName.trim()}
                       className="flex-1 py-1.5 rounded-xl bg-gradient-to-r from-[#5E5CE6] to-[#BF5AF2] text-white text-[11.5px] font-semibold disabled:opacity-50"
                     >
-                      {lang === 'he' ? 'שמור' : 'Save'}
+                      {t.save}
                     </button>
                   </div>
                 </div>
@@ -280,14 +280,14 @@ export default function TreeSwitcher({
                   onClick={() => setDeleteTarget(null)}
                   className="flex-1 py-2.5 rounded-2xl bg-[#F2F2F7] text-[#1C1C1E] text-sf-subhead font-semibold"
                 >
-                  {lang === 'he' ? 'ביטול' : 'Cancel'}
+                  {t.cancel}
                 </button>
                 <button
                   type="button"
                   onClick={confirmDeleteTree}
                   className="flex-1 py-2.5 rounded-2xl bg-[#FF3B30] text-white text-sf-subhead font-bold"
                 >
-                  {lang === 'he' ? 'מחק' : 'Delete'}
+                  {t.deleteBtn}
                 </button>
               </div>
             </motion.div>

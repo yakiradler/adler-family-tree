@@ -373,7 +373,7 @@ export default function TreeView({
                     type="text"
                     value={pickerQuery}
                     onChange={e => setPickerQuery(e.target.value)}
-                    placeholder={lang === 'he' ? 'חפש בן/בת משפחה…' : 'Search member…'}
+                    placeholder={t.memberSearchPlaceholder}
                     className="w-full text-[13px] px-3 py-2 bg-[#F2F2F7] rounded-xl outline-none focus:ring-2 focus:ring-[#007AFF]/30"
                     dir="auto"
                   />

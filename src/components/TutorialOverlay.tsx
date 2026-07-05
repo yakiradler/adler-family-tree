@@ -66,7 +66,7 @@ const CAPTION_GAP = 14
 const EDGE_PAD = 16
 
 export default function TutorialOverlay({ open, steps, onClose }: Props) {
-  const { lang } = useLang()
+  const { t, lang } = useLang()
   const rtl = isRTL(lang)
   // Phone back button exits the tour instead of leaving the page.
   useCloseOnBack(open, onClose)
@@ -243,11 +243,11 @@ export default function TutorialOverlay({ open, steps, onClose }: Props) {
   const prev = () => setStepIndex((i) => Math.max(0, i - 1))
   const skip = () => onClose()
 
-  const tourLabel = lang === 'he' ? 'מצב למידה' : 'Tutorial'
-  const stepOf = lang === 'he' ? `שלב ${stepIndex + 1} מתוך ${steps.length}` : `Step ${stepIndex + 1} of ${steps.length}`
-  const labelPrev = lang === 'he' ? 'הקודם' : 'Back'
-  const labelNext = lang === 'he' ? (stepIndex >= steps.length - 1 ? 'סיום' : 'הבא') : (stepIndex >= steps.length - 1 ? 'Done' : 'Next')
-  const labelSkip = lang === 'he' ? 'דלג' : 'Skip'
+  const tourLabel = t.tutTourLabel
+  const stepOf = t.tutStepOf.replace('{n}', String(stepIndex + 1)).replace('{total}', String(steps.length))
+  const labelPrev = t.tutBack
+  const labelNext = stepIndex >= steps.length - 1 ? t.tutDone : t.tutNext
+  const labelSkip = t.tutSkip
 
   const portalEl = typeof document !== 'undefined' ? document.body : null
   if (!portalEl) return null

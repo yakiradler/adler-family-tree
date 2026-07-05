@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { Factor } from '@supabase/supabase-js'
 import { supabase, isSupabaseConfigured } from '../../lib/supabase'
+import { mapAuthError } from '../../lib/authErrors'
 import { useLang, isRTL } from '../../i18n/useT'
 import { confirmDialog } from '../../lib/confirm'
 import { useCloseOnBack } from '../../hooks/useCloseOnBack'
@@ -63,12 +64,12 @@ export default function SecuritySettingsModal({ open, onClose }: { open: boolean
         }
         setFactors(all.filter((f) => f.status === 'verified'))
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'error')
+        setError(mapAuthError(e, t))
       } finally {
         setLoading(false)
       }
     })()
-  }, [open])
+  }, [open, t])
 
   const startEnroll = async () => {
     setError(null)
@@ -81,7 +82,7 @@ export default function SecuritySettingsModal({ open, onClose }: { open: boolean
       setEnrollData({ id: data.id, qr: totp.qr_code, secret: totp.secret })
       setStage('enroll')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'error')
+      setError(mapAuthError(e, t))
     } finally {
       setLoading(false)
     }
@@ -121,7 +122,7 @@ export default function SecuritySettingsModal({ open, onClose }: { open: boolean
       if (error) throw error
       setFactors((fs) => fs.filter((f) => f.id !== factorId))
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'error')
+      setError(mapAuthError(e, t))
     } finally {
       setLoading(false)
     }
@@ -262,17 +263,9 @@ function QrImage({ qr, fallbackText }: { qr: string; fallbackText: string }) {
       </div>
     )
   }
-  if (trimmed.startsWith('<svg')) {
-    // Raw SVG markup straight from our own auth server — inline it.
-    return (
-      <div
-        className={`${frame} [&>svg]:w-full [&>svg]:h-full`}
-        role="img"
-        aria-label="QR"
-        dangerouslySetInnerHTML={{ __html: trimmed }}
-      />
-    )
-  }
+  // Raw `<svg>` markup and any other non-data shape are encoded into an
+  // <img> data URI — same rendering, but an <img> never executes scripts,
+  // so nothing from the wire is injected into the DOM.
   const src = trimmed.startsWith('data:')
     ? trimmed
     : `data:image/svg+xml;utf8,${encodeURIComponent(trimmed)}`

@@ -18,9 +18,9 @@ import TreeSwitchSheet from './TreeSwitchSheet'
  * is the right edge under `dir=rtl`.
  */
 const TABS = [
-  { path: '/home', labelHe: 'בית', labelEn: 'Home', icon: 'M3 10.5 12 3l9 7.5M5 9.5V20h14V9.5' },
-  { path: '/feed', labelHe: 'משפחה', labelEn: 'Family', icon: 'M7 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm10 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 19c0-2.8 2.2-5 5-5s5 2.2 5 5M13 19c0-2.8 2.2-5 5-5s4 2.2 4 5' },
-  { path: '/birthdays', labelHe: 'ימי הולדת', labelEn: 'Birthdays', icon: 'M5 21h14v-7H5v7Zm1-7c0-2 1.5-3 6-3s6 1 6 3M12 8V5m0 0a1.2 1.2 0 1 1 1.2-1.2c0 .9-1.2 1.2-1.2 1.2Z' },
+  { path: '/home', labelKey: 'navHome', icon: 'M3 10.5 12 3l9 7.5M5 9.5V20h14V9.5' },
+  { path: '/feed', labelKey: 'navFeed', icon: 'M7 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm10 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 19c0-2.8 2.2-5 5-5s5 2.2 5 5M13 19c0-2.8 2.2-5 5-5s4 2.2 4 5' },
+  { path: '/birthdays', labelKey: 'navBirthdays', icon: 'M5 21h14v-7H5v7Zm1-7c0-2 1.5-3 6-3s6 1 6 3M12 8V5m0 0a1.2 1.2 0 1 1 1.2-1.2c0 .9-1.2 1.2-1.2 1.2Z' },
 ] as const
 
 // Routes that show the bar. /tree is intentionally excluded (the tree
@@ -31,7 +31,7 @@ const BAR_ROUTES = ['/home', '/feed', '/birthdays']
 export default function BottomNav({ isAuth }: { isAuth: boolean }) {
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const { t, lang } = useLang()
+  const { t } = useLang()
   const { trees, activeTreeId } = useFamilyStore()
 
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -115,7 +115,7 @@ export default function BottomNav({ isAuth }: { isAuth: boolean }) {
                   <path d={tab.icon} />
                 </svg>
                 <span className={`text-[10.5px] font-semibold ${active ? 'text-[#007AFF]' : 'text-[#8E8E93]'}`}>
-                  {lang === 'he' ? tab.labelHe : tab.labelEn}
+                  {t[tab.labelKey]}
                 </span>
               </button>
             )

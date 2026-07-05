@@ -175,7 +175,7 @@ export default function BuildFromTextModal({ open, onClose, anchorMember, onAdde
                 type="button"
                 onClick={handleClose}
                 className="absolute top-3 end-3 w-9 h-9 rounded-full bg-white/95 text-[#1C1C1E] text-lg font-bold flex items-center justify-center shadow active:scale-95 transition"
-                aria-label={lang === 'he' ? 'סגור' : 'Close'}
+                aria-label={t.closeBtn}
               >
                 ×
               </button>
@@ -268,7 +268,7 @@ export default function BuildFromTextModal({ open, onClose, anchorMember, onAdde
                               )}
                               {m.maidenName && (
                                 <span className="text-[#8E8E93]">
-                                  ({lang === 'he' ? 'לבית' : 'née'} {m.maidenName})
+                                  ({t.maidenNeePrefix} {m.maidenName})
                                 </span>
                               )}
                               {m.gender && (
@@ -361,7 +361,7 @@ export default function BuildFromTextModal({ open, onClose, anchorMember, onAdde
                   onClick={handleClose}
                   className="w-full py-3 rounded-2xl bg-[#F2F2F7] text-[#1C1C1E] text-sf-subhead font-semibold active:scale-[0.98] transition"
                 >
-                  {lang === 'he' ? 'סגור' : 'Close'}
+                  {t.closeBtn}
                 </button>
               </div>
             )}

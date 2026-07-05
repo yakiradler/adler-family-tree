@@ -362,8 +362,8 @@ export default function Dashboard({ demoMode }: Props) {
       summaries.push({
         id: null,
         name: ln
-          ? (lang === 'he' ? `עץ משפחת ${ln}` : `${ln} Family Tree`)
-          : (lang === 'he' ? 'עץ המשפחה הראשי' : 'Main Family Tree'),
+          ? t.dashTreeOfFamily.replace('{name}', ln)
+          : t.dashMainTree,
         count: mainPool.length,
         color: '#007AFF',
         icon: null,
@@ -381,7 +381,7 @@ export default function Dashboard({ demoMode }: Props) {
       const pool = members.filter((m) => m.tree_id === tr.id)
       summaries.push({
         id: tr.id,
-        name: tr.name || (lang === 'he' ? 'עץ ללא שם' : 'Unnamed tree'),
+        name: tr.name || t.dashUnnamedTree,
         count: pool.length,
         color: tr.color ?? palette[(i + 1) % palette.length]!,
         icon: tr.icon_url ?? null,
@@ -390,7 +390,7 @@ export default function Dashboard({ demoMode }: Props) {
     })
 
     return summaries
-  }, [members, scopedTrees, lang, profile, demoMode])
+  }, [members, scopedTrees, profile, demoMode, t.dashMainTree, t.dashTreeOfFamily, t.dashUnnamedTree])
 
   const today = new Date()
   const dateStr = today.toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-US', {
@@ -790,7 +790,7 @@ export default function Dashboard({ demoMode }: Props) {
                     <span
                       role="button"
                       tabIndex={0}
-                      aria-label={lang === 'he' ? 'אפשרויות עץ' : 'Tree options'}
+                      aria-label={t.dashTreeOptions}
                       onPointerDown={(e) => {
                         e.stopPropagation()
                         if (treeCardPressTimerRef.current != null) {
@@ -905,14 +905,14 @@ export default function Dashboard({ demoMode }: Props) {
             <AppTile
               index={0}
               icon="🌳"
-              label={lang === 'he' ? 'עץ משפחה' : 'Family Tree'}
+              label={t.dashTileTree}
               gradient="from-[#007AFF] to-[#32ADE6]"
               onClick={() => navigate('/tree')}
             />
             <AppTile
               index={1}
               icon="🎂"
-              label={lang === 'he' ? 'ימי הולדת' : 'Birthdays'}
+              label={t.navBirthdays}
               gradient="from-[#32ADE6] to-[#5AC8FA]"
               onClick={() => navigate('/birthdays')}
             />
@@ -928,10 +928,10 @@ export default function Dashboard({ demoMode }: Props) {
               <AppTile
                 index={5}
                 icon="🎓"
-                label={lang === 'he' ? 'מצב למידה' : 'Tutorial'}
+                label={t.tutTourLabel}
                 gradient="from-[#FFD60A] to-[#FF9F0A]"
                 onClick={() => setTutorialOpen(true)}
-                tooltip={lang === 'he' ? 'מדריך אינטראקטיבי על המערכת' : 'Interactive guide to the app'}
+                tooltip={t.dashTileTutorialHint}
               />
             </div>
             {/* Join-by-code tile. Mirrors the QuickAccessMenu item
@@ -950,7 +950,7 @@ export default function Dashboard({ demoMode }: Props) {
               <AppTile
                 index={8}
                 icon="⚙️"
-                label={lang === 'he' ? 'ניהול' : 'Admin'}
+                label={t.navAdmin}
                 gradient="from-[#5AC8FA] to-[#64D2FF]"
                 onClick={() => navigate('/admin')}
                 badge={Math.max(adminInboxTotal, countUnreadAdminInbox(notifications))}

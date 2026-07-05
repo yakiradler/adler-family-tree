@@ -232,8 +232,8 @@ export default function OnboardingWizard() {
         } else {
           const personalName =
             profile.full_name?.trim()
-              ? (lang === 'he' ? `העץ של ${profile.full_name.trim()}` : `${profile.full_name.trim()}'s tree`)
-              : (lang === 'he' ? 'העץ שלי' : 'My tree')
+              ? t.onbTreeOfName.replace('{name}', profile.full_name.trim())
+              : t.onbMyTreeName
           const newTree = await addTree({
             name: personalName,
             color: '#34C759',
@@ -273,8 +273,8 @@ export default function OnboardingWizard() {
       //    of an existing tree can approve them.
       if (a.joinChoice === 'new') {
         const treeName = a.lastName.trim()
-          ? (lang === 'he' ? `משפחת ${a.lastName.trim()}` : `${a.lastName.trim()} Family`)
-          : (lang === 'he' ? 'העץ שלי' : 'My Tree')
+          ? t.onbFamilyOfName.replace('{name}', a.lastName.trim())
+          : t.onbMyTreeName
         const newTree = await addTree({
           name: treeName,
           color: '#34C759',
@@ -383,11 +383,7 @@ export default function OnboardingWizard() {
         // pilot bug ("הבקשה לא הגיעה למנהל"). Stay on the form with a
         // retry-able error instead.
         if (!sent) {
-          setError(
-            lang === 'he'
-              ? 'שליחת הבקשה למנהל נכשלה. בדקו את החיבור ונסו שוב.'
-              : 'Sending the request to the admin failed. Check your connection and try again.',
-          )
+          setError(t.onbSubmitFailedRetry)
           return
         }
       }
@@ -404,12 +400,8 @@ export default function OnboardingWizard() {
       // the message AND clear the gate so they're not trapped: their
       // profile changes can sync later (optimistic updates already
       // committed locally), and the admin can fill in the gaps.
-      const message = err instanceof Error ? err.message : String(err)
-      setError(
-        lang === 'he'
-          ? `שמירה לשרת נכשלה — נשמר מקומית. הפרטים יסונכרנו כשהחיבור יחזור. (${message})`
-          : `Couldn't reach the server — saved locally. Details will sync when the connection returns. (${message})`,
-      )
+      console.warn('[onboarding] submit failed:', err)
+      setError(t.onbSavedLocally)
       // Don't strand the user. They've already done the work; let
       // them through to the app even if the round-trip to the DB
       // didn't land.
@@ -470,7 +462,7 @@ export default function OnboardingWizard() {
                 onClick={skipOnboarding}
                 className="text-[13px] font-semibold text-[#007AFF] hover:underline underline-offset-2 transition-colors px-2 py-1"
               >
-                {lang === 'he' ? 'דלג — כניסה ישר לאפליקציה' : 'Skip — go straight in'}
+                {t.onbSkipStraightIn}
               </button>
             </div>
           </div>

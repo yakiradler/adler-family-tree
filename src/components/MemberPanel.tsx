@@ -465,7 +465,7 @@ export default function MemberPanel({ onClose }: Props) {
                 the profile rather than only in the search match. */}
             {member.maiden_name && (
               <p className="text-sf-caption text-[#8E8E93] mt-0.5 italic">
-                {lang === 'he' ? `לבית ${member.maiden_name}` : `née ${member.maiden_name}`}
+                {`${t.maidenNeePrefix} ${member.maiden_name}`}
               </p>
             )}
             {member.nickname && (
@@ -882,7 +882,7 @@ export default function MemberPanel({ onClose }: Props) {
                         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                           <path d="M7 2v10M2 7h10" stroke="white" strokeWidth="2" strokeLinecap="round" />
                         </svg>
-                        {lang === 'he' ? 'הוסף תמונה' : 'Add photo'}
+                        {t.panelAddPhoto}
                       </button>
                     )}
                   </div>
@@ -896,14 +896,14 @@ export default function MemberPanel({ onClose }: Props) {
                         whileHover={{ scale: 1.03 }}
                         whileTap={{ scale: 0.97 }}
                         onClick={() => photoInputRef.current?.click()}
-                        aria-label={lang === 'he' ? 'הוסף תמונה' : 'Add photo'}
+                        aria-label={t.panelAddPhoto}
                         className="aspect-square rounded-xl bg-[#F2F2F7] flex flex-col items-center justify-center gap-1 text-[#007AFF] active:bg-[#E5E5EA] transition"
                       >
                         <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                           <path d="M10 4v12M4 10h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                         </svg>
                         <span className="text-[10px] font-semibold">
-                          {lang === 'he' ? 'הוסף' : 'Add'}
+                          {t.panelAddBtn}
                         </span>
                       </motion.button>
                     )}

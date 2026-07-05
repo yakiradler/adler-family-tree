@@ -105,7 +105,7 @@ export default function Auth({ demoMode = false, onDemoEnter }: Props) {
           // them back to "Adler Family".
           useFamilyStore.getState().setProfile({
             id: `demo-${Math.random().toString(36).slice(2, 10)}`,
-            full_name: fullName.trim() || (lang === 'he' ? 'משתמש חדש' : 'New user'),
+            full_name: fullName.trim() || t.authNewUserFallback,
             role: 'user',
             onboarded_at: null,
           })
@@ -195,7 +195,7 @@ export default function Auth({ demoMode = false, onDemoEnter }: Props) {
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
           <path d={lang === 'he' ? 'M4 2l4 4-4 4' : 'M8 2L4 6l4 4'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        {lang === 'he' ? 'ראשי' : 'Home'}
+        {t.authHomeLink}
       </motion.button>
 
       {/* Language toggle */}
@@ -363,7 +363,7 @@ export default function Auth({ demoMode = false, onDemoEnter }: Props) {
               onClick={() => { onDemoEnter?.(); navigate('/home') }}
               className="text-[12px] text-[#007AFF] font-semibold underline decoration-[#007AFF]/40 underline-offset-2 hover:decoration-[#007AFF] transition"
             >
-              {lang === 'he' ? 'המשך כהדגמה (ללא הרשמה)' : 'Continue as demo (no signup)'}
+              {t.authContinueDemo}
             </button>
             <p className="text-[10px] text-[#8E8E93] text-center max-w-[260px] leading-relaxed px-4">
               {lang === 'he'

@@ -165,11 +165,8 @@ export default function AdminDashboard() {
       .select()
     if (error) {
       setUsers(prev)
-      void alertDialog({
-        message: lang === 'he'
-          ? `לא ניתן להשעות את המשתמש: ${error.message}`
-          : `Couldn't suspend user: ${error.message}`,
-      })
+      console.warn('[admin] suspend failed:', error)
+      void alertDialog({ message: t.adminSuspendFailed })
       return
     }
     if (!data || data.length === 0) {
@@ -281,16 +278,12 @@ export default function AdminDashboard() {
       // Friendlier than the previous "Invite sent" — explain what the
       // user will actually receive in their inbox.
       const msg = inviteOutcome === 'magic-link'
-        ? (lang === 'he'
-            ? `קישור הצטרפות נשלח ל-${inviteEmail.trim()}.\nהמשתמש ילחץ עליו ויתחבר ישירות לחשבון חדש.`
-            : `Signup link sent to ${inviteEmail.trim()}.\nThey'll click it to create their account.`)
-        : (lang === 'he'
-            ? `המשתמש נוסף למערכת. שלח לו את הקישור באופן ידני: ${window.location.origin}/`
-            : `User added. Share this link with them: ${window.location.origin}/`)
+        ? t.adminInviteMagicLinkSent.replace('{email}', inviteEmail.trim())
+        : t.adminInviteManualLink.replace('{origin}', `${window.location.origin}/`)
       void alertDialog({ message: msg })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'unknown error'
-      void alertDialog({ message: lang === 'he' ? `שגיאה בשליחת ההזמנה: ${msg}` : `Invite failed: ${msg}` })
+      console.warn('[admin] invite failed:', err)
+      void alertDialog({ message: t.adminInviteFailed })
     } finally {
       setInviting(false)
     }
@@ -540,7 +533,7 @@ export default function AdminDashboard() {
             <span className="text-lg leading-none">⚠️</span>
             <div className="flex-1 min-w-0">
               <p className="text-sf-subhead font-bold text-[#1C1C1E]">
-                {lang === 'he' ? 'הגדרות הבקאנד חסרות' : 'Backend setup incomplete'}
+                {t.adminBackendMissing}
               </p>
               <p className="text-[11px] text-[#3A3A3C] leading-snug mt-0.5">
                 {lang === 'he'
@@ -553,7 +546,7 @@ export default function AdminDashboard() {
                 rel="noopener noreferrer"
                 className="inline-block mt-1.5 text-[11px] font-bold text-[#FF9F0A] underline"
               >
-                {lang === 'he' ? '← פתח את מדריך החיבור' : 'Open the setup guide →'}
+                {t.adminOpenSetupGuide}
               </a>
             </div>
           </motion.div>
@@ -601,7 +594,7 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
                     }}
                     className="text-[11px] font-bold bg-white/80 border border-[#FF3B30]/30 text-[#FF3B30] rounded-lg px-2.5 py-1 hover:bg-white"
                   >
-                    {lang === 'he' ? '📋 העתק SQL' : '📋 Copy SQL'}
+                    {t.adminCopySql}
                   </button>
                   <a
                     href="https://supabase.com/dashboard/project/_/sql/new"
@@ -609,7 +602,7 @@ where email = '${dbAdminStatus.email ?? '<האימייל-שלך>'}';`}
                     rel="noopener noreferrer"
                     className="text-[11px] font-bold text-[#FF3B30] underline"
                   >
-                    {lang === 'he' ? '← פתח SQL Editor' : 'Open SQL Editor →'}
+                    {t.adminOpenSqlEditor}
                   </a>
                   <span className="text-[10px] text-[#8E8E93]">
                     {lang === 'he'
@@ -1283,7 +1276,7 @@ function UserRow({
           </p>
           <div className="grid grid-cols-2 gap-1.5">
             <ActionChip
-              label={lang === 'he' ? 'שחזר' : 'Restore'}
+              label={t.adminRestoreBtn}
               onClick={() => onRestore(user)}
               color="cyan"
               icon="♻"
