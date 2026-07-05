@@ -1,6 +1,9 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+// Country-flag SVG sprites for the member origin flags. CSS-only import;
+// the browser fetches only the flags actually rendered.
+import 'flag-icons/css/flag-icons.min.css'
 import App from './App.tsx'
 import { applyStoredTheme } from './lib/theme'
 
