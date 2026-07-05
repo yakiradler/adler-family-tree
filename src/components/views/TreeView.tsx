@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang, isRTL, type Translations } from '../../i18n/useT'
+import { displayName, nameHaystack } from '../../lib/memberName'
 import MemberNode from '../MemberNode'
 import QuickAddRelativeModal, { type RelativeDirection } from '../QuickAddRelativeModal'
 import type { Member } from '../../types'
@@ -83,7 +84,7 @@ export default function TreeView({
   const pickerResults = useMemo(() => {
     const q = pickerQuery.trim().toLowerCase()
     const pool = q
-      ? members.filter(m => `${m.first_name} ${m.last_name}`.toLowerCase().includes(q))
+      ? members.filter(m => nameHaystack(m).includes(q))
       : members
     return pool.slice(0, 10)
   }, [members, pickerQuery])
@@ -393,7 +394,7 @@ export default function TreeView({
                         {m.first_name.charAt(0)}
                       </div>
                       <span className="font-semibold text-[13px] text-[#1C1C1E] truncate">
-                        {m.first_name} {m.last_name}
+                        {displayName(m, lang)}
                       </span>
                     </button>
                   ))}

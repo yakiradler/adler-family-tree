@@ -13,6 +13,7 @@ import { getRingGradient, getFallbackGradient } from '../memberVisuals'
 import type { EditRequest, Member, Profile, UserRole, TreeRole, AccessRequest, UserPlan, PlanId } from '../../types'
 import { adminInboxCounts } from '../../lib/notifications'
 import { fieldLabel, formatValue } from '../../lib/editRequestDisplay'
+import { displayName, nameHaystack } from '../../lib/memberName'
 
 type Tab = 'overview' | 'users' | 'members' | 'trees' | 'inbox' | 'invites' | 'system'
 
@@ -456,9 +457,7 @@ export default function AdminDashboard() {
   const filteredMembers = useMemo(() => {
     const q = searchTerm.trim().toLowerCase()
     if (!q) return members
-    return members.filter(m =>
-      `${m.first_name} ${m.last_name} ${m.nickname ?? ''}`.toLowerCase().includes(q),
-    )
+    return members.filter(m => nameHaystack(m).includes(q))
   }, [members, searchTerm])
 
   // Live name filters for the trees + users tabs (type-to-narrow).
@@ -1384,6 +1383,7 @@ function ActionChip({
 function MemberAdminRow({
   member, t, onEdit, onDelete,
 }: { member: Member; t: Translations; onEdit: () => void; onDelete: () => void }) {
+  const { lang } = useLang()
   return (
     <div className="glass-strong rounded-2xl p-2.5 shadow-glass-sm flex items-center gap-2.5">
       <div className="rounded-full flex-shrink-0" style={{ padding: 1.5, background: getRingGradient(member) }}>
@@ -1401,7 +1401,7 @@ function MemberAdminRow({
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sf-footnote font-semibold text-[#1C1C1E] truncate">
-          {member.first_name} {member.last_name}
+          {displayName(member, lang)}
         </p>
         <p className="text-[10px] text-[#8E8E93] truncate">
           {member.birth_date ? new Date(member.birth_date).getFullYear() : ''}

@@ -6,6 +6,7 @@ import { useCloseOnBack } from '../hooks/useCloseOnBack'
 import type { Gender, Lineage } from '../types'
 import { linkRelative, type RelativeDirection } from '../lib/relatives'
 import { uploadMemberPhoto } from '../lib/photoUpload'
+import { displayName, nameHaystack } from '../lib/memberName'
 
 interface Props {
   open: boolean
@@ -17,7 +18,7 @@ export default function AddMemberModal({ open, onClose }: Props) {
     addMember, addRelationship, relationships,
     members, selectedMemberId, profile, activeTreeId,
   } = useFamilyStore()
-  const { t } = useLang()
+  const { t, lang } = useLang()
   // Phone back button closes the modal instead of leaving the page.
   useCloseOnBack(open, onClose)
   const [form, setForm] = useState({ first_name: '', last_name: '', first_name_en: '', last_name_en: '', maiden_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '' as Gender | '', birth_order: '', lineage: '' as Lineage | '' })
@@ -61,7 +62,7 @@ export default function AddMemberModal({ open, onClose }: Props) {
   const anchorResults = useMemo(() => {
     const q = relSearch.trim().toLowerCase()
     const pool = q
-      ? treeMembers.filter((m) => `${m.first_name} ${m.last_name ?? ''}`.toLowerCase().includes(q))
+      ? treeMembers.filter((m) => nameHaystack(m).includes(q))
       : treeMembers
     return pool.slice(0, 8)
   }, [treeMembers, relSearch])
@@ -321,7 +322,7 @@ export default function AddMemberModal({ open, onClose }: Props) {
                               {m.first_name.charAt(0)}
                             </span>
                             <span className="text-[13px] font-medium text-[#1C1C1E] truncate">
-                              {m.first_name} {m.last_name}
+                              {displayName(m, lang)}
                             </span>
                             {sel && <span className="ms-auto text-[#007AFF] text-xs">✓</span>}
                           </button>

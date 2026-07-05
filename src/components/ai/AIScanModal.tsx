@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang, isRTL, type Translations } from '../../i18n/useT'
+import { displayName } from '../../lib/memberName'
 import { scanFiles, isLiveAIScanConfigured, type AIScanCandidate } from '../../lib/aiVision'
 import type { Gender, Member } from '../../types'
 
@@ -696,7 +697,7 @@ function ChatCandidate({
                     <option value="">— {t.aiPlaceRelativePickPrompt} —</option>
                     {sortedMembers.map((m) => (
                       <option key={m.id} value={m.id}>
-                        {m.first_name} {m.last_name}
+                        {displayName(m, lang)}
                       </option>
                     ))}
                   </select>

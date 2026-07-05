@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang } from '../../i18n/useT'
+import { displayName } from '../../lib/memberName'
 import { Avatar } from '../MemberCard'
 import { getParentMap, resolveLineage } from '../../lib/lineage'
 import { applyTreeFilters } from './applyTreeFilters'
@@ -46,15 +47,15 @@ export default function TimelineView({ filters }: { filters?: FilterState }) {
     visible.forEach((m) => {
       if (m.birth_date) {
         const d = new Date(m.birth_date)
-        evts.push({ year: d.getFullYear(), month: d.getMonth(), day: d.getDate(), type: 'birth', member: m, label: `${m.first_name} ${m.last_name} ${t.eventBorn}`, description: m.bio ?? '' })
+        evts.push({ year: d.getFullYear(), month: d.getMonth(), day: d.getDate(), type: 'birth', member: m, label: `${displayName(m, lang)} ${t.eventBorn}`, description: m.bio ?? '' })
       }
       if (m.death_date) {
         const d = new Date(m.death_date)
-        evts.push({ year: d.getFullYear(), month: d.getMonth(), day: d.getDate(), type: 'death', member: m, label: `${m.first_name} ${m.last_name} ${t.eventDied}`, description: '' })
+        evts.push({ year: d.getFullYear(), month: d.getMonth(), day: d.getDate(), type: 'death', member: m, label: `${displayName(m, lang)} ${t.eventDied}`, description: '' })
       }
     })
     return evts.sort((a, b) => a.year - b.year || (a.month ?? 0) - (b.month ?? 0))
-  }, [visible, t])
+  }, [visible, t, lang])
 
   if (events.length === 0) {
     return <div className="flex items-center justify-center h-full pt-20 text-[#8E8E93] text-sf-subhead px-6 text-center">{t.timelineEmpty}</div>

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import type { Member } from '../../types'
 import type { LineageInfo } from '../../lib/lineage'
 import { useLang } from '../../i18n/useT'
+import { displayName } from '../../lib/memberName'
 import { buildFocusedSubgraph, type FocusedMember } from './buildFocusedSubgraph'
 import { CARD, CARD_BODY_H, computeLayout } from '../../layout'
 import ConnectorsLayer from './tree/ConnectorsLayer'
@@ -36,7 +37,7 @@ export default function FocusedCentricView({
   onSelectMember,
   onExit,
 }: FocusedCentricViewProps) {
-  const { t } = useLang()
+  const { t, lang } = useLang()
   const wrapRef = useRef<HTMLDivElement>(null)
 
   const [focusId, setFocusId] = useState(initialFocusId)
@@ -265,7 +266,7 @@ export default function FocusedCentricView({
                       : 'text-[#8E8E93] hover:text-[#1C1C1E]'
                   }`}
                 >
-                  {m.first_name} {m.last_name}
+                  {displayName(m, lang)}
                 </button>
               </span>
             )

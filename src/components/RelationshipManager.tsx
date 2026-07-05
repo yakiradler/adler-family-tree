@@ -8,6 +8,7 @@ import { useCloseOnBack } from '../hooks/useCloseOnBack'
 import { PersonAvatarIcon } from './MemberNode'
 import { getRingGradient, getFallbackGradient } from './memberVisuals'
 import { canManageRelationships, computeNuclearFamilyIds } from '../lib/permissions'
+import { displayName, nameHaystack } from '../lib/memberName'
 import type { Member, Gender, RelationshipType, SpouseStatus, ParentType, Relationship } from '../types'
 
 interface Props {
@@ -114,10 +115,7 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
     .filter(m => {
       const s = search.trim().toLowerCase()
       if (!s) return true
-      return (
-        `${m.first_name} ${m.last_name}`.toLowerCase().includes(s) ||
-        (m.nickname ?? '').toLowerCase().includes(s)
-      )
+      return nameHaystack(m).includes(s)
     })
     .slice(0, 30)
 
@@ -286,7 +284,7 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
               <div className="flex-1 min-w-0">
                 <h2 className="text-sf-headline font-bold leading-tight">{t.relTitle}</h2>
                 <p className="text-[12px] opacity-90 mt-0.5 truncate">
-                  {member.first_name} {member.last_name} · {t.relSubtitle}
+                  {displayName(member, lang)} · {t.relSubtitle}
                 </p>
               </div>
               <button
@@ -526,7 +524,7 @@ export default function RelationshipManager({ open, onClose, member }: Props) {
                         </div>
                         <div className="flex-1 min-w-0 text-start">
                           <p className="text-sf-subhead font-semibold text-[#1C1C1E] truncate">
-                            {m.first_name} {m.last_name}
+                            {displayName(m, lang)}
                           </p>
                           {m.birth_date && (
                             <p className="text-[11px] text-[#8E8E93]">
@@ -662,7 +660,7 @@ function RelList({
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sf-subhead font-semibold text-[#1C1C1E] truncate flex items-center gap-1.5">
-                  {m.first_name} {m.last_name}
+                  {displayName(m, lang)}
                   {getRelBadge?.(m.id) && (
                     <span className="px-1.5 py-0.5 rounded-full bg-[#FF9F0A]/15 text-[#FF9F0A] text-[9px] font-bold flex-shrink-0">
                       {getRelBadge(m.id)}
@@ -767,7 +765,7 @@ function SpouseList({
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sf-subhead font-semibold text-[#1C1C1E] truncate">
-                    {m.first_name} {m.last_name}
+                    {displayName(m, lang)}
                   </p>
                   <p className="text-[11px] text-[#8E8E93]">
                     {m.birth_date
