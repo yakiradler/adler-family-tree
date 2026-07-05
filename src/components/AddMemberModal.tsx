@@ -17,7 +17,7 @@ export default function AddMemberModal({ open, onClose }: Props) {
     addMember, addRelationship, relationships,
     members, selectedMemberId, profile, activeTreeId,
   } = useFamilyStore()
-  const { t, lang } = useLang()
+  const { t } = useLang()
   // Phone back button closes the modal instead of leaving the page.
   useCloseOnBack(open, onClose)
   const [form, setForm] = useState({ first_name: '', last_name: '', first_name_en: '', last_name_en: '', maiden_name: '', birth_date: '', death_date: '', bio: '', photo_url: '', gender: '' as Gender | '', birth_order: '', lineage: '' as Lineage | '' })
@@ -273,7 +273,7 @@ export default function AddMemberModal({ open, onClose }: Props) {
                 {needsRelation && (
                   <div className="rounded-2xl bg-[#F2F2F7]/70 p-3 space-y-2">
                     <label className="text-sf-caption font-semibold text-[#1C1C1E] block">
-                      {lang === 'he' ? 'איך הוא/היא מתחבר/ת למשפחה?' : 'How do they connect?'}
+                      {t.addRelConnectLabel}
                     </label>
                     <div className="grid grid-cols-4 gap-1.5">
                       {([
@@ -298,7 +298,7 @@ export default function AddMemberModal({ open, onClose }: Props) {
                       type="text"
                       value={relSearch}
                       onChange={(e) => setRelSearch(e.target.value)}
-                      placeholder={lang === 'he' ? 'חפש בן/בת משפחה…' : 'Search member…'}
+                      placeholder={t.memberSearchPlaceholder}
                       className="input-field py-2"
                       dir="auto"
                     />
@@ -329,15 +329,13 @@ export default function AddMemberModal({ open, onClose }: Props) {
                       })}
                       {anchorResults.length === 0 && (
                         <div className="px-3 py-2 text-[12px] text-[#8E8E93]">
-                          {lang === 'he' ? 'לא נמצאו בני משפחה' : 'No matches'}
+                          {t.memberSearchNoMatches}
                         </div>
                       )}
                     </div>
                     {siblingWouldFloat && (
                       <p className="text-[11px] text-[#FF3B30]">
-                        {lang === 'he'
-                          ? 'לבן המשפחה שבחרת אין הורים רשומים — בחר/י קשר אחר (הורה/בן-זוג/ילד) כדי לחבר.'
-                          : 'The selected member has no recorded parents — pick another relation (parent/spouse/child) to connect.'}
+                        {t.addSiblingNoParents}
                       </p>
                     )}
                   </div>

@@ -26,7 +26,7 @@ export default function JumpToFamilyTreeButton({ member }: { member: Member }) {
     trees, activeTreeId, setActiveTreeId, addTree, updateMember, profile,
     submitAccessRequest,
   } = useFamilyStore()
-  const { lang } = useLang()
+  const { t, lang } = useLang()
   const [busy, setBusy] = useState(false)
   const [confirm, setConfirm] = useState<'create' | 'request' | null>(null)
   const [outcome, setOutcome] = useState<'switched' | 'created' | 'requested' | null>(null)
@@ -47,7 +47,7 @@ export default function JumpToFamilyTreeButton({ member }: { member: Member }) {
   const activeTree: FamilyTree | null =
     activeTreeId ? trees.find((tt) => tt.id === activeTreeId) ?? null : null
 
-  const activeTreeName = activeTree?.name ?? (lang === 'he' ? 'עץ ראשי' : 'Main tree')
+  const activeTreeName = activeTree?.name ?? t.jumpMainTree
 
   const targetTree: FamilyTree | undefined = useMemo(
     () => (targetName ? trees.find((tt) => norm(tt.name) === norm(targetName)) : undefined),
@@ -73,7 +73,7 @@ export default function JumpToFamilyTreeButton({ member }: { member: Member }) {
     try {
       const created = await addTree({
         name: targetName,
-        description: lang === 'he' ? `נוצר אוטומטית מ${member.first_name}` : `Auto-created from ${member.first_name}`,
+        description: t.jumpAutoCreatedFrom.replace('{name}', member.first_name),
         color: '#5E5CE6',
         created_by: profile?.id ?? 'demo',
       })
@@ -117,9 +117,7 @@ export default function JumpToFamilyTreeButton({ member }: { member: Member }) {
     }
   }
 
-  const labelExists = targetTree
-    ? (lang === 'he' ? 'עבור לעץ' : 'Switch to tree')
-    : (lang === 'he' ? 'פתח עץ חדש' : 'Open new tree')
+  const labelExists = targetTree ? t.jumpSwitchToTree : t.jumpOpenNewTree
 
   // Action when clicked: targets either a switch (have access),
   // an inline create (admin), or an access request (everyone else).
@@ -187,17 +185,13 @@ export default function JumpToFamilyTreeButton({ member }: { member: Member }) {
                 <div className="flex-1 min-w-0">
                   <h3 className="text-sf-headline font-bold text-[#1C1C1E]">
                     {confirm === 'create'
-                      ? (lang === 'he' ? `ליצור עץ "${targetName}"?` : `Create tree "${targetName}"?`)
-                      : (lang === 'he' ? `בקשת גישה לעץ ${targetName}` : `Request access to ${targetName}`)}
+                      ? t.jumpCreateTreeQ.replace('{name}', targetName)
+                      : t.jumpRequestAccessQ.replace('{name}', targetName)}
                   </h3>
                   <p className="text-[12px] text-[#636366] mt-0.5 leading-snug">
                     {confirm === 'create'
-                      ? (lang === 'he'
-                        ? `${member.first_name} שייך/ת לעץ ${targetName}. ליצור עכשיו ולעבור אליו?`
-                        : `${member.first_name} belongs to the ${targetName} tree. Create it and switch?`)
-                      : (lang === 'he'
-                        ? 'הבקשה תישלח למנהל המערכת לבדיקה. תקבל הודעה ברגע שהבקשה אושרה.'
-                        : 'The request will be sent to an admin. You’ll be notified once approved.')}
+                      ? t.jumpCreateBody.replace('{member}', member.first_name).replace('{name}', targetName)
+                      : t.jumpRequestBody}
                   </p>
                 </div>
               </div>
@@ -207,7 +201,7 @@ export default function JumpToFamilyTreeButton({ member }: { member: Member }) {
                   onClick={() => setConfirm(null)}
                   className="flex-1 py-2.5 rounded-2xl bg-[#F2F2F7] text-[#1C1C1E] text-sf-subhead font-semibold"
                 >
-                  {lang === 'he' ? 'ביטול' : 'Cancel'}
+                  {t.cancel}
                 </button>
                 <button
                   type="button"
@@ -218,8 +212,8 @@ export default function JumpToFamilyTreeButton({ member }: { member: Member }) {
                   {busy
                     ? '…'
                     : confirm === 'create'
-                    ? (lang === 'he' ? 'צור ועבור' : 'Create & switch')
-                    : (lang === 'he' ? 'שלח בקשה' : 'Send request')}
+                    ? t.jumpCreateAndSwitch
+                    : t.jumpSendRequest}
                 </button>
               </div>
             </motion.div>
@@ -243,9 +237,9 @@ export default function JumpToFamilyTreeButton({ member }: { member: Member }) {
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path d="M2.5 6.5l2.5 2.5L9.5 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            {outcome === 'switched' && (lang === 'he' ? 'עברנו לעץ' : 'Switched tree')}
-            {outcome === 'created' && (lang === 'he' ? 'עץ נוצר' : 'Tree created')}
-            {outcome === 'requested' && (lang === 'he' ? 'בקשה נשלחה' : 'Request sent')}
+            {outcome === 'switched' && t.jumpSwitched}
+            {outcome === 'created' && t.jumpCreated}
+            {outcome === 'requested' && t.jumpRequested}
           </motion.div>
         )}
       </AnimatePresence>

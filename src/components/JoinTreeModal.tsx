@@ -67,7 +67,10 @@ export default function JoinTreeModal({
         navigate('/tree')
       }, 900)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      // Raw Supabase/store errors are English implementation details —
+      // log for diagnosis, show the user a clean localized message.
+      console.warn('[join] redeem failed:', err)
+      setError(t.genericErrorRetry)
     } finally {
       setBusy(false)
     }

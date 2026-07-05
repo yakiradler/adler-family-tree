@@ -40,7 +40,7 @@ export default function ComingSoonModal({
   bullets,
   gradient = 'from-[#5E5CE6] to-[#BF5AF2]',
 }: Props) {
-  const { lang } = useLang()
+  const { t } = useLang()
 
   return (
     <AnimatePresence>
@@ -75,7 +75,7 @@ export default function ComingSoonModal({
                 {icon}
               </motion.span>
               <div className="absolute top-3 end-3 rounded-full bg-white/95 px-2.5 py-1 text-[10.5px] font-bold text-[#5E5CE6] shadow">
-                {lang === 'he' ? 'בקרוב 🚀' : 'Coming soon 🚀'}
+                {t.comingSoonBadge}
               </div>
             </div>
 
@@ -100,7 +100,7 @@ export default function ComingSoonModal({
                 onClick={onClose}
                 className="mt-5 w-full py-3 rounded-2xl bg-gradient-to-r from-[#007AFF] to-[#32ADE6] text-white text-sf-subhead font-bold active:scale-[0.98] transition shadow-md"
               >
-                {lang === 'he' ? 'הבנתי, אחכה' : "Got it, I'll wait"}
+                {t.comingSoonOk}
               </button>
             </div>
           </motion.div>

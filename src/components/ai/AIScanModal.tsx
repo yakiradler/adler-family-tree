@@ -388,8 +388,8 @@ export default function AIScanModal({
                       className="text-[11px] text-[#5E5CE6] font-semibold hover:underline"
                     >
                       {candidates.every((c) => c.selected)
-                        ? lang === 'he' ? 'בטל הכל' : 'Deselect all'
-                        : lang === 'he' ? 'בחר הכל' : 'Select all'}
+                        ? t.aiDeselectAll
+                        : t.aiSelectAll}
                     </button>
                   </div>
                 )}
@@ -525,7 +525,7 @@ function ChatCandidate({
 }) {
   const display =
     `${c.first_name}${c.last_name ? ` ${c.last_name}` : ''}`.trim() ||
-    (lang === 'he' ? 'דמות לא מזוהה' : 'unknown person')
+    t.aiUnknownPerson
 
   const sortedMembers = useMemo(
     () =>

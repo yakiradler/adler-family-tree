@@ -41,7 +41,7 @@ export default function InviteCodeManager() {
             created_at: new Date(Date.now() - 86_400_000 * 2).toISOString(),
             expires_at: new Date(Date.now() + 86_400_000 * 28).toISOString(),
             uses_left: 5,
-            note: lang === 'he' ? 'הזמנה לדוגמה' : 'Demo invite',
+            note: t.inviteDemoNote,
           },
         ],
   )

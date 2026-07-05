@@ -82,7 +82,7 @@ function generateConfetti(count: number): ConfettiPiece[] {
 
 export default function VersionUpdateModal() {
   const { updateAvailable, serverVersion } = useVersionCheck()
-  const { lang } = useLang()
+  const { t } = useLang()
   const [open, setOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -237,12 +237,10 @@ export default function VersionUpdateModal() {
 
             <div className="p-6 text-center">
               <h2 className="text-sf-title2 font-bold text-[#1C1C1E]">
-                {lang === 'he' ? '✨ גרסה חדשה זמינה!' : '✨ New version available!'}
+                {t.updateAvailableTitle}
               </h2>
               <p className="text-sf-subhead text-[#636366] mt-1.5 leading-relaxed">
-                {lang === 'he'
-                  ? 'הוספנו תיקונים ופיצ״רים חדשים. רענן כדי לעבור לגרסה החדשה — הנתונים שלך נשמרים.'
-                  : "We've shipped fixes + new features. Refresh to switch over — your data is preserved."}
+                {t.updateAvailableBody}
               </p>
 
               <div className="mt-5 flex flex-col gap-2">
@@ -262,7 +260,7 @@ export default function VersionUpdateModal() {
                       <path d="M2 8a6 6 0 0 1 10.2-4.2M14 8a6 6 0 0 1-10.2 4.2M12 2v3h-3M4 14v-3h3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   )}
-                  {lang === 'he' ? 'רענן עכשיו' : 'Refresh now'}
+                  {t.updateRefreshNow}
                 </button>
                 <button
                   type="button"
@@ -270,7 +268,7 @@ export default function VersionUpdateModal() {
                   disabled={refreshing}
                   className="w-full py-2.5 rounded-2xl bg-[#F2F2F7] text-[#1C1C1E] text-sf-subhead font-semibold active:scale-[0.98] transition disabled:opacity-50"
                 >
-                  {lang === 'he' ? 'אחר כך' : 'Maybe later'}
+                  {t.updateLater}
                 </button>
               </div>
             </div>
