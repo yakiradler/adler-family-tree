@@ -20,6 +20,8 @@ import { alertDialog } from '../lib/confirm'
 import { notifySaved } from '../lib/saved'
 import { gregorianToHebrew } from '../lib/hebrewDate'
 import { displayName, displayFirst } from '../lib/memberName'
+import { countryName, isHeritageToken } from '../lib/countries'
+import FlagIcon from './FlagIcon'
 import type { Member, SpouseStatus } from '../types'
 
 interface Props {
@@ -457,8 +459,33 @@ export default function MemberPanel({ onClose }: Props) {
       >
         <div className="px-4 pt-2 flex flex-col items-center text-center">
           <div className="w-full">
-            <h2 className="text-sf-headline font-bold text-[#1C1C1E] leading-tight">
+            <h2 className="text-sf-headline font-bold text-[#1C1C1E] leading-tight flex items-center justify-center gap-2">
               {displayName(member, lang)}
+              {/* Origin flags (migration 035) — birth country first, then
+                  nationality/religion. Panel-only by owner decision; the
+                  tree cards stay flag-free. */}
+              {(member.birth_country_code || member.heritage_code) && (
+                <span className="inline-flex items-center gap-1.5" aria-hidden={false}>
+                  {member.birth_country_code && (
+                    <FlagIcon
+                      code={member.birth_country_code}
+                      size={17}
+                      title={countryName(member.birth_country_code, lang)}
+                    />
+                  )}
+                  {member.heritage_code && (
+                    <FlagIcon
+                      code={member.heritage_code}
+                      size={17}
+                      title={
+                        isHeritageToken(member.heritage_code)
+                          ? t.heritageJewish
+                          : countryName(member.heritage_code, lang)
+                      }
+                    />
+                  )}
+                </span>
+              )}
             </h2>
             {/* "לבית X" — surfaces the maiden name right under the
                 official name. The user asked for a way to see this in

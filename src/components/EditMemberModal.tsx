@@ -11,6 +11,8 @@ import { getRingGradient, getFallbackGradient } from './memberVisuals'
 import type { Member, Gender, Lineage } from '../types'
 import { uploadMemberPhoto } from '../lib/photoUpload'
 import { isSupabaseConfigured } from '../lib/supabase'
+import { supportsMemberFlags } from '../lib/countries'
+import CountrySelect from './ui/CountrySelect'
 
 interface Props {
   open: boolean
@@ -31,6 +33,8 @@ interface FormState {
   last_name_en: string
   maiden_name: string
   nickname: string
+  birth_country_code: string
+  heritage_code: string
   bio: string
   birth_date: string
   death_date: string
@@ -57,6 +61,8 @@ function fromMember(m: Member): FormState {
     last_name_en: m.last_name_en ?? '',
     maiden_name: m.maiden_name ?? '',
     nickname: m.nickname ?? '',
+    birth_country_code: m.birth_country_code ?? '',
+    heritage_code: m.heritage_code ?? '',
     bio: m.bio ?? '',
     birth_date: m.birth_date ?? '',
     death_date: m.death_date ?? '',
@@ -78,6 +84,10 @@ function fromMember(m: Member): FormState {
 
 export default function EditMemberModal({ open, onClose, member, suggestMode = false }: Props) {
   const { updateMember, submitEditRequest, members, relationships } = useFamilyStore()
+  // Migration-035 feature gate: hide the flag pickers (and never send the
+  // columns) until the server rows prove the columns exist — otherwise an
+  // UPDATE would 42703 and roll the whole edit back.
+  const flagsSupported = supportsMemberFlags(members, isSupabaseConfigured)
   // Parents of this member — used by the "connector parent" picker so
   // the user can choose which parent the descending tree-line draws
   // from (default: mother).
@@ -186,6 +196,13 @@ export default function EditMemberModal({ open, onClose, member, suggestMode = f
         // null (not undefined) so clearing every field actually persists.
         return Object.values(c).some(Boolean) ? c : null
       })(),
+      // Origin flags — only when migration 035 is live (see flagsSupported).
+      ...(flagsSupported
+        ? {
+            birth_country_code: form.birth_country_code || null,
+            heritage_code: form.heritage_code || null,
+          }
+        : {}),
     }
     if (suggestMode) {
       // No edit rights on this member — the change lands in the admin's
@@ -442,6 +459,32 @@ export default function EditMemberModal({ open, onClose, member, suggestMode = f
                     })}
                   </div>
                 </Field>
+                {/* ── Origin flags (birth country + nationality/religion) ── */}
+                {flagsSupported && (
+                  <div className="pt-1">
+                    <p className="text-[11px] font-bold text-[#8E8E93] mb-1.5 uppercase tracking-wide">
+                      {t.editOriginSection}
+                    </p>
+                    <div className="space-y-2">
+                      <Field label={t.editBirthCountry}>
+                        <CountrySelect
+                          value={form.birth_country_code || null}
+                          onChange={(code) => patch('birth_country_code', code ?? '')}
+                          placeholder={t.editBirthCountry}
+                        />
+                      </Field>
+                      <Field label={t.editHeritage}>
+                        <CountrySelect
+                          value={form.heritage_code || null}
+                          onChange={(code) => patch('heritage_code', code ?? '')}
+                          placeholder={t.editHeritage}
+                          withHeritageTokens
+                        />
+                        <p className="text-[10.5px] text-[#8E8E93] mt-1">{t.editHeritageHint}</p>
+                      </Field>
+                    </div>
+                  </div>
+                )}
                 <Field label={t.biography}>
                   <textarea
                     className="w-full bg-[#F2F2F7] border border-transparent rounded-xl px-3 py-2 text-sf-subhead text-[#1C1C1E] placeholder:text-[#8E8E93] focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40 focus:bg-white focus:border-[#007AFF]/30 transition resize-none min-h-[84px]"

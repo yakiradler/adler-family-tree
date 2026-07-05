@@ -16,6 +16,7 @@
     "@hebcal/core": "^6.5.3",
     "@supabase/supabase-js": "^2.104.0",
     "autoprefixer": "^10.5.0",
+    "flag-icons": "^7.5.0",
     "framer-motion": "^12.38.0",
     "postcss": "^8.5.10",
     "react": "^19.2.5",

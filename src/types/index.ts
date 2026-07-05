@@ -129,6 +129,11 @@ export interface Member {
    * profile panel; never on the tree, so the tree stays compact. */
   maiden_name?: string
   nickname?: string
+  /** Origin flags (migration 035), shown in the profile panel only.
+   * birth_country_code: ISO-3166-1 alpha-2 ('IL'). heritage_code: a second
+   * ISO code OR a symbol token ('jewish' → Star of David). */
+  birth_country_code?: string | null
+  heritage_code?: string | null
   birth_date?: string
   death_date?: string
   hebrew_birth_date?: string
