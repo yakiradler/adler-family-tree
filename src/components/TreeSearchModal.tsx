@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFamilyStore } from '../store/useFamilyStore'
 import { useLang, isRTL } from '../i18n/useT'
+import { displayName, nameHaystack } from '../lib/memberName'
 import { useCloseOnBack } from '../hooks/useCloseOnBack'
 import { PersonAvatarIcon } from './MemberNode'
 import { getRingGradient, getFallbackGradient } from './memberVisuals'
@@ -74,17 +75,7 @@ export default function TreeSearchModal({
         .slice(0, 12)
     }
     return members
-      .filter((m) => {
-        const hay = [
-          m.first_name,
-          m.last_name,
-          (m as Member & { maiden_name?: string }).maiden_name,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-        return hay.includes(q)
-      })
+      .filter((m) => nameHaystack(m).includes(q))
       .slice(0, 30)
   }, [members, query, lang])
 
@@ -161,7 +152,7 @@ export default function TreeSearchModal({
                         <Avatar member={m} />
                         <div className="flex-1 min-w-0">
                           <p className="text-[13px] font-semibold text-[#1C1C1E] truncate">
-                            {m.first_name} {m.last_name}
+                            {displayName(m, lang)}
                           </p>
                           <p className="text-[11px] text-[#8E8E93] truncate">
                             {[

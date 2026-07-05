@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { useFamilyStore } from '../../store/useFamilyStore'
 import { useLang, type Translations } from '../../i18n/useT'
+import { displayName } from '../../lib/memberName'
 import { Avatar } from '../MemberCard'
 import type { Member } from '../../types'
 import { buildFamilyGraph, solveGenerations } from '../../layout'
@@ -18,7 +19,7 @@ interface GenGroup {
 export default function SchematicView({ filters }: { filters?: FilterState }) {
   const { members: allMembers, relationships, selectedMemberId, setSelectedMemberId, activeTreeId } =
     useFamilyStore()
-  const { t } = useLang()
+  const { t, lang } = useLang()
 
   // Per-tree isolation — the schematic used to show ALL trees mixed.
   const members = useMemo(
@@ -101,7 +102,7 @@ export default function SchematicView({ filters }: { filters?: FilterState }) {
                   </div>
                   <div className="min-w-0">
                     <p className={`text-sf-subhead font-semibold truncate ${isSelected ? 'text-[#007AFF]' : 'text-[#1C1C1E]'}`}>
-                      {member.first_name} {member.last_name}
+                      {displayName(member, lang)}
                     </p>
                     {member.birth_date && (
                       <p className="text-sf-caption text-[#8E8E93] truncate">

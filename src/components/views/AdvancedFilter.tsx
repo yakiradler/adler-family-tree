@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLang, isRTL } from '../../i18n/useT'
+import { displayName } from '../../lib/memberName'
 import { useCloseOnBack } from '../../hooks/useCloseOnBack'
 import { useFamilyStore } from '../../store/useFamilyStore'
 import type { Member, Relationship } from '../../types'
@@ -207,7 +208,7 @@ export default function AdvancedFilter({
                 <option value="">— {t.filterAll} —</option>
                 {sortedMembers.map((m) => (
                   <option key={m.id} value={m.id}>
-                    {m.first_name} {m.last_name}
+                    {displayName(m, lang)}
                   </option>
                 ))}
               </select>
@@ -249,7 +250,7 @@ export default function AdvancedFilter({
                   <option value="">— {t.filterPathFrom} —</option>
                   {sortedMembers.map((m) => (
                     <option key={m.id} value={m.id}>
-                      {m.first_name} {m.last_name}
+                      {displayName(m, lang)}
                     </option>
                   ))}
                 </select>
@@ -261,7 +262,7 @@ export default function AdvancedFilter({
                   <option value="">— {t.filterPathTo} —</option>
                   {sortedMembers.map((m) => (
                     <option key={m.id} value={m.id}>
-                      {m.first_name} {m.last_name}
+                      {displayName(m, lang)}
                     </option>
                   ))}
                 </select>

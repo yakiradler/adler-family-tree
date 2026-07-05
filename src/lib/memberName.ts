@@ -30,3 +30,18 @@ export function displayFirst(member: NamedMember, lang: 'he' | 'en'): string {
   if (lang === 'en') return en || he
   return he || en
 }
+
+type SearchableMember = NamedMember & Partial<Pick<Member, 'nickname' | 'maiden_name'>>
+
+/**
+ * Lower-cased searchable text covering BOTH languages plus nickname and
+ * maiden name — so a search box matches a member no matter which language
+ * the typist thinks in. Use for filters, never for display.
+ */
+export function nameHaystack(m: SearchableMember): string {
+  return [m.first_name, m.last_name, m.first_name_en, m.last_name_en, m.nickname, m.maiden_name]
+    .map((s) => (s ?? '').trim())
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+}

@@ -423,10 +423,18 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     }
 
     set({ isLoading: true })
+    // Hard safety ceiling — a family tree should never approach this,
+    // and an unbounded select('*') is a runaway-query risk if the
+    // account ever accumulates junk rows.
+    const MEMBERS_FETCH_LIMIT = 2000
     const { data, error } = await supabase
       .from('members')
       .select('*')
       .order('birth_date', { ascending: true })
+      .limit(MEMBERS_FETCH_LIMIT)
+    if (Array.isArray(data) && data.length === MEMBERS_FETCH_LIMIT) {
+      console.warn(`[fetchMembers] hit the ${MEMBERS_FETCH_LIMIT}-row ceiling — some members may not be loaded`)
+    }
     if (error) {
       reportSupabaseFailure('fetchMembers', error, 'read')
       set({ isLoading: false })
@@ -466,7 +474,14 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     // fetch every time; if the server returns a non-empty result we
     // merge it with any *unsynced* optimistic rows (those with the
     // local `rel-` id prefix) so that mid-flight edits aren't lost.
-    const { data, error } = await supabase.from('relationships').select('*')
+    const RELS_FETCH_LIMIT = 5000
+    const { data, error } = await supabase
+      .from('relationships')
+      .select('*')
+      .limit(RELS_FETCH_LIMIT)
+    if (Array.isArray(data) && data.length === RELS_FETCH_LIMIT) {
+      console.warn(`[fetchRelationships] hit the ${RELS_FETCH_LIMIT}-row ceiling — some relationships may not be loaded`)
+    }
     if (error) {
       reportSupabaseFailure('fetchRelationships', error, 'read')
       return

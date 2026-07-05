@@ -85,7 +85,7 @@ export default function Landing() {
             // browsers cached it as a hard black square. Bumping the
             // `?v=` forces a re-fetch even if the asset name is
             // stable. Increment on future asset swaps.
-            src="/icon-app-glyph.png?v=2"
+            src="/icon-app-glyph.png?v=3"
             alt="InfiniTree"
             width={1000}
             height={1000}
