@@ -28,7 +28,7 @@ without logging into the Vercel dashboard, append the project's
 automation bypass token to the URL:
 
 ```
-https://<deployment>-yakir-adler-s-projects.vercel.app/?x-vercel-set-bypass-cookie=true&x-vercel-protection-bypass=gQEMZMghRw5uDY4MXblvE3DEet4E9zw4
+https://<deployment>-yakir-adler-s-projects.vercel.app/?x-vercel-set-bypass-cookie=true&x-vercel-protection-bypass=<BYPASS_TOKEN>
 ```
 
 Once Vercel sets the bypass cookie you can navigate within the

@@ -1,7 +1,8 @@
 import { Client } from 'pg'
+import { dbPassword } from './_dbPassword'
 const c = new Client({
   connectionString:
-    'postgresql://postgres:Yakiradler1123@db.wkbdqdytfjycbbcnzjuv.supabase.co:5432/postgres',
+    `postgresql://postgres:${encodeURIComponent(dbPassword())}@db.wkbdqdytfjycbbcnzjuv.supabase.co:5432/postgres`,
   ssl: { rejectUnauthorized: false },
 })
 await c.connect()

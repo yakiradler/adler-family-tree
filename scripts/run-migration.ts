@@ -17,6 +17,7 @@ import { Client } from 'pg'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { resolve, dirname, join } from 'path'
 import { fileURLToPath } from 'url'
+import { dbPassword } from './_dbPassword'
 
 const file = process.argv[2]
 if (!file) {
@@ -28,7 +29,7 @@ const sql = readFileSync(resolve(file), 'utf8')
 console.log(`Applying ${file} (${sql.length} bytes)…`)
 
 const PROJECT_REF = 'wkbdqdytfjycbbcnzjuv'
-const DB_PASSWORD = 'Yakiradler1123'
+const DB_PASSWORD = dbPassword()
 
 const here = dirname(fileURLToPath(import.meta.url))
 const cacheFile = join(here, '.region-cache')

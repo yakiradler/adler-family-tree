@@ -3,9 +3,10 @@
  * Probes both pooler generations for eu-central-1.
  */
 import { Client } from 'pg'
+import { dbPassword } from './_dbPassword'
 
 const PROJECT_REF = 'wkbdqdytfjycbbcnzjuv'
-const DB_PASSWORD = 'Yakiradler1123'
+const DB_PASSWORD = dbPassword()
 
 async function tryConnect(host: string) {
   const c = new Client({

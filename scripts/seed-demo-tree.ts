@@ -28,6 +28,7 @@ import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 import { ADLER_MEMBERS, ADLER_RELATIONSHIPS } from '../src/data/adlerFamily'
+import { dbPassword } from './_dbPassword'
 
 const args = process.argv.slice(2)
 function argValue(flag: string): string | null {
@@ -50,7 +51,7 @@ if (!dryRun && !confirmed) {
 
 // ── Connection (same strategy as run-migration.ts) ───────────────────
 const PROJECT_REF = 'wkbdqdytfjycbbcnzjuv'
-const DB_PASSWORD = 'Yakiradler1123'
+const DB_PASSWORD = dbPassword()
 const here = dirname(fileURLToPath(import.meta.url))
 const cacheFile = join(here, '.region-cache')
 

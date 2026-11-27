@@ -28,6 +28,7 @@ import { execSync } from 'child_process'
 import { readFileSync, writeFileSync, existsSync, rmSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
+import { dbPassword } from './_dbPassword'
 
 const SOURCE_COMMIT = '83c7aaa'
 const TREE_NAME = 'משפחת אדלר'
@@ -87,7 +88,7 @@ console.log(`Loaded historical seed: ${members.length} members, ${rels.length} r
 
 // ── 2. Connection (same strategy as run-migration.ts) ───────────────
 const PROJECT_REF = 'wkbdqdytfjycbbcnzjuv'
-const DB_PASSWORD = 'Yakiradler1123'
+const DB_PASSWORD = dbPassword()
 const cacheFile = join(here, '.region-cache')
 
 async function tryConnect(opts: { host: string; port: number; user: string; label: string }): Promise<Client | null> {

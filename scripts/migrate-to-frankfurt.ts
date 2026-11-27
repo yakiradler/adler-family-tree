@@ -20,11 +20,12 @@ import { Client } from 'pg'
 import { readFileSync } from 'fs'
 import { resolve, dirname, join } from 'path'
 import { fileURLToPath } from 'url'
+import { dbPassword } from './_dbPassword'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const projectRoot = resolve(here, '..')
 
-const PASSWORD = 'Yakiradler1123'
+const PASSWORD = dbPassword()
 
 // Port 5432 = session mode pooler (one client = one Postgres backend).
 // Required for schema scripts: transaction mode (6543) breaks SQL-language
