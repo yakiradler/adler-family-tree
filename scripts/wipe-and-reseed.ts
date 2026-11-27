@@ -31,11 +31,12 @@ import { Client } from 'pg'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
+import { dbPassword } from './_dbPassword'
 
 const confirmed = process.argv.includes('--confirm')
 
 const PROJECT_REF = 'wkbdqdytfjycbbcnzjuv'
-const DB_PASSWORD = 'Yakiradler1123'
+const DB_PASSWORD = dbPassword()
 
 const here = dirname(fileURLToPath(import.meta.url))
 const cacheFile = join(here, '.region-cache')

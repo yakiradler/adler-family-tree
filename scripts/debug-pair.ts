@@ -1,9 +1,10 @@
 import { Client } from 'pg'
+import { dbPassword } from './_dbPassword'
 import { buildLayout, NODE_W } from '../src/components/views/treeLayout'
 import type { Member, Relationship } from '../src/types'
 
 const DB =
-  'postgresql://postgres:Yakiradler1123@db.wkbdqdytfjycbbcnzjuv.supabase.co:5432/postgres'
+  `postgresql://postgres:${encodeURIComponent(dbPassword())}@db.wkbdqdytfjycbbcnzjuv.supabase.co:5432/postgres`
 
 async function main() {
   const c = new Client({ connectionString: DB, ssl: { rejectUnauthorized: false } })

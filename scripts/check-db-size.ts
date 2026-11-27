@@ -3,9 +3,10 @@
  * Run once before migrating the project to a new region.
  */
 import { Client } from 'pg'
+import { dbPassword } from './_dbPassword'
 
 const PROJECT_REF = 'oklwywuxglaefchjbhcw'
-const DB_PASSWORD = 'Yakiradler1123'
+const DB_PASSWORD = dbPassword()
 
 const client = new Client({
   host: 'aws-1-ap-south-1.pooler.supabase.com',

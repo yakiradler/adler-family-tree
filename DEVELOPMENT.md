@@ -1,11 +1,13 @@
 # Development Workflow
 
-> **STATUS (2026-06-10): PLANNED, NOT ACTIVE.** The two-environment
-> setup below was never completed — there is no dev Supabase project
-> and Vercel preview env vars are not split. The ACTUAL current flow
-> is: feature branch → PR to `main` → all CI checks green → owner
-> approves the merge → Vercel deploys production. Treat everything
-> below as the future plan, not as instructions.
+> **STATUS (2026-11-27): SUPERSEDED.** The environments are already
+> split, but not the way this file describes. The source of truth is
+> [`docs/DEV-ENVIRONMENT.md`](docs/DEV-ENVIRONMENT.md):
+> production (`main`, infinitree.vercel.app) uses the Frankfurt
+> Supabase project; every Vercel preview branch and local
+> `npm run dev` use the separate Mumbai project. There is no
+> `develop` flow: feature branch → preview → PR to `main` → CI green
+> → owner approves the merge. Everything below is historical.
 
 This project runs in TWO isolated environments:
 

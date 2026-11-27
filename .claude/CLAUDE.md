@@ -19,14 +19,17 @@ otherwise.
 After `AGENTS.md`, also skim `ARCHITECTURE.md` before any non-trivial
 change, and `ROADMAP.md` if the task is a new feature.
 
-**For environment / workflow questions** — branching, CI, dev vs.
-production data, how to promote a change — read `DEVELOPMENT.md`.
-Short version:
-- PRs target `develop`, NOT `main`. CI must pass before merge.
-- `develop` deploys to a Vercel preview URL backed by the dev
-  Supabase project. Real family data is untouched.
-- Promote to production by opening a PR from `develop` → `main`
-  and squash-merging once CI is green.
-- A red/orange "🧪 Preview" banner is visible on every non-prod
-  deployment — if you don't see it on `infinitree.vercel.app`,
-  that's production, treat data with care.
+**For environment / workflow questions** — dev vs. production data,
+preview links, how to promote a change — read
+`docs/DEV-ENVIRONMENT.md`. Short version:
+- Production (`main`, infinitree.vercel.app) uses the Frankfurt
+  Supabase project `wkbdqdytfjycbbcnzjuv`. It holds real family
+  data: never run SQL or scripts against it without the owner's
+  explicit approval, and check the repo state before assuming a
+  project is empty.
+- Every Vercel preview branch and local `npm run dev` use the
+  separate Mumbai project `oklwywuxglaefchjbhcw`.
+- Flow: feature branch → preview deployment → PR to `main` → CI
+  green → owner approves the merge.
+- Never commit credentials. Maintenance scripts read the database
+  password from `SUPABASE_DB_PASSWORD`.
